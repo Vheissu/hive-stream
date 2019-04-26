@@ -190,7 +190,7 @@ class Streamer {
             return isNaN(parseValue) ? currentBlockNumber : parseValue;
         }
     
-        return blockNumber > 0 ? blockNumber : 0;
+        return currentBlockNumber;
     }
 
     onTransfer(account, callback) {
