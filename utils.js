@@ -7,6 +7,18 @@ module.exports = {
         return new Promise(resolve => setTimeout(resolve, milliseconds));
     },
 
+    jsonParse(string) {
+        let obj;
+    
+        try {
+            obj = JSON.parse(string);
+        } catch {
+    
+        }
+    
+        return obj;
+    },
+
     transferSteemTokens(from, to, amount, symbol, memo) {
         const wif = process.env.PRIVATE_KEY;
     
@@ -27,7 +39,7 @@ module.exports = {
             }
         };
     
-        return steem.broadcast.customJsonAsync(wif, from, [], 'ssc-mainnet', json);
+        return steem.broadcast.customJsonAsync(wif, from, [], 'ssc-mainnet1', json);
     }
 
 };
