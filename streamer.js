@@ -1,10 +1,11 @@
 const steem = require('steem');
 const fs = require('fs');
+const utils = require('./utils');
 
 steem.api.setOptions({ url: 'https://api.steemit.com' });
 
 class Streamer {
-    constructor(lastBlockNumber = 0) {
+    constructor({lastBlockNumber = 0, username, postingKey, activeKey}) {
         this.customJsonSubscriptions = [];
         this.sscJsonSubscriptions = [];
         this.commentSubscriptions = [];
@@ -13,6 +14,10 @@ class Streamer {
         this.blockNumberInterval = null;
 
         this.lastBlockNumber = lastBlockNumber;
+
+        this.username = username;
+        this.postingKey = postingKey;
+        this.activeKey = activeKey;
 
         this.blockNumber;
         this.transactionId;
@@ -94,7 +99,7 @@ class Streamer {
             }
         } else {
             // The latest block number is less than the supplied block number, retry
-            await sleep(300);
+            await utils.sleep(300);
 
             this.loadBlock(blockNumber);
         }
@@ -137,7 +142,7 @@ class Streamer {
                             }
 
                             const id = op[1].id;
-                            const json = jsonParse(op[1].json);
+                            const json = utils.jsonParse(op[1].json);
 
                             // SSC JSON operation
                             if (id === 'ssc-mainnet1') {
@@ -200,24 +205,6 @@ class Streamer {
     onSscJson(callback) {
         this.sscJsonSubscriptions.push({ callback });
     }
-}
-
-
-// https://flaviocopes.com/javascript-sleep/
-function sleep(milliseconds) {
-    return new Promise(resolve => setTimeout(resolve, milliseconds));
-}
-
-function jsonParse(string) {
-    let obj;
-
-    try {
-        obj = JSON.parse(string);
-    } catch {
-
-    }
-
-    return obj;
 }
 
 module.exports = Streamer;
