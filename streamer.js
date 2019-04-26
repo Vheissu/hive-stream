@@ -2,10 +2,12 @@ const steem = require('steem');
 const fs = require('fs');
 const utils = require('./utils');
 
-steem.api.setOptions({ url: 'https://api.steemit.com' });
+const config = require('./config');
+
+steem.api.setOptions({ url: config.API_URL });
 
 class Streamer {
-    constructor({lastBlockNumber = 0, username, postingKey, activeKey}) {
+    constructor() {
         this.customJsonSubscriptions = [];
         this.sscJsonSubscriptions = [];
         this.commentSubscriptions = [];
@@ -13,11 +15,11 @@ class Streamer {
 
         this.blockNumberInterval = null;
 
-        this.lastBlockNumber = lastBlockNumber;
+        this.lastBlockNumber = config.LAST_BLOCK_NUMBER;
 
-        this.username = username;
-        this.postingKey = postingKey;
-        this.activeKey = activeKey;
+        this.username = config.USERNAME;
+        this.postingKey = config.POSTING_KEY;
+        this.activeKey = config.ACTIVE_KEY;
 
         this.blockNumber;
         this.transactionId;
@@ -70,7 +72,7 @@ class Streamer {
             steem.api.getDynamicGlobalPropertiesAsync().then(props => {
                 this.lastBlockNumber = parseInt(props.last_irreversible_block_num);
             });
-        }, 3000)
+        }, config.BLOCK_CHECK_INTERVAL)
     }
 
     // Attempt to load the block from Steem itself
@@ -99,7 +101,7 @@ class Streamer {
             }
         } else {
             // The latest block number is less than the supplied block number, retry
-            await utils.sleep(300);
+            await utils.sleep(config.BLOCK_CHECK_WAIT);
 
             this.loadBlock(blockNumber);
         }
@@ -145,7 +147,7 @@ class Streamer {
                             const json = utils.jsonParse(op[1].json);
 
                             // SSC JSON operation
-                            if (id === 'ssc-mainnet1') {
+                            if (id === config.CHAIN_ID) {
                                 const { contractName, contractAction, contractPayload } = json;
 
                                 sub.callback(contractName, contractAction, contractPayload, sender, op[1], tx, block, blockNumber);

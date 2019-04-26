@@ -1,4 +1,5 @@
 const steem = require('steem');
+const config = require('./config');
 
 module.exports = {
 
@@ -19,15 +20,11 @@ module.exports = {
         return obj;
     },
 
-    transferSteemTokens(from, to, amount, symbol, memo) {
-        const wif = process.env.PRIVATE_KEY;
-    
-        return steem.broadcast.transferAsync(wif, from, to, `${parseFloat(amount).toFixed(3)} ${symbol}`, memo);
+    transferSteemTokens(from, to, amount, symbol, memo) {   
+        return steem.broadcast.transferAsync(config.ACTIVE_KEY, from, to, `${parseFloat(amount).toFixed(3)} ${symbol}`, memo);
     },
     
-    transferSteemEngineTokens(from, to, amount, token, memo) {
-        const wif = process.env.PRIVATE_KEY;
-    
+    transferSteemEngineTokens(from, to, amount, token, memo) {    
         const json = {
             'contractName': 'tokens',
             'contractAction': 'transfer',
@@ -39,7 +36,7 @@ module.exports = {
             }
         };
     
-        return steem.broadcast.customJsonAsync(wif, from, [], 'ssc-mainnet1', json);
+        return steem.broadcast.customJsonAsync(config.ACTIVE_KEY, from, [], 'ssc-mainnet1', json);
     }
 
 };
