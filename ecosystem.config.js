@@ -1,12 +1,3 @@
-# steem-stream
-
-A Node.js layer for Steem that allows you to watch for specific actions on the Steem blockchain.
-
-## Permanently running with PM2
-
-**ecosystem.config.js**
-
-```
 module.exports = {
   apps: [
     {
@@ -21,4 +12,4 @@ module.exports = {
       }
     }
   ]
-```
+};
