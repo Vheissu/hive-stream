@@ -11,7 +11,9 @@ npm install steem-stream
 ## Quick Usage
 
 ```javascript
-const ss = require('steem-stream');
+const Streamer = require('steem-stream');
+
+const ss = new Streamer();
 
 ss.onCustomJson((op, tx, block, blockNumer) => {
   // React to custom JSON operations
