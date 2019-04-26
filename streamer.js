@@ -1,17 +1,18 @@
 const steem = require('steem');
 const fs = require('fs');
 
+steem.api.setOptions({ url: 'https://api.steemit.com' });
+
 class Streamer {
-    constructor({ username, postingKey, activeKey }) {
+    constructor(lastBlockNumber = 0) {
+        this.customJsonSubscriptions = [];
+        this.sscJsonSubscriptions = [];
+        this.commentSubscriptions = [];
         this.transferSubscriptions = [];
 
         this.blockNumberInterval = null;
 
-        this.lastBlockNumber = 0;
-
-        this.username = username;
-        this.postingKey = postingKey;
-        this.activeKey = activeKey;
+        this.lastBlockNumber = lastBlockNumber;
 
         this.blockNumber;
         this.transactionId;
@@ -117,6 +118,35 @@ class Streamer {
                             }
                         })
                     }
+
+                    if (op[0] === 'custom_json') {
+                        this.customJsonSubscriptions.forEach(sub => {
+                            sub.callback(op[1], tx, block, blockNumber);
+                        });
+
+                        this.sscJsonSubscriptions.forEach(sub => {
+                            let isSignedWithActiveKey = null;
+                            let sender;
+                        
+                            if (op[1].required_auths.length > 0) {
+                                sender = op[1].required_auths[0];
+                                isSignedWithActiveKey = true;
+                            } else {
+                                sender = op[1].required_posting_auths[0];
+                                isSignedWithActiveKey = false;
+                            }
+
+                            const id = op[1].id;
+                            const json = jsonParse(op[1].json);
+
+                            // SSC JSON operation
+                            if (id === 'ssc-mainnet1') {
+                                const { contractName, contractAction, contractPayload } = json;
+
+                                sub.callback(contractName, contractAction, contractPayload, sender, op[1], tx, block, blockNumber);
+                            }
+                        });
+                    }
                 }
 
                 this.transactionId = tx.transaction_id;
@@ -143,11 +173,17 @@ class Streamer {
 
     // Get the last saved block number
     async getSavedBlockNumber() {
+        const currentBlockNumber = await steem.api.getDynamicGlobalPropertiesAsync().then(props => {
+            return parseInt(props.last_irreversible_block_num);
+        });
+
         if (fs.existsSync('block.txt')) {
-            return parseInt(fs.readFileSync('block.txt'));
+            const parseValue = parseInt(fs.readFileSync('block.txt'));
+
+            return isNaN(parseValue) ? currentBlockNumber : parseValue;
         }
     
-        return 0;
+        return blockNumber > 0 ? blockNumber : 0;
     }
 
     onTransfer(account, callback) {
@@ -156,6 +192,32 @@ class Streamer {
             callback
         });    
     }
+
+    onCustomJson(callback) {
+        this.customJsonSubscriptions.push({ callback });
+    }
+
+    onSscJson(callback) {
+        this.sscJsonSubscriptions.push({ callback });
+    }
+}
+
+
+// https://flaviocopes.com/javascript-sleep/
+function sleep(milliseconds) {
+    return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
+function jsonParse(string) {
+    let obj;
+
+    try {
+        obj = JSON.parse(string);
+    } catch {
+
+    }
+
+    return obj;
 }
 
 module.exports = Streamer;
