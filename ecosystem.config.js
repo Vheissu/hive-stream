@@ -1,3 +1,5 @@
+// PM2 configuration
+
 module.exports = {
   apps: [
     {
