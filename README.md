@@ -13,7 +13,10 @@ npm install steem-stream
 ```javascript
 const Streamer = require('steem-stream');
 
-const ss = new Streamer();
+const ss = new Streamer({
+  ACTIVE_KEY: '',
+  POSTING_KEY: ''
+});
 
 ss.onCustomJson((op, { sender, isSignedWithActiveKey }, tx, block, blockNumber) => {
   // React to custom JSON operations
