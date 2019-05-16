@@ -36,7 +36,7 @@ module.exports = {
             }
         };
     
-        return steem.broadcast.customJsonAsync(config.ACTIVE_KEY, from, [], 'ssc-mainnet1', json);
+        return steem.broadcast.customJsonAsync(config.ACTIVE_KEY, from, [], config.CHAIN_ID, JSON.stringify(json));
     },
 
     upvote(votePercentage = 100.0, username, permlink) {
