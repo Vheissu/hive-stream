@@ -20,11 +20,11 @@ module.exports = {
         return obj;
     },
 
-    transferSteemTokens(from, to, amount, symbol, memo) {   
-        return steem.broadcast.transferAsync(config.ACTIVE_KEY, from, to, `${parseFloat(amount).toFixed(3)} ${symbol}`, memo);
+    transferSteemTokens(activeKey, from, to, amount, symbol, memo = '') {   
+        return steem.broadcast.transferAsync(activeKey, from, to, `${parseFloat(amount).toFixed(3)} ${symbol}`, memo);
     },
     
-    transferSteemEngineTokens(from, to, symbol, quantity, memo) {    
+    transferSteemEngineTokens(activeKey, from, to, symbol, quantity, memo = '') {    
         const payload = {
             'contractName': 'tokens',
             'contractAction': 'transfer',
@@ -36,10 +36,10 @@ module.exports = {
             }
         };
     
-        return steem.broadcast.customJsonAsync(config.ACTIVE_KEY, [from], [], config.CHAIN_ID, JSON.stringify(payload));
+        return steem.broadcast.customJsonAsync(activeKey, [from], [], config.CHAIN_ID, JSON.stringify(payload));
     },
 
-    issueSteemEngineTokens(from, to, symbol, quantity, memo = '') {     
+    issueSteemEngineTokens(activeKey, from, to, symbol, quantity, memo = '') {     
         const payload = {
           contractName:'tokens',
           contractAction:'issue',
@@ -51,10 +51,10 @@ module.exports = {
           }
         };
       
-        return steem.broadcast.customJsonAsync(config.ACTIVE_KEY, [from], [], config.CHAIN_ID, JSON.stringify(payload));
+        return steem.broadcast.customJsonAsync(activeKey, [from], [], config.CHAIN_ID, JSON.stringify(payload));
     },
 
-    upvote(votePercentage = 100.0, username, permlink) {
+    upvote(postingKey, from, votePercentage = 100.0, username, permlink) {
         votePercentage = parseFloat(votePercentage);
 
         if (votePercentage < 0) {
@@ -64,22 +64,22 @@ module.exports = {
         const weight = this.votingWeight(votePercentage);
 
         return steem.broadcast.voteAsync(
-            config.ACTIVE_KEY,
-            config.USERNAME,
+            postingKey,
+            from,
             username,
             permlink,
             weight
         );
     },
 
-    downvote(votePercentage = 100.0, username, permlink) {
+    downvote(postingKey, from, votePercentage = 100.0, username, permlink) {
         votePercentage = parseFloat(votePercentage);
 
         const weight = this.votingWeight(votePercentage) * -1;
 
         return steem.broadcast.voteAsync(
-            config.ACTIVE_KEY,
-            config.USERNAME,
+            postingKey,
+            from,
             username,
             permlink,
             weight

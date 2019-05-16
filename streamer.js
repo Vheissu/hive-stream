@@ -239,6 +239,26 @@ class Streamer {
         return currentBlockNumber;
     }
 
+    transferSteemTokens(from, to, amount, symbol, memo = '') {
+        return utils.transferSteemTokens(this.activeKey, from, to, amount, symbol, memo);
+    }
+
+    transferSteemEngineTokens(from, to, symbol, quantity, memo = '') {
+        return utils.transferSteemEngineTokens(this.activeKey, from, to, symbol, quantity, memo);
+    }
+
+    issueSteemEngineTokens(from, to, symbol, quantity, memo = '') {
+        return utils.issueSteemEngineTokens(this.activeKey, from, to, symbol, quantity, memo);
+    }
+
+    upvote(votePercentage = 100.0, username, permlink) {
+        return utils.upvote(this.postingKey, this.username, votePercentage, username, permlink);
+    }
+
+    downvote(votePercentage = 100.0, username, permlink) {
+        return utils.downvote(this.postingKey, this.username, votePercentage, username, permlink);
+    }
+
     onComment(callback) {
         this.commentSubscriptions.push({
             callback
