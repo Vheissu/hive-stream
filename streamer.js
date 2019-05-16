@@ -11,6 +11,7 @@ class Streamer {
         this.customJsonSubscriptions = [];
         this.sscJsonSubscriptions = [];
         this.commentSubscriptions = [];
+        this.postSubscriptions = [];
         this.transferSubscriptions = [];
 
         this.blockNumberInterval = null;
@@ -88,8 +89,10 @@ class Streamer {
 
                     // Save the block number to our text file cache
                     await this.saveBlock(blockNumber);
-        
-                    console.log(`Saved block ${blockNumber} ${block.timestamp}`);
+                    
+                    if (config.DEBUG_MODE) {
+                        console.log(`Saved block ${blockNumber} ${block.timestamp}`);
+                    }
 
                     // Get the next block
                     this.loadBlock(blockNumber + 1);
@@ -112,7 +115,33 @@ class Streamer {
         return new Promise((resolve, reject) => {
             for (let tx of block.transactions) {
                 for (let op of tx.operations) {
+                    // Either a comment or a post
+                    if (op[0] === 'comment') {
+                        // This is a post
+                        if (op[1].parent_author === '') {
+                            if (config.DEBUG_MODE) {
+                                console.log('Post found');
+                            }
+                            this.postSubscriptions.forEach(sub => {
+                                sub.callback(op[1], tx, block, blockNumber);
+                            });
+                        } 
+                        // It's a comment
+                        else {
+                            if (config.DEBUG_MODE) {
+                                console.log('Comment found');
+                            }
+                            this.commentSubscriptions.forEach(sub => {
+                                sub.callback(op[1], tx, block, blockNumber);
+                            });
+                        }
+                    }
+
                     if (op[0] === 'transfer') {
+                        if (config.DEBUG_MODE) {
+                            console.log('Transfer found');
+                        }
+
                         this.transferSubscriptions.forEach(sub => {
                             if (!Array.isArray(sub.account)) {
                                 if (sub.account === op[1].to) {
@@ -127,6 +156,10 @@ class Streamer {
                     }
 
                     if (op[0] === 'custom_json') {
+                        if (config.DEBUG_MODE) {
+                            console.log('Custom JSON found');
+                        }
+                        
                         this.customJsonSubscriptions.forEach(sub => {
                             let isSignedWithActiveKey = false;
                             let sender;
@@ -202,6 +235,18 @@ class Streamer {
         }
     
         return currentBlockNumber;
+    }
+
+    onComment(callback) {
+        this.commentSubscriptions.push({
+            callback
+        });
+    }
+
+    onPost(callback) {
+        this.postSubscriptions.push({
+            callback
+        });
     }
 
     onTransfer(account, callback) {
