@@ -4,8 +4,6 @@ const utils = require('./utils');
 
 let config = require('./config');
 
-steem.api.setOptions({ url: config.API_URL });
-
 class Streamer {
     constructor(userConfig = {}) {
         this.customJsonSubscriptions = [];
@@ -14,15 +12,15 @@ class Streamer {
         this.postSubscriptions = [];
         this.transferSubscriptions = [];
 
+        this.config = Object.assign(config, userConfig);
+
         this.blockNumberInterval = null;
 
-        Object.assign(config, userConfig);
+        this.lastBlockNumber = this.config.LAST_BLOCK_NUMBER;
 
-        this.lastBlockNumber = config.LAST_BLOCK_NUMBER;
-
-        this.username = config.USERNAME;
-        this.postingKey = config.POSTING_KEY;
-        this.activeKey = config.ACTIVE_KEY;
+        this.username = this.config.USERNAME;
+        this.postingKey = this.config.POSTING_KEY;
+        this.activeKey = this.config.ACTIVE_KEY;
 
         this.blockNumber;
         this.transactionId;
@@ -31,6 +29,9 @@ class Streamer {
 
     // Starts the streaming process
     init() {
+        // Set the Steem API endpoint
+        steem.api.setOptions({ url: this.config.API_URL });
+
         // Streams the latest irreversible block number
         this.streamBlockNumber();
 
@@ -75,7 +76,7 @@ class Streamer {
             steem.api.getDynamicGlobalPropertiesAsync().then(props => {
                 this.lastBlockNumber = parseInt(props.last_irreversible_block_num);
             });
-        }, config.BLOCK_CHECK_INTERVAL)
+        }, this.config.BLOCK_CHECK_INTERVAL)
     }
 
     // Attempt to load the block from Steem itself
@@ -92,7 +93,7 @@ class Streamer {
                     // Save the block number to our text file cache
                     await this.saveBlock(blockNumber);
                     
-                    if (config.DEBUG_MODE) {
+                    if (this.config.DEBUG_MODE) {
                         console.log(`Saved block ${blockNumber} ${block.timestamp}`);
                     }
 
@@ -106,7 +107,7 @@ class Streamer {
             }
         } else {
             // The latest block number is less than the supplied block number, retry
-            await utils.sleep(config.BLOCK_CHECK_WAIT);
+            await utils.sleep(this.config.BLOCK_CHECK_WAIT);
 
             this.loadBlock(blockNumber);
         }
@@ -121,7 +122,7 @@ class Streamer {
                     if (op[0] === 'comment') {
                         // This is a post
                         if (op[1].parent_author === '') {
-                            if (config.DEBUG_MODE) {
+                            if (this.config.DEBUG_MODE) {
                                 console.log('Post found');
                             }
                             this.postSubscriptions.forEach(sub => {
@@ -130,7 +131,7 @@ class Streamer {
                         } 
                         // It's a comment
                         else {
-                            if (config.DEBUG_MODE) {
+                            if (this.config.DEBUG_MODE) {
                                 console.log('Comment found');
                             }
                             this.commentSubscriptions.forEach(sub => {
@@ -140,7 +141,7 @@ class Streamer {
                     }
 
                     if (op[0] === 'transfer') {
-                        if (config.DEBUG_MODE) {
+                        if (this.config.DEBUG_MODE) {
                             console.log('Transfer found');
                         }
 
@@ -158,7 +159,7 @@ class Streamer {
                     }
 
                     if (op[0] === 'custom_json') {
-                        if (config.DEBUG_MODE) {
+                        if (this.config.DEBUG_MODE) {
                             console.log('Custom JSON found');
                         }
                         
@@ -193,7 +194,7 @@ class Streamer {
                             const json = utils.jsonParse(op[1].json);
 
                             // SSC JSON operation
-                            if (id === config.CHAIN_ID) {
+                            if (id === this.config.CHAIN_ID) {
                                 const { contractName, contractAction, contractPayload } = json;
 
                                 sub.callback(contractName, contractAction, contractPayload, sender, op[1], tx, block, blockNumber);
@@ -240,23 +241,23 @@ class Streamer {
     }
 
     transferSteemTokens(from, to, amount, symbol, memo = '') {
-        return utils.transferSteemTokens(this.activeKey, from, to, amount, symbol, memo);
+        return utils.transferSteemTokens(this.config, from, to, amount, symbol, memo);
     }
 
     transferSteemEngineTokens(from, to, symbol, quantity, memo = '') {
-        return utils.transferSteemEngineTokens(this.activeKey, from, to, symbol, quantity, memo);
+        return utils.transferSteemEngineTokens(this.config, from, to, symbol, quantity, memo);
     }
 
     issueSteemEngineTokens(from, to, symbol, quantity, memo = '') {
-        return utils.issueSteemEngineTokens(this.activeKey, from, to, symbol, quantity, memo);
+        return utils.issueSteemEngineTokens(this.config, from, to, symbol, quantity, memo);
     }
 
     upvote(votePercentage = 100.0, username, permlink) {
-        return utils.upvote(this.postingKey, this.username, votePercentage, username, permlink);
+        return utils.upvote(this.config, this.username, votePercentage, username, permlink);
     }
 
     downvote(votePercentage = 100.0, username, permlink) {
-        return utils.downvote(this.postingKey, this.username, votePercentage, username, permlink);
+        return utils.downvote(this.config, this.username, votePercentage, username, permlink);
     }
 
     onComment(callback) {
