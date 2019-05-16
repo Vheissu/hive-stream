@@ -39,7 +39,7 @@ module.exports = {
         return steem.broadcast.customJsonAsync(config.ACTIVE_KEY, [from], [], config.CHAIN_ID, JSON.stringify(payload));
     },
 
-    issueTokens(from, to, symbol, quantity, memo) {     
+    issueSteemEngineTokens(from, to, symbol, quantity, memo = '') {     
         const payload = {
           contractName:'tokens',
           contractAction:'issue',
