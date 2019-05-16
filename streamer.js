@@ -2,12 +2,12 @@ const steem = require('steem');
 const fs = require('fs');
 const utils = require('./utils');
 
-const config = require('./config');
+let config = require('./config');
 
 steem.api.setOptions({ url: config.API_URL });
 
 class Streamer {
-    constructor() {
+    constructor(userConfig = {}) {
         this.customJsonSubscriptions = [];
         this.sscJsonSubscriptions = [];
         this.commentSubscriptions = [];
@@ -15,6 +15,8 @@ class Streamer {
         this.transferSubscriptions = [];
 
         this.blockNumberInterval = null;
+
+        Object.assign(config, userConfig);
 
         this.lastBlockNumber = config.LAST_BLOCK_NUMBER;
 
