@@ -31,7 +31,7 @@ ss.onTransfer((op, tx, block, blockNumber) => {
 ```
 
 ```javascript
-ss.onCustomJson((op, tx, block, blockNumber) => {
+ss.onCustomJson((op, { sender, isSignedWithActiveKey }, tx, block, blockNumber) => {
   
 })
 ```
