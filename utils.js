@@ -24,19 +24,34 @@ module.exports = {
         return steem.broadcast.transferAsync(config.ACTIVE_KEY, from, to, `${parseFloat(amount).toFixed(3)} ${symbol}`, memo);
     },
     
-    transferSteemEngineTokens(from, to, amount, token, memo) {    
-        const json = {
+    transferSteemEngineTokens(from, to, symbol, quantity, memo) {    
+        const payload = {
             'contractName': 'tokens',
             'contractAction': 'transfer',
             'contractPayload': {
-                'symbol': token,
-                'to': to,
-                'quantity': amount,
-                'memo': memo
+                symbol: `${symbol.toUpperCase()}`,
+                to,
+                quantity,
+                memo
             }
         };
     
-        return steem.broadcast.customJsonAsync(config.ACTIVE_KEY, from, [], config.CHAIN_ID, JSON.stringify(json));
+        return steem.broadcast.customJsonAsync(config.ACTIVE_KEY, [from], [], config.CHAIN_ID, JSON.stringify(payload));
+    },
+
+    issueTokens(from, to, symbol, quantity, memo) {     
+        const payload = {
+          contractName:'tokens',
+          contractAction:'issue',
+          contractPayload: {
+              symbol: `${symbol.toUpperCase()}`,
+              to,
+              quantity,
+              memo
+          }
+        };
+      
+        return steem.broadcast.customJsonAsync(config.ACTIVE_KEY, [from], [], config.CHAIN_ID, JSON.stringify(payload));
     },
 
     upvote(votePercentage = 100.0, username, permlink) {
