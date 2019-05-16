@@ -128,7 +128,18 @@ class Streamer {
 
                     if (op[0] === 'custom_json') {
                         this.customJsonSubscriptions.forEach(sub => {
-                            sub.callback(op[1], tx, block, blockNumber);
+                            let isSignedWithActiveKey = false;
+                            let sender;
+
+                            if (op[1].required_auths.length > 0) {
+                                sender = op[1].required_auths[0];
+                                isSignedWithActiveKey = true;
+                            } else {
+                                sender = op[1].required_posting_auths[0];
+                                isSignedWithActiveKey = false;
+                            }
+
+                            sub.callback(op[1], { sender, isSignedWithActiveKey }, tx, block, blockNumber);
                         });
 
                         this.sscJsonSubscriptions.forEach(sub => {
