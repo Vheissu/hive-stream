@@ -15,7 +15,7 @@ const Streamer = require('steem-stream');
 
 const ss = new Streamer();
 
-ss.onCustomJson((op, tx, block, blockNumer) => {
+ss.onCustomJson((op, { sender, isSignedWithActiveKey }, tx, block, blockNumber) => {
   // React to custom JSON operations
 });
 ```
