@@ -142,18 +142,12 @@ class Streamer {
                     if (op[0] === 'comment') {
                         // This is a post
                         if (op[1].parent_author === '') {
-                            if (this.config.DEBUG_MODE) {
-                                console.log('Post found');
-                            }
                             this.postSubscriptions.forEach(sub => {
                                 sub.callback(op[1], tx, block, blockNumber);
                             });
                         } 
                         // It's a comment
                         else {
-                            if (this.config.DEBUG_MODE) {
-                                console.log('Comment found');
-                            }
                             this.commentSubscriptions.forEach(sub => {
                                 sub.callback(op[1], tx, block, blockNumber);
                             });
@@ -161,10 +155,6 @@ class Streamer {
                     }
 
                     if (op[0] === 'transfer') {
-                        if (this.config.DEBUG_MODE) {
-                            console.log('Transfer found');
-                        }
-
                         this.transferSubscriptions.forEach(sub => {
                             if (!Array.isArray(sub.account)) {
                                 if (sub.account === op[1].to) {
@@ -178,11 +168,7 @@ class Streamer {
                         })
                     }
 
-                    if (op[0] === 'custom_json') {
-                        if (this.config.DEBUG_MODE) {
-                            console.log('Custom JSON found');
-                        }
-                        
+                    if (op[0] === 'custom_json') {                        
                         this.customJsonSubscriptions.forEach(sub => {
                             let isSignedWithActiveKey = false;
                             let sender;
