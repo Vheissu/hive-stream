@@ -49,6 +49,15 @@ const options = {
 const ss = new Streamer(options);
 ```
 
+The configuration itself can also be overloaded using the `setConfig` method which allows you to pass one or more of the above configuration options, useful in situations where multiple keys might be used for issuing.
+
+```
+ss.setConfig({
+  ACTIVE_KEY: 'newactivekey',
+  USERNAMEL 'newusername'
+});
+```
+
 ## Streamer
 
 The following subscription methods are read only methods, they allow you to react to certain Steem and Steem Engine events on the blockchain. You do not need to pass in any keys to use these methods as they're purely read only.

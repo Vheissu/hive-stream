@@ -27,6 +27,16 @@ class Streamer {
         this.refBlockNumber;
     }
 
+    // Allow configuration options to be overloaded
+    setConfig(config) {
+        Object.assign(this.config, config);
+
+        // Set keys and username incase they have changed
+        this.username = this.config.USERNAME;
+        this.postingKey = this.config.POSTING_KEY;
+        this.activeKey = this.config.ACTIVE_KEY;
+    }
+
     // Starts the streaming process
     start() {
         // Set the Steem API endpoint
