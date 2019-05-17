@@ -39,6 +39,8 @@ class Streamer {
 
     // Starts the streaming process
     start() {
+        console.log('Starting to stream the Steem blockchain');
+
         // Set the Steem API endpoint
         steem.api.setOptions({ url: this.config.API_URL });
 
@@ -56,6 +58,8 @@ class Streamer {
     }
 
     stop() {
+        console.log('Stopping Steem Stream');
+        
         if (this.blockNumberInterval) {
             clearInterval(this.blockNumberInterval);
         }
