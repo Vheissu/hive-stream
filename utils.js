@@ -33,6 +33,9 @@ function memorySizeOf(obj) {
     return sizeOf(obj);
 };
 
+const MAX_PAYLOAD_SIZE = 8192;
+const MAX_ACCOUNTS_CHECK = 999;
+
 module.exports = {
 
     // https://flaviocopes.com/javascript-sleep/
@@ -71,6 +74,52 @@ module.exports = {
         return steem.broadcast.customJsonAsync(config.ACTIVE_KEY, [from], [], config.CHAIN_ID, JSON.stringify(payload));
     },
 
+    async transferSteemEngineTokensMultiple(config, from, accounts, symbol, memo, amount = 0) {
+        const payloads = [[]];
+        const completed = 0;
+
+        for (const user of accounts) {
+            const account = user.account.replace('@', '');
+            const quantity = user.amount ? parseFloat(user.amount).replace(',', '.') : parseFloat(amount);
+
+            // 0 means no quantity supplied (either in accounts or default)
+            if (quantity > 0) {
+                const payload = {
+                    'contractName': 'tokens',
+                    'contractAction': 'transfer',
+                    'contractPayload': {
+                        symbol: `${symbol.toUpperCase()}`,
+                        account,
+                        quantity,
+                        memo
+                    }
+                };
+
+                const lastPayloadSize = memorySizeOf(payloads[payloads.length - 1]);
+                const payloadSize = memorySizeOf(payload);
+
+                if (payloadSize + lastPayloadSize > MAX_PAYLOAD_SIZE) {
+                    payloads.push([payload]);
+                } else {
+                    payloads[payloads.length - 1].push(payload);
+                }  
+            }
+        }
+
+        for (let payload of payloads) {
+            const required_auths = [from];
+            const required_posting_auths = [];
+
+            await steem.broadcast.customJsonAsync(config.ACTIVE_KEY, required_auths, required_posting_auths, config.CHAIN_ID, JSON.stringify(payload));
+
+            completed++;
+
+            if (completed !== (payloads.length) && completed !== 0) {
+                await this.sleep(3000);
+            }
+        }
+    },
+
     issueSteemEngineTokens(config, from, to, symbol, quantity, memo = '') {     
         const payload = {
           contractName:'tokens',
@@ -84,6 +133,52 @@ module.exports = {
         };
       
         return steem.broadcast.customJsonAsync(config.ACTIVE_KEY, [from], [], config.CHAIN_ID, JSON.stringify(payload));
+    },
+
+    async issueSteemEngineTokensMultiple(config, from, accounts, symbol, memo, amount = 0) {
+        const payloads = [[]];
+        const completed = 0;
+
+        for (const user of accounts) {
+            const account = user.account.replace('@', '');
+            const quantity = user.amount ? parseFloat(user.amount).replace(',', '.') : parseFloat(amount);
+
+            // 0 means no quantity supplied (either in accounts or default)
+            if (quantity > 0) {
+                const payload = {
+                    'contractName': 'tokens',
+                    'contractAction': 'issue',
+                    'contractPayload': {
+                        symbol: `${symbol.toUpperCase()}`,
+                        account,
+                        quantity,
+                        memo
+                    }
+                };
+
+                const lastPayloadSize = memorySizeOf(payloads[payloads.length - 1]);
+                const payloadSize = memorySizeOf(payload);
+
+                if (payloadSize + lastPayloadSize > MAX_PAYLOAD_SIZE) {
+                    payloads.push([payload]);
+                } else {
+                    payloads[payloads.length - 1].push(payload);
+                }  
+            }
+        }
+
+        for (let payload of payloads) {
+            const required_auths = [from];
+            const required_posting_auths = [];
+
+            await steem.broadcast.customJsonAsync(config.ACTIVE_KEY, required_auths, required_posting_auths, config.CHAIN_ID, JSON.stringify(payload));
+
+            completed++;
+
+            if (completed !== (payloads.length) && completed !== 0) {
+                await this.sleep(3000);
+            }
+        }
     },
 
     upvote(config, from, votePercentage = 100.0, username, permlink) {

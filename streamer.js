@@ -248,8 +248,16 @@ class Streamer {
         return utils.transferSteemEngineTokens(this.config, from, to, symbol, quantity, memo);
     }
 
+    transferSteemEngineTokensMultiple(from, accounts = [], symbol, memo = '') {
+        return utils.transferSteemEngineTokensMultiple(this.config, from, accounts, symbol, memo);
+    }
+
     issueSteemEngineTokens(from, to, symbol, quantity, memo = '') {
         return utils.issueSteemEngineTokens(this.config, from, to, symbol, quantity, memo);
+    }
+
+    issueSteemEngineTokensMultiple(from, to, symbol, quantity, memo = '') {
+        return utils.issueSteemEngineTokensMultiple(this.config, from, to, symbol, quantity, memo);
     }
 
     upvote(votePercentage = 100.0, username, permlink) {
