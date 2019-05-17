@@ -54,7 +54,7 @@ The configuration itself can also be overloaded using the `setConfig` method whi
 ```
 ss.setConfig({
   ACTIVE_KEY: 'newactivekey',
-  USERNAMEL 'newusername'
+  USERNAME: 'newusername'
 });
 ```
 
