@@ -15,8 +15,8 @@ const Streamer = require('steem-stream');
 
 const ss = new Streamer();
 
-// Kickstart the streamer
-ss.init();
+// Kickstart the streamer to watch the Steem blockchain
+ss.start();
 
 // Watch for all custom JSON operations
 ss.onCustomJson((op, { sender, isSignedWithActiveKey }, tx, block, blockNumber) => {
@@ -49,11 +49,13 @@ const options = {
 const ss = new Streamer(options);
 ```
 
-## Subscriptions
+## Streamer
 
-React to certain Steem and Steem Engine events on the blockchain.
+The following subscription methods are read only methods, they allow you to react to certain Steem and Steem Engine events on the blockchain. You do not need to pass in any keys to use these methods as they're purely read only.
 
-### Watch for transfers
+To use the following methods, you need to make sure you have started the streamer using the `start` method.
+
+#### Watch for transfers
 
 ```javascript
 ss.onTransfer((op, tx, block, blockNumber) => {
@@ -61,32 +63,79 @@ ss.onTransfer((op, tx, block, blockNumber) => {
 })
 ```
 
-### Watch for custom JSON operations
+#### Watch for custom JSON operations
 ```javascript
 ss.onCustomJson((op, { sender, isSignedWithActiveKey }, tx, block, blockNumber) => {
   
 })
 ```
 
-### Watch for Steem Engine JSON operations
+#### Watch for Steem Engine JSON operations
 ```javascript
 ss.onSscJson((contractName, contractAction, contractPayload, sender, op, tx, block, blockNumber) => {
   
 })
 ```
 
-### Watch for post operations
+#### Watch for post operations
 ```javascript
 ss.onPost((op, tx, block, blockNumber) => {
 
 });
 ```
 
-### Watch for comment operations
+#### Watch for comment operations
 ```javascript
 ss.onComment((op, tx, block, blockNumber) => {
 
 });
+```
+
+## Actions (active key)
+
+All of the below methods require an active key has been supplied in the constructor above called `ACTIVE_KEY`. The methods below are all promised based, so you can `await` them or use `then` to confirm a successful result.
+
+**You are not required to start the streamer using the `start` method to call these methods.**
+
+```javascript
+const ss = new Streamer({
+  ACTIVE_KEY: 'youractivekey'
+});
+```
+
+### Transfer Steem (STEEM or SBD)
+```javascript
+transferSteemTokens(from, to, amount, symbol, memo = '') {
+
+}
+```
+
+### Transfer Steem Engine tokens
+```javascript
+transferSteemEngineTokens(from, to, symbol, quantity, memo = '') {
+
+}
+```
+
+### Transfer Multiple Steem Engine tokens
+```javascript
+transferSteemEngineTokensMultiple(from, accounts = [], symbol, memo = '') {
+
+}
+```
+
+### Issue Steem Engine tokens
+```javascript
+issueSteemEngineTokens(from, to, symbol, quantity, memo = '') {
+
+}
+```
+
+### Issue Multiple Steem Engine tokens
+```javascript
+issueSteemEngineTokensMultiple(from, to, symbol, quantity, memo = '') {
+
+}
 ```
 
 ## Permanently running with PM2
@@ -111,7 +160,3 @@ module.exports = {
     }
   ]
 ```
-
-## Roadmap
-
-This package currently only works for one-way READ ONLY operations, however, will support transfers, comments, posts and other functionality very shortly (including the ability to transfer and issue Steem Engine tokens).

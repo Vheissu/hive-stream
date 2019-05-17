@@ -28,7 +28,7 @@ class Streamer {
     }
 
     // Starts the streaming process
-    init() {
+    start() {
         // Set the Steem API endpoint
         steem.api.setOptions({ url: this.config.API_URL });
 
@@ -45,10 +45,16 @@ class Streamer {
         });
     }
 
+    stop() {
+        if (this.blockNumberInterval) {
+            clearInterval(this.blockNumberInterval);
+        }
+    }
+
     // Resets the entire streamer
     reset() {
         setTimeout(() => {
-            this.init();
+            this.start();
         }, 5000);
     }
 
