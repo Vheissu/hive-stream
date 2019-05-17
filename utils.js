@@ -74,7 +74,7 @@ module.exports = {
         return steem.broadcast.customJsonAsync(config.ACTIVE_KEY, [from], [], config.CHAIN_ID, JSON.stringify(payload));
     },
 
-    async transferSteemEngineTokensMultiple(config, from, accounts, symbol, memo, amount = 0) {
+    async transferSteemEngineTokensMultiple(config, from, accounts, symbol, memo, amount = '0') {
         const payloads = [[]];
         const completed = 0;
 
@@ -135,7 +135,7 @@ module.exports = {
         return steem.broadcast.customJsonAsync(config.ACTIVE_KEY, [from], [], config.CHAIN_ID, JSON.stringify(payload));
     },
 
-    async issueSteemEngineTokensMultiple(config, from, accounts, symbol, memo, amount = 0) {
+    async issueSteemEngineTokensMultiple(config, from, accounts, symbol, memo, amount = '0') {
         const payloads = [[]];
         const completed = 0;
 

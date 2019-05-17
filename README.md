@@ -127,8 +127,20 @@ transferSteemEngineTokens(from, to, symbol, quantity, memo = '') {
 ```
 
 ### Transfer Multiple Steem Engine tokens
+
+The accounts array should contain one or more objects with the following keys:
+
+```
+{
+  account: 'steemaccountname',
+  amount: '2.00'
+}
+```
+
+If the object does not contain an amount, you will need to supply a default amount to the function itself. By default the default amount if no value is supplied is '0'. If every object in the array has an amount specific, the default amount is ignored.
+
 ```javascript
-transferSteemEngineTokensMultiple(from, accounts = [], symbol, memo = '') {
+transferSteemEngineTokensMultiple(from, accounts = [], symbol, memo = '', amount = '0') {
 
 }
 ```
@@ -141,8 +153,20 @@ issueSteemEngineTokens(from, to, symbol, quantity, memo = '') {
 ```
 
 ### Issue Multiple Steem Engine tokens
+
+The accounts array should contain one or more objects with the following keys:
+
+```
+{
+  account: 'steemaccountname',
+  amount: '2.00'
+}
+```
+
+If the object does not contain an amount, you will need to supply a default amount to the function itself. By default the default amount if no value is supplied is '0'. If every object in the array has an amount specific, the default amount is ignored.
+
 ```javascript
-issueSteemEngineTokensMultiple(from, to, symbol, quantity, memo = '') {
+issueSteemEngineTokensMultiple(from, to, symbol, quantity, memo = '', amount = '0') {
 
 }
 ```
