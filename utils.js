@@ -1,39 +1,6 @@
 const steem = require('steem');
 
-// https://stackoverflow.com/questions/23318037/size-of-json-object-in-kbs-mbs
-function memorySizeOf(obj) {
-    var bytes = 0;
-
-    function sizeOf(obj) {
-        if(obj !== null && obj !== undefined) {
-            switch(typeof obj) {
-            case 'number':
-                bytes += 8;
-                break;
-            case 'string':
-                bytes += obj.length * 2;
-                break;
-            case 'boolean':
-                bytes += 4;
-                break;
-            case 'object':
-                var objClass = Object.prototype.toString.call(obj).slice(8, -1);
-                if(objClass === 'Object' || objClass === 'Array') {
-                    for(var key in obj) {
-                        if(!obj.hasOwnProperty(key)) continue;
-                        sizeOf(obj[key]);
-                    }
-                } else bytes += obj.toString().length * 2;
-                break;
-            }
-        }
-        return bytes;
-    };
-
-    return sizeOf(obj);
-};
-
-const MAX_PAYLOAD_SIZE = 8192;
+const MAX_PAYLOAD_SIZE = 2000;
 const MAX_ACCOUNTS_CHECK = 999;
 
 module.exports = {
@@ -80,7 +47,7 @@ module.exports = {
 
         for (const user of accounts) {
             const account = user.account.replace('@', '');
-            const quantity = user.amount ? parseFloat(user.amount).replace(',', '.') : parseFloat(amount);
+            const quantity = user.amount ? parseFloat(user.amount.replace(',', '.')) : parseFloat(amount);
 
             // 0 means no quantity supplied (either in accounts or default)
             if (quantity > 0) {
@@ -95,8 +62,8 @@ module.exports = {
                     }
                 };
 
-                const lastPayloadSize = memorySizeOf(payloads[payloads.length - 1]);
-                const payloadSize = memorySizeOf(payload);
+                const lastPayloadSize = JSON.stringify(payloads[payloads.length - 1]).length;
+                const payloadSize = JSON.stringify(payload).length;
 
                 if (payloadSize + lastPayloadSize > MAX_PAYLOAD_SIZE) {
                     payloads.push([payload]);
@@ -141,7 +108,7 @@ module.exports = {
 
         for (const user of accounts) {
             const account = user.account.replace('@', '');
-            const quantity = user.amount ? parseFloat(user.amount).replace(',', '.') : parseFloat(amount);
+            const quantity = user.amount ? parseFloat(user.amount.replace(',', '.')) : parseFloat(amount);
 
             // 0 means no quantity supplied (either in accounts or default)
             if (quantity > 0) {
@@ -156,8 +123,8 @@ module.exports = {
                     }
                 };
 
-                const lastPayloadSize = memorySizeOf(payloads[payloads.length - 1]);
-                const payloadSize = memorySizeOf(payload);
+                const lastPayloadSize = JSON.stringify(payloads[payloads.length - 1]).length;
+                const payloadSize = JSON.stringify(payload).length;
 
                 if (payloadSize + lastPayloadSize > MAX_PAYLOAD_SIZE) {
                     payloads.push([payload]);
