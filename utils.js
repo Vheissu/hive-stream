@@ -43,7 +43,7 @@ module.exports = {
 
     async transferSteemEngineTokensMultiple(config, from, accounts, symbol, memo, amount = '0') {
         const payloads = [[]];
-        const completed = 0;
+        let completed = 0;
 
         for (const user of accounts) {
             const account = user.account.replace('@', '');
@@ -104,7 +104,7 @@ module.exports = {
 
     async issueSteemEngineTokensMultiple(config, from, accounts, symbol, memo, amount = '0') {
         const payloads = [[]];
-        const completed = 0;
+        let completed = 0;
 
         for (const user of accounts) {
             const account = user.account.replace('@', '');
