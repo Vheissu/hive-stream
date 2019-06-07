@@ -1,6 +1,6 @@
 {
   "name": "steem-stream",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "A layer for streaming actions on the Steem blockchain.",
   "main": "index.js",
   "repository": "git@github.com:Vheissu/steem-stream.git",
