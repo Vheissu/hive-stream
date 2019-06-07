@@ -89,13 +89,13 @@ module.exports = {
 
     issueSteemEngineTokens(config, from, to, symbol, quantity, memo = '') {     
         const payload = {
-          contractName:'tokens',
-          contractAction:'issue',
-          contractPayload: {
-              symbol: `${symbol.toUpperCase()}`,
-              to,
-              quantity,
-              memo
+          'contractName':'tokens',
+          'contractAction':'issue',
+          'contractPayload': {
+              'symbol': `${symbol.toUpperCase()}`,
+              'to': to,
+              'quantity': quantity,
+              'memo': memo
           }
         };
       
