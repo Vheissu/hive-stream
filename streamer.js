@@ -87,7 +87,7 @@ class Streamer {
         // If the block number we've got is zero
         // set it to the last irreversible block number
         if (this.lastBlockNumber === 0) {
-            last_block = props.last_irreversible_block_num - 1;
+            this.lastBlockNumber = props.last_irreversible_block_num - 1;
         }
 
         // We are more than 25 blocks behind, uh oh, we gotta catch up
