@@ -27,18 +27,18 @@ module.exports = {
     },
     
     transferSteemEngineTokens(config, from, to, symbol, quantity, memo = '') {    
-        const payload = {
-            'contractName': 'tokens',
-            'contractAction': 'transfer',
-            'contractPayload': {
-                symbol: `${symbol.toUpperCase()}`,
-                to,
-                quantity,
-                memo
+        const json = {
+            "contractName": "tokens",
+            "contractAction": "transfer",
+            "contractPayload": {
+                "symbol": symbol.toUpperCase(),
+                "to": to,
+                "quantity": quantity,
+                "memo":memo
             }
         };
     
-        return steem.broadcast.customJsonAsync(config.ACTIVE_KEY, [from], [], config.CHAIN_ID, JSON.stringify(payload));
+        return steem.broadcast.customJsonAsync(config.ACTIVE_KEY, [from], null, config.CHAIN_ID, JSON.stringify(json));
     },
 
     async transferSteemEngineTokensMultiple(config, from, accounts, symbol, memo, amount = '0') {
@@ -51,14 +51,14 @@ module.exports = {
 
             // 0 means no quantity supplied (either in accounts or default)
             if (quantity > 0) {
-                const payload = {
-                    'contractName': 'tokens',
-                    'contractAction': 'transfer',
-                    'contractPayload': {
-                        symbol: `${symbol.toUpperCase()}`,
-                        account,
-                        quantity,
-                        memo
+                const json = {
+                    "contractName": "tokens",
+                    "contractAction": "transfer",
+                    "contractPayload": {
+                        "symbol": symbol.toUpperCase(),
+                        "to": account,
+                        "quantity": quantity,
+                        "memo":memo
                     }
                 };
 
@@ -66,16 +66,16 @@ module.exports = {
                 const payloadSize = JSON.stringify(payload).length;
 
                 if (payloadSize + lastPayloadSize > MAX_PAYLOAD_SIZE) {
-                    payloads.push([payload]);
+                    payloads.push([json]);
                 } else {
-                    payloads[payloads.length - 1].push(payload);
+                    payloads[payloads.length - 1].push(json);
                 }  
             }
         }
 
         for (let payload of payloads) {
             const required_auths = [from];
-            const required_posting_auths = [];
+            const required_posting_auths = null;
 
             await steem.broadcast.customJsonAsync(config.ACTIVE_KEY, required_auths, required_posting_auths, config.CHAIN_ID, JSON.stringify(payload));
 
@@ -88,18 +88,22 @@ module.exports = {
     },
 
     issueSteemEngineTokens(config, from, to, symbol, quantity, memo = '') {     
-        const payload = {
-          'contractName':'tokens',
-          'contractAction':'issue',
-          'contractPayload': {
-              'symbol': `${symbol.toUpperCase()}`,
-              'to': to,
-              'quantity': quantity,
-              'memo': memo
-          }
+        const json = {
+            "contractName": "tokens",
+            "contractAction": "issue",
+            "contractPayload": {
+                "symbol": symbol,
+                "to": to,
+                "quantity": quantity,
+                "memo":memo
+            }
         };
+
+        if (config.DEBUG_MODE) {
+            console.log(`Issuing Steem Engine Token: `, payload, JSON.stringify(json));
+        }
       
-        return steem.broadcast.customJsonAsync(config.ACTIVE_KEY, [from], [], config.CHAIN_ID, JSON.stringify(payload));
+        return steem.broadcast.customJsonAsync(config.ACTIVE_KEY, [from], null, config.CHAIN_ID, JSON.stringify(json));
     },
 
     async issueSteemEngineTokensMultiple(config, from, accounts, symbol, memo, amount = '0') {
@@ -112,31 +116,31 @@ module.exports = {
 
             // 0 means no quantity supplied (either in accounts or default)
             if (quantity > 0) {
-                const payload = {
-                    'contractName': 'tokens',
-                    'contractAction': 'issue',
-                    'contractPayload': {
-                        symbol: `${symbol.toUpperCase()}`,
-                        account,
-                        quantity,
-                        memo
+                const json = {
+                    "contractName": "tokens",
+                    "contractAction": "issue",
+                    "contractPayload": {
+                        "symbol": symbol.toUpperCase(),
+                        "to": to,
+                        "quantity": quantity,
+                        "memo":memo
                     }
                 };
 
                 const lastPayloadSize = JSON.stringify(payloads[payloads.length - 1]).length;
-                const payloadSize = JSON.stringify(payload).length;
+                const payloadSize = JSON.stringify(json).length;
 
                 if (payloadSize + lastPayloadSize > MAX_PAYLOAD_SIZE) {
                     payloads.push([payload]);
                 } else {
-                    payloads[payloads.length - 1].push(payload);
+                    payloads[payloads.length - 1].push(json);
                 }  
             }
         }
 
         for (let payload of payloads) {
             const required_auths = [from];
-            const required_posting_auths = [];
+            const required_posting_auths = null;
 
             await steem.broadcast.customJsonAsync(config.ACTIVE_KEY, required_auths, required_posting_auths, config.CHAIN_ID, JSON.stringify(payload));
 
