@@ -19,7 +19,7 @@ const ss = new Streamer();
 ss.start();
 
 // Watch for all custom JSON operations
-ss.onCustomJson((op, { sender, isSignedWithActiveKey }, tx, block, blockNumber) => {
+ss.onCustomJson((op, { sender, isSignedWithActiveKey }, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
   // React to custom JSON operations
 });
 ```
@@ -28,7 +28,9 @@ ss.onCustomJson((op, { sender, isSignedWithActiveKey }, tx, block, blockNumber) 
 
 The `Streamer` object can accept an object of configuration values which are all optional. However, some operations like transfering Steem Engine tokens or other operations on the blockchain that are not READ ONLY, will require the active key and/or posting keys supplied as well as a username.
 
-Many of these values can be left as the defaults. The `BLOCK_CHECK_INTERVAL` configuration value is how often a new block is checked, because Steem is a 3 second blockchain, this accounts for new blocks being created. The `BLOCK_CHECK_WAIT` value is how long to wait if the block returned is the same as the current block. By default, this is 300 milliseconds, and works, but can be adjusted accordingly.
+The `BLOCK_CHECK_INTERVAL` value is how often to check for new blocks or in cases of error or falling behind, to poll for new blocks. It is advisable you keep this as the default 1000ms value which is one second. This allows you to account for situations where blocks fall behind the main block.
+
+The `BLOCKS_BEHIND_WARNING` value is a numeric value of the number of blocks your API will fall behind from the master before warning to the console.
 
 The `CHAIN_ID` value is only for Steem Engine related operations. The `API_URL` is the Steem API. If you want to enable debug mode, set to `DEBUG_MODE` to `true`. The configuration values and their defaults can be found [here](https://github.com/Vheissu/steem-stream/blob/master/config.js).
 
@@ -39,8 +41,8 @@ const options = {
   APP_NAME: 'steem-stream',
   USERNAME: '',
   LAST_BLOCK_NUMBER: 0,
-  BLOCK_CHECK_INTERVAL: 3000,
-  BLOCK_CHECK_WAIT: 300,
+  BLOCK_CHECK_INTERVAL: 1000,
+  BLOCKS_BEHIND_WARNING: 25,
   CHAIN_ID: 'ssc-mainnet1',
   API_URL: 'https://api.steemit.com',
   DEBUG_MODE: false
@@ -67,35 +69,35 @@ To use the following methods, you need to make sure you have started the streame
 #### Watch for transfers
 
 ```javascript
-ss.onTransfer((op, tx, block, blockNumber) => {
+ss.onTransfer((op,blockNumber, blockId, prevBlockId, trxId, blockTime) => {
 
 })
 ```
 
 #### Watch for custom JSON operations
 ```javascript
-ss.onCustomJson((op, { sender, isSignedWithActiveKey }, tx, block, blockNumber) => {
+ss.onCustomJson((op, { sender, isSignedWithActiveKey }, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
   
 })
 ```
 
 #### Watch for Steem Engine JSON operations
 ```javascript
-ss.onSscJson((contractName, contractAction, contractPayload, sender, op, tx, block, blockNumber) => {
+ss.onSscJson((contractName, contractAction, contractPayload, sender, op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
   
 })
 ```
 
 #### Watch for post operations
 ```javascript
-ss.onPost((op, tx, block, blockNumber) => {
+ss.onPost((op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
 
 });
 ```
 
 #### Watch for comment operations
 ```javascript
-ss.onComment((op, tx, block, blockNumber) => {
+ss.onComment((op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
 
 });
 ```
