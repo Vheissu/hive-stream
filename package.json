@@ -1,8 +1,7 @@
 {
   "name": "steem-stream",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "description": "A layer for streaming actions on the Steem blockchain.",
-  "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "repository": "git@github.com:Vheissu/steem-stream.git",
   "author": "Dwayne Charrington <dwaynecharrington@gmail.com>",
