@@ -80,7 +80,9 @@ class Streamer {
 
         // We have no props, try again
         if (!props) {
-            setTimeout(this.getBlock, this.config.BLOCK_CHECK_INTERVAL);
+            setTimeout(() => {
+                this.getBlock();
+            }, this.config.BLOCK_CHECK_INTERVAL);
             return;
         }
 
@@ -99,7 +101,9 @@ class Streamer {
             }
         }
 
-        this.blockNumberTimeout = setTimeout(this.getBlock, this.config.BLOCK_CHECK_INTERVAL);
+        this.blockNumberTimeout = setTimeout(() => {
+            this.getBlock();
+        }, this.config.BLOCK_CHECK_INTERVAL);
     }
 
     // Takes the block from Steem and allows us to work with it
