@@ -11,7 +11,7 @@ npm install steem-stream
 ## Quick Usage
 
 ```javascript
-const Streamer = require('steem-stream');
+const { Streamer } = require('steem-stream');
 
 const ss = new Streamer();
 

@@ -301,5 +301,3 @@ export class Streamer {
         return this.refBlockNumber;
     }
 }
-
-module.exports = Streamer;
