@@ -2,13 +2,27 @@
   "name": "steem-stream",
   "version": "2.0.2",
   "description": "A layer for streaming actions on the Steem blockchain.",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "repository": "git@github.com:Vheissu/steem-stream.git",
   "author": "Dwayne Charrington <dwaynecharrington@gmail.com>",
   "license": "MIT",
   "private": false,
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "jest"
+  },
   "dependencies": {
+    "@types/dotenv": "^6.1.1",
+    "@types/node": "^12.0.8",
     "dotenv": "^7.0.0",
     "steem": "^0.7.4"
+  },
+  "devDependencies": {
+    "@types/jest": "^24.0.15",
+    "jest": "^24.8.0",
+    "ts-jest": "^24.0.2",
+    "typescript": "^3.5.2"
   }
 }
