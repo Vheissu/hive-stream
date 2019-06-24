@@ -3,6 +3,10 @@ import fs from 'fs';
 import { Utils } from './utils';
 import { Config, ConfigInterface } from './config';
 
+import SSC from 'sscjs';
+
+const ssc = new SSC('https://api.steem-engine.com/rpc');
+
 export class Streamer {
     private customJsonSubscriptions: any[] = [];
     private sscJsonSubscriptions: any[] = [];
@@ -96,8 +100,11 @@ export class Streamer {
         // If the block number we've got is zero
         // set it to the last irreversible block number
         if (this.lastBlockNumber === 0) {
-            this.lastBlockNumber = props.last_irreversible_block_num - 1;
+            this.lastBlockNumber = props.head_block_number - 1;
         }
+
+        console.log(`Head block number: `, props.head_block_number);
+        console.log(`Last block number: `, this.lastBlockNumber);
 
         // We are more than 25 blocks behind, uh oh, we gotta catch up
         if (props.head_block_number >= (this.lastBlockNumber + this.config.BLOCKS_BEHIND_WARNING)) {
@@ -192,7 +199,7 @@ export class Streamer {
                     blockNumber, blockId, prevBlockId, trxId, blockTime);
             });
 
-            this.sscJsonSubscriptions.forEach((sub) => {
+            Utils.asyncForEach(this.sscJsonSubscriptions, async (sub: any) => {
                 let isSignedWithActiveKey = null;
                 let sender;
 
@@ -211,8 +218,21 @@ export class Streamer {
                 if (id === this.config.CHAIN_ID) {
                     const { contractName, contractAction, contractPayload } = json;
 
-                    sub.callback(contractName, contractAction, contractPayload, sender,
-                        op[1], blockNumber, blockId, prevBlockId, trxId, blockTime);
+                    try {
+                      // Attempt to get the transaction from Steem Engine itself
+                      const txInfo = await ssc.getTransactionInfo(trxId);
+
+                      const logs = txInfo && txInfo.logs ? Utils.jsonParse(txInfo.logs) : null;
+
+                      // Do we have a valid transaction and are there no errors? It's a real transaction
+                      if (txInfo && logs && typeof logs.errors === 'undefined') {
+                          sub.callback(contractName, contractAction, contractPayload, sender,
+                              op[1], blockNumber, blockId, prevBlockId, trxId, blockTime);
+                      }
+                    } catch(e) {
+                        console.error(e);
+                        return;
+                    }
                 }
             });
         }
@@ -262,13 +282,13 @@ export class Streamer {
         return Utils.downvote(this.config, this.username, votePercentage, username, permlink);
     }
 
-    public onComment(callback: () => void): void {
+    public onComment(callback: any): void {
         this.commentSubscriptions.push({
             callback,
         });
     }
 
-    public onPost(callback: () => void): void {
+    public onPost(callback: any): void {
         this.postSubscriptions.push({
             callback,
         });
@@ -281,11 +301,11 @@ export class Streamer {
         });
     }
 
-    public onCustomJson(callback: () => void): void {
+    public onCustomJson(callback: any): void {
         this.customJsonSubscriptions.push({ callback });
     }
 
-    public onSscJson(callback: () => void): void {
+    public onSscJson(callback: any): void {
         this.sscJsonSubscriptions.push({ callback });
     }
 
