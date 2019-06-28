@@ -52,10 +52,12 @@ export const Utils = {
 
         for (const user of accounts) {
             const account: string = user.account.replace('@', '');
-            const quantity: number = user.amount ? parseFloat(user.amount.replace(',', '.')) : parseFloat(amount);
+            const quantity: string = user.amount ?
+                                     parseFloat(user.amount.replace(',', '.')).toString() :
+                                     parseFloat(amount).toString();
 
             // 0 means no quantity supplied (either in accounts or default)
-            if (quantity > 0) {
+            if (parseFloat(quantity) > 0) {
                 const json = {
                     contractName: 'tokens',
                     contractAction: 'transfer',
@@ -120,10 +122,12 @@ export const Utils = {
 
         for (const user of accounts) {
             const to = user.account.replace('@', '');
-            const quantity = user.amount ? parseFloat(user.amount.replace(',', '.')) : parseFloat(amount);
+            const quantity: string = user.amount ?
+                                     parseFloat(user.amount.replace(',', '.')).toString() :
+                                     parseFloat(amount).toString();
 
             // 0 means no quantity supplied (either in accounts or default)
-            if (quantity > 0) {
+            if (parseFloat(quantity) > 0) {
                 const json = {
                     contractName: 'tokens',
                     contractAction: 'issue',
