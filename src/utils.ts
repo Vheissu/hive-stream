@@ -197,4 +197,10 @@ export const Utils = {
         return Math.min(Math.floor(parseFloat(votePercentage.toFixed(2)) * 100), 10000);
     },
 
+    async asyncForEach(array: any[], callback: any) {
+        for (let index = 0; index < array.length; index++) {
+          await callback(array[index], index, array);
+        }
+    }
+
 };
