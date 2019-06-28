@@ -24,7 +24,6 @@ export class Streamer {
     private refBlockNumber: number;
 
     constructor(userConfig: Partial<ConfigInterface> = {}) {
-
         this.config = Object.assign(Config, userConfig);
 
         this.lastBlockNumber = this.config.LAST_BLOCK_NUMBER;
@@ -34,7 +33,13 @@ export class Streamer {
         this.activeKey = this.config.ACTIVE_KEY;
     }
 
-    // Allow configuration options to be overloaded
+    /**
+     * setConfig
+     *
+     * Allows specific configuration settings to be overridden
+     *
+     * @param config
+     */
     public setConfig(config: Partial<ConfigInterface>) {
         Object.assign(this.config, config);
 
@@ -44,17 +49,23 @@ export class Streamer {
         this.activeKey = this.config.ACTIVE_KEY;
     }
 
-    // Starts the streaming process
-    public async start() {
+    /**
+     * Start
+     *
+     * Starts the streamer bot to get blocks from the Steem API
+     *
+     */
+    public start(): void {
         console.log('Starting to stream the Steem blockchain');
 
         // Set the Steem API endpoint
         steem.api.setOptions({ url: this.config.API_URL });
 
-        // Do we have a state file?
+        // Do we have any previously saved state to load?
         if (fs.existsSync('steem-stream.json')) {
+            // Parse the object data from the JSON state file
             const state = JSON.parse(fs.readFileSync('steem-stream.json') as unknown as string);
-
+            
             if (state.lastBlockNumber) {
                 this.lastBlockNumber = state.lastBlockNumber;
             }
@@ -76,16 +87,22 @@ export class Streamer {
         this.getBlock();
     }
 
-    public stop() {
+    /**
+     * Stop
+     *
+     * Stops the streamer from running
+     */
+    public stop(): void {
         if (this.blockNumberTimeout) {
             clearTimeout(this.blockNumberTimeout);
         }
     }
 
-    private async getBlock() {
+    private async getBlock(): Promise<void> {
+        // Load global properties from the steem API
         const props = await steem.api.getDynamicGlobalPropertiesAsync();
 
-        // We have no props, try again
+        // We have no props, so try loading them again.
         if (!props) {
             setTimeout(() => {
                 this.getBlock();
@@ -101,8 +118,9 @@ export class Streamer {
 
         // We are more than 25 blocks behind, uh oh, we gotta catch up
         if (props.head_block_number >= (this.lastBlockNumber + this.config.BLOCKS_BEHIND_WARNING)) {
-            console.log(`We are more than 25 blocks behind: ${props.head_block_number - this.lastBlockNumber}`);
+            console.log(`We are more than 25 blocks behind`);
 
+            // We catch-up by running a while loop and incrementing the block number
             while (props.head_block_number > this.lastBlockNumber) {
                 await this.loadBlock(this.lastBlockNumber + 1);
             }
@@ -115,10 +133,11 @@ export class Streamer {
     }
 
     // Takes the block from Steem and allows us to work with it
-    private async loadBlock(blockNumber: number) {
+    private async loadBlock(blockNumber: number): Promise<void> {
+        // Load the block itself from the Steem API
         const block = await steem.api.getBlockAsync(blockNumber);
 
-        // Block most likely does not exist
+        // The block doesn't exist, wait and try again
         if (!block) {
             await Utils.sleep(this.config.BLOCK_CHECK_INTERVAL);
             return;
@@ -147,13 +166,15 @@ export class Streamer {
     }
 
     public processOperation(op: any, blockNumber: number, blockId: string,
-                            prevBlockId: string, trxId: string, blockTime: Date) {
+                            prevBlockId: string, trxId: string, blockTime: Date): void {
+        // Operation is a "comment" which could either be a post or comment
         if (op[0] === 'comment') {
             // This is a post
             if (op[1].parent_author === '') {
                 this.postSubscriptions.forEach((sub) => {
                     sub.callback(op[1], blockNumber, blockId, prevBlockId, trxId, blockTime);
                 });
+            // This is a comment
             } else {
                 this.commentSubscriptions.forEach((sub) => {
                     sub.callback(op[1], blockNumber, blockId, prevBlockId, trxId, blockTime);
@@ -161,6 +182,7 @@ export class Streamer {
             }
         }
 
+        // This is a transfer
         if (op[0] === 'transfer') {
             this.transferSubscriptions.forEach((sub) => {
                 if (!Array.isArray(sub.account)) {
@@ -175,6 +197,7 @@ export class Streamer {
             });
         }
 
+        // This is a custom JSON operation
         if (op[0] === 'custom_json') {
             this.customJsonSubscriptions.forEach((sub) => {
                 let isSignedWithActiveKey = false;
@@ -218,7 +241,7 @@ export class Streamer {
         }
     }
 
-    public async saveStateToDisk() {
+    public async saveStateToDisk(): Promise<void> {
         const state = {
             lastBlockNumber: this.lastBlockNumber,
             transactionId: this.transactionId,
