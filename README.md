@@ -1,21 +1,21 @@
-# steem-stream
+# Hive Stream
 
-A Node.js layer for Steem that allows you to watch for specific actions on the Steem blockchain.
+A Node.js layer for Hive that allows you to watch for specific actions on the Hive blockchain.
 
 ## Install
 
 ```shell
-npm install steem-stream
+npm install hive-stream
 ```
 
 ## Quick Usage
 
 ```javascript
-const { Streamer } = require('steem-stream');
+const { Streamer } = require('hive-stream');
 
 const ss = new Streamer();
 
-// Kickstart the streamer to watch the Steem blockchain
+// Kickstart the streamer to watch the Hive blockchain
 ss.start();
 
 // Watch for all custom JSON operations
@@ -26,25 +26,25 @@ ss.onCustomJson((op, { sender, isSignedWithActiveKey }, blockNumber, blockId, pr
 
 ## Configuration
 
-The `Streamer` object can accept an object of configuration values which are all optional. However, some operations like transfering Steem Engine tokens or other operations on the blockchain that are not READ ONLY, will require the active key and/or posting keys supplied as well as a username.
+The `Streamer` object can accept an object of configuration values which are all optional. However, some operations like transfering Hive Engine tokens or other operations on the blockchain that are not READ ONLY, will require the active key and/or posting keys supplied as well as a username.
 
 The `BLOCK_CHECK_INTERVAL` value is how often to check for new blocks or in cases of error or falling behind, to poll for new blocks. It is advisable you keep this as the default 1000ms value which is one second. This allows you to account for situations where blocks fall behind the main block.
 
 The `BLOCKS_BEHIND_WARNING` value is a numeric value of the number of blocks your API will fall behind from the master before warning to the console.
 
-The `CHAIN_ID` value is only for Steem Engine related operations. The `API_URL` is the Steem API. If you want to enable debug mode, set to `DEBUG_MODE` to `true`. The configuration values and their defaults can be found [here](https://github.com/Vheissu/steem-stream/blob/master/config.js).
+The `CHAIN_ID` value is only for Hive Engine related operations. The `API_URL` is the Hive API. If you want to enable debug mode, set to `DEBUG_MODE` to `true`. The configuration values and their defaults can be found [here](https://github.com/Vheissu/hive-stream/blob/master/config.js).
 
 ```
 const options = {
   ACTIVE_KEY: '',
   POSTING_KEY: '',
-  APP_NAME: 'steem-stream',
+  APP_NAME: 'hive-stream',
   USERNAME: '',
   LAST_BLOCK_NUMBER: 0,
   BLOCK_CHECK_INTERVAL: 1000,
   BLOCKS_BEHIND_WARNING: 25,
   CHAIN_ID: 'ssc-mainnet1',
-  API_URL: 'https://api.steemit.com',
+  API_URL: 'https://api.hiveit.com',
   DEBUG_MODE: false
 }
 
@@ -62,7 +62,7 @@ ss.setConfig({
 
 ## Streamer
 
-The following subscription methods are read only methods, they allow you to react to certain Steem and Steem Engine events on the blockchain. You do not need to pass in any keys to use these methods as they're purely read only.
+The following subscription methods are read only methods, they allow you to react to certain Hive and Hive Engine events on the blockchain. You do not need to pass in any keys to use these methods as they're purely read only.
 
 To use the following methods, you need to make sure you have started the streamer using the `start` method.
 
@@ -81,7 +81,7 @@ ss.onCustomJson((op, { sender, isSignedWithActiveKey }, blockNumber, blockId, pr
 })
 ```
 
-#### Watch for Steem Engine JSON operations
+#### Watch for Hive Engine JSON operations
 ```javascript
 ss.onSscJson((contractName, contractAction, contractPayload, sender, op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
   
@@ -114,27 +114,27 @@ const ss = new Streamer({
 });
 ```
 
-### Transfer Steem (STEEM or SBD)
+### Transfer Hive (STEEM or SBD)
 ```javascript
-transferSteemTokens(from, to, amount, symbol, memo = '') {
+transferHiveTokens(from, to, amount, symbol, memo = '') {
 
 }
 ```
 
-### Transfer Steem Engine tokens
+### Transfer Hive Engine tokens
 ```javascript
-transferSteemEngineTokens(from, to, symbol, quantity, memo = '') {
+transferHiveEngineTokens(from, to, symbol, quantity, memo = '') {
 
 }
 ```
 
-### Transfer Multiple Steem Engine tokens
+### Transfer Multiple Hive Engine tokens
 
 The accounts array should contain one or more objects with the following keys:
 
 ```
 {
-  account: 'steemaccountname',
+  account: 'hiveaccountname',
   amount: '2.00'
 }
 ```
@@ -142,25 +142,25 @@ The accounts array should contain one or more objects with the following keys:
 If the object does not contain an amount, you will need to supply a default amount to the function itself. By default the default amount if no value is supplied is '0'. If every object in the array has an amount specific, the default amount is ignored.
 
 ```javascript
-transferSteemEngineTokensMultiple(from, accounts = [], symbol, memo = '', amount = '0') {
+transferHiveEngineTokensMultiple(from, accounts = [], symbol, memo = '', amount = '0') {
 
 }
 ```
 
-### Issue Steem Engine tokens
+### Issue Hive Engine tokens
 ```javascript
-issueSteemEngineTokens(from, to, symbol, quantity, memo = '') {
+issueHiveEngineTokens(from, to, symbol, quantity, memo = '') {
 
 }
 ```
 
-### Issue Multiple Steem Engine tokens
+### Issue Multiple Hive Engine tokens
 
 The accounts array should contain one or more objects with the following keys:
 
 ```
 {
-  account: 'steemaccountname',
+  account: 'hiveaccountname',
   amount: '2.00'
 }
 ```
@@ -168,7 +168,7 @@ The accounts array should contain one or more objects with the following keys:
 If the object does not contain an amount, you will need to supply a default amount to the function itself. By default the default amount if no value is supplied is '0'. If every object in the array has an amount specific, the default amount is ignored.
 
 ```javascript
-issueSteemEngineTokensMultiple(from, to, symbol, quantity, memo = '', amount = '0') {
+issueHiveEngineTokensMultiple(from, to, symbol, quantity, memo = '', amount = '0') {
 
 }
 ```
@@ -183,7 +183,7 @@ Simply copy the `ecosystem.config.js` file from this repository into your applic
 module.exports = {
   apps: [
     {
-      name: 'steem-stream',
+      name: 'hive-stream',
       script: 'index.js',
       ignore_watch: ['node_modules'],
       env: {
