@@ -25,7 +25,7 @@ export const Config: ConfigInterface = {
     BLOCKS_BEHIND_WARNING: 25,
 
     CHAIN_ID: 'ssc-mainnet1',
-    API_URL: 'https://api.steemit.com',
+    API_URL: 'https://api.hive.blog',
 
     DEBUG_MODE: false,
 };

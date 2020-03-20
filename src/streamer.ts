@@ -1,11 +1,11 @@
-import steem from 'steem';
+import hive from 'steem';
 import fs from 'fs';
 import { Utils } from './utils';
 import { Config, ConfigInterface } from './config';
 
-import SSC from 'sscjs';
+// import SSC from 'sscjs';
 
-const ssc = new SSC('https://api.steem-engine.com/rpc');
+// const ssc = new SSC('https://api.steem-engine.com/rpc');
 
 export class Streamer {
     private customJsonSubscriptions: any[] = [];
@@ -56,19 +56,19 @@ export class Streamer {
     /**
      * Start
      *
-     * Starts the streamer bot to get blocks from the Steem API
+     * Starts the streamer bot to get blocks from the Hive API
      *
      */
     public start(): void {
-        console.log('Starting to stream the Steem blockchain');
+        console.log('Starting to stream the Hive blockchain');
 
-        // Set the Steem API endpoint
-        steem.api.setOptions({ url: this.config.API_URL });
+        // Set the Hive API endpoint
+        hive.api.setOptions({ url: this.config.API_URL });
 
         // Do we have any previously saved state to load?
-        if (fs.existsSync('steem-stream.json')) {
+        if (fs.existsSync('hive-stream.json')) {
             // Parse the object data from the JSON state file
-            const state = JSON.parse(fs.readFileSync('steem-stream.json') as unknown as string);
+            const state = JSON.parse(fs.readFileSync('hive-stream.json') as unknown as string);
             
             if (state.lastBlockNumber) {
                 this.lastBlockNumber = state.lastBlockNumber;
@@ -103,8 +103,8 @@ export class Streamer {
     }
 
     private async getBlock(): Promise<void> {
-        // Load global properties from the steem API
-        const props = await steem.api.getDynamicGlobalPropertiesAsync();
+        // Load global properties from the Hive API
+        const props = await hive.api.getDynamicGlobalPropertiesAsync();
 
         // We have no props, so try loading them again.
         if (!props) {
@@ -139,10 +139,10 @@ export class Streamer {
         }, this.config.BLOCK_CHECK_INTERVAL);
     }
 
-    // Takes the block from Steem and allows us to work with it
+    // Takes the block from Hive and allows us to work with it
     private async loadBlock(blockNumber: number): Promise<void> {
-        // Load the block itself from the Steem API
-        const block = await steem.api.getBlockAsync(blockNumber);
+        // Load the block itself from the Hive API
+        const block = await hive.api.getBlockAsync(blockNumber);
 
         // The block doesn't exist, wait and try again
         if (!block) {
@@ -222,42 +222,42 @@ export class Streamer {
                     blockNumber, blockId, prevBlockId, trxId, blockTime);
             });
 
-            Utils.asyncForEach(this.sscJsonSubscriptions, async (sub: any) => {
-                let isSignedWithActiveKey = null;
-                let sender;
+            // Utils.asyncForEach(this.sscJsonSubscriptions, async (sub: any) => {
+            //     let isSignedWithActiveKey = null;
+            //     let sender;
 
-                if (op[1].required_auths.length > 0) {
-                    sender = op[1].required_auths[0];
-                    isSignedWithActiveKey = true;
-                } else {
-                    sender = op[1].required_posting_auths[0];
-                    isSignedWithActiveKey = false;
-                }
+            //     if (op[1].required_auths.length > 0) {
+            //         sender = op[1].required_auths[0];
+            //         isSignedWithActiveKey = true;
+            //     } else {
+            //         sender = op[1].required_posting_auths[0];
+            //         isSignedWithActiveKey = false;
+            //     }
 
-                const id = op[1].id;
-                const json = Utils.jsonParse(op[1].json);
+            //     const id = op[1].id;
+            //     const json = Utils.jsonParse(op[1].json);
 
-                // SSC JSON operation
-                if (id === this.config.CHAIN_ID) {
-                    const { contractName, contractAction, contractPayload } = json;
+            //     // SSC JSON operation
+            //     if (id === this.config.CHAIN_ID) {
+            //         const { contractName, contractAction, contractPayload } = json;
 
-                    try {
-                      // Attempt to get the transaction from Steem Engine itself
-                      const txInfo = await ssc.getTransactionInfo(trxId);
+            //         try {
+            //           // Attempt to get the transaction from Steem Engine itself
+            //           const txInfo = await ssc.getTransactionInfo(trxId);
 
-                      const logs = txInfo && txInfo.logs ? Utils.jsonParse(txInfo.logs) : null;
+            //           const logs = txInfo && txInfo.logs ? Utils.jsonParse(txInfo.logs) : null;
 
-                      // Do we have a valid transaction and are there no errors? It's a real transaction
-                      if (txInfo && logs && typeof logs.errors === 'undefined') {
-                          sub.callback(contractName, contractAction, contractPayload, sender,
-                              op[1], blockNumber, blockId, prevBlockId, trxId, blockTime);
-                      }
-                    } catch(e) {
-                        console.error(e);
-                        return;
-                    }
-                }
-            });
+            //           // Do we have a valid transaction and are there no errors? It's a real transaction
+            //           if (txInfo && logs && typeof logs.errors === 'undefined') {
+            //               sub.callback(contractName, contractAction, contractPayload, sender,
+            //                   op[1], blockNumber, blockId, prevBlockId, trxId, blockTime);
+            //           }
+            //         } catch(e) {
+            //             console.error(e);
+            //             return;
+            //         }
+            //     }
+            // });
         }
     }
 
@@ -268,34 +268,34 @@ export class Streamer {
             refBlockNumber: this.refBlockNumber,
         };
 
-        fs.writeFile('steem-stream.json', JSON.stringify(state), (err) => {
+        fs.writeFile('hive-stream.json', JSON.stringify(state), (err) => {
             if (err) {
                 console.error(err);
             }
         });
     }
 
-    public transferSteemTokens(from: string, to: string, amount: string, symbol: string, memo: string = '') {
-        return Utils.transferSteemTokens(this.config, from, to, amount, symbol, memo);
+    public transferHiveTokens(from: string, to: string, amount: string, symbol: string, memo: string = '') {
+        return Utils.transferHiveTokens(this.config, from, to, amount, symbol, memo);
     }
 
-    public transferSteemEngineTokens(from: string, to: string, symbol: string, quantity: string, memo: string = '') {
-        return Utils.transferSteemEngineTokens(this.config, from, to, symbol, quantity, memo);
-    }
+    // public transferSteemEngineTokens(from: string, to: string, symbol: string, quantity: string, memo: string = '') {
+    //     return Utils.transferSteemEngineTokens(this.config, from, to, symbol, quantity, memo);
+    // }
 
-    public transferSteemEngineTokensMultiple(from: string, accounts: any[] = [],
-                                             symbol: string, memo: string = '', amount: string = '0') {
-        return Utils.transferSteemEngineTokensMultiple(this.config, from, accounts, symbol, memo, amount);
-    }
+    // public transferSteemEngineTokensMultiple(from: string, accounts: any[] = [],
+    //                                          symbol: string, memo: string = '', amount: string = '0') {
+    //     return Utils.transferSteemEngineTokensMultiple(this.config, from, accounts, symbol, memo, amount);
+    // }
 
-    public issueSteemEngineTokens(from: string, to: string, symbol: string, quantity: string, memo: string = '') {
-        return Utils.issueSteemEngineTokens(this.config, from, to, symbol, quantity, memo);
-    }
+    // public issueSteemEngineTokens(from: string, to: string, symbol: string, quantity: string, memo: string = '') {
+    //     return Utils.issueSteemEngineTokens(this.config, from, to, symbol, quantity, memo);
+    // }
 
-    public issueSteemEngineTokensMultiple(from: string, accounts: any[] = [],
-                                          symbol: string, memo: string = '', amount: string = '0') {
-        return Utils.issueSteemEngineTokensMultiple(this.config, from, accounts, symbol, memo, amount);
-    }
+    // public issueSteemEngineTokensMultiple(from: string, accounts: any[] = [],
+    //                                       symbol: string, memo: string = '', amount: string = '0') {
+    //     return Utils.issueSteemEngineTokensMultiple(this.config, from, accounts, symbol, memo, amount);
+    // }
 
     public upvote(votePercentage: string = '100.0', username: string, permlink: string) {
         return Utils.upvote(this.config, this.username, votePercentage, username, permlink);
@@ -328,9 +328,9 @@ export class Streamer {
         this.customJsonSubscriptions.push({ callback });
     }
 
-    public onSscJson(callback: any): void {
-        this.sscJsonSubscriptions.push({ callback });
-    }
+    // public onSscJson(callback: any): void {
+    //     this.sscJsonSubscriptions.push({ callback });
+    // }
 
     public getTransactionId(): string {
         return this.transactionId;

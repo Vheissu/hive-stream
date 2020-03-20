@@ -4,6 +4,6 @@ const streamer = new Streamer();
 
 streamer.start();
 
-streamer.onSscJson((op: any) => {
+streamer.onPost((op: any) => {
     console.log(op);
 });
