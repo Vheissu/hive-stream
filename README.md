@@ -51,7 +51,7 @@ const ss = new Streamer(options);
 The configuration itself can also be overloaded using the `setConfig` method which allows you to pass one or more of the above configuration options, useful in situations where multiple keys might be used for issuing.
 
 ```
-ss.init({
+ss.setConfig({
   ACTIVE_KEY: 'newactivekey',
   USERNAME: 'newusername'
 });
@@ -60,6 +60,8 @@ ss.init({
 ## Streamer
 
 The following subscription methods are read only methods, they allow you to react to certain Hive and Hive Engine events on the blockchain. You do not need to pass in any keys to use these methods as they're purely read only.
+
+**The following actions DO require calling the `start` method first to watch the blockchain**
 
 #### Watch for transfers
 
@@ -100,6 +102,8 @@ ss.onComment((op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
 ## Actions (active key)
 
 All of the below methods require an active key has been supplied in the constructor above called `ACTIVE_KEY`. The methods below are all promised based, so you can `await` them or use `then` to confirm a successful result.
+
+**The following actions do NOT require calling the `start` method first to watch the blockchain**
 
 ```javascript
 const ss = new Streamer({
