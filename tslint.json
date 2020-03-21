@@ -10,7 +10,9 @@
         "object-literal-sort-keys": false,
         "eofline": false,
         "no-console": false,
-        "member-ordering": false
+        "member-ordering": false,
+        "max-line-length": false,
+        "trailing-comma": false
     },
     "rulesDirectory": []
   }
