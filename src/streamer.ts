@@ -1,4 +1,4 @@
-import hive from 'steem';
+import { Client } from 'dsteem';
 import fs from 'fs';
 import { Utils } from './utils';
 import { Config, ConfigInterface } from './config';
@@ -8,339 +8,422 @@ import { Config, ConfigInterface } from './config';
 // const ssc = new SSC('https://api.steem-engine.com/rpc');
 
 export class Streamer {
-    private customJsonSubscriptions: any[] = [];
-    private sscJsonSubscriptions: any[] = [];
-    private commentSubscriptions: any[] = [];
-    private postSubscriptions: any[] = [];
-    private transferSubscriptions: any[] = [];
+  private customJsonSubscriptions: any[] = [];
+  private sscJsonSubscriptions: any[] = [];
+  private commentSubscriptions: any[] = [];
+  private postSubscriptions: any[] = [];
+  private transferSubscriptions: any[] = [];
 
-    private config: ConfigInterface = Config;
+  private attempts = 0;
 
-    private username: string;
-    private postingKey: string;
-    private activeKey: string;
+  private config: ConfigInterface = Config;
+  private client: Client;
 
-    private blockNumberTimeout: NodeJS.Timeout = null;
-    private lastBlockNumber: number = 0;
+  private username: string;
+  private postingKey: string;
+  private activeKey: string;
 
-    private blockNumber: number;
-    private transactionId: string;
-    private refBlockNumber: number;
+  private blockNumberTimeout: NodeJS.Timeout = null;
+  private lastBlockNumber: number = 0;
 
-    constructor(userConfig: Partial<ConfigInterface> = {}) {
-        this.config = Object.assign(Config, userConfig);
+  private blockNumber: number;
+  private transactionId: string;
+  private refBlockNumber: number;
 
-        this.lastBlockNumber = this.config.LAST_BLOCK_NUMBER;
+  constructor(userConfig: Partial<ConfigInterface> = {}) {
+    this.config = Object.assign(Config, userConfig);
 
-        this.username = this.config.USERNAME;
-        this.postingKey = this.config.POSTING_KEY;
-        this.activeKey = this.config.ACTIVE_KEY;
+    this.lastBlockNumber = this.config.LAST_BLOCK_NUMBER;
+
+    this.username = this.config.USERNAME;
+    this.postingKey = this.config.POSTING_KEY;
+    this.activeKey = this.config.ACTIVE_KEY;
+
+    this.client = new Client(this.config.API_NODES[0], { timeout: 2000 });
+
+    this.start();
+  }
+
+  /**
+   * setConfig
+   *
+   * Allows specific configuration settings to be overridden
+   *
+   * @param config
+   */
+  public setConfig(config: Partial<ConfigInterface>) {
+    Object.assign(this.config, config);
+
+    // Set keys and username incase they have changed
+    this.username = this.config.USERNAME;
+    this.postingKey = this.config.POSTING_KEY;
+    this.activeKey = this.config.ACTIVE_KEY;
+  }
+
+  /**
+   * Start
+   *
+   * Starts the streamer bot to get blocks from the Hive API
+   *
+   */
+  private start(): void {
+    console.log('Starting to stream the Hive blockchain');
+
+    // Do we have any previously saved state to load?
+    if (fs.existsSync('hive-stream.json')) {
+      // Parse the object data from the JSON state file
+      const state = JSON.parse(
+        (fs.readFileSync('hive-stream.json') as unknown) as string
+      );
+
+      if (state.lastBlockNumber) {
+        this.lastBlockNumber = state.lastBlockNumber;
+      }
+
+      if (this.config.DEBUG_MODE) {
+        console.debug(`Restoring state from file: ${JSON.stringify(state)}`);
+      }
     }
 
-    /**
-     * setConfig
-     *
-     * Allows specific configuration settings to be overridden
-     *
-     * @param config
-     */
-    public setConfig(config: Partial<ConfigInterface>) {
-        Object.assign(this.config, config);
+    // Kicks off the blockchain streaming and operation parsing
+    this.getBlock();
+  }
 
-        // Set keys and username incase they have changed
-        this.username = this.config.USERNAME;
-        this.postingKey = this.config.POSTING_KEY;
-        this.activeKey = this.config.ACTIVE_KEY;
+  /**
+   * Stop
+   *
+   * Stops the streamer from running
+   */
+  public stop(): void {
+    if (this.blockNumberTimeout) {
+      clearTimeout(this.blockNumberTimeout);
     }
+  }
 
-    /**
-     * Start
-     *
-     * Starts the streamer bot to get blocks from the Hive API
-     *
-     */
-    public start(): void {
-        console.log('Starting to stream the Hive blockchain');
+  private async getBlock(): Promise<void> {
+    try {
+      // Load global properties from the Hive API
+      const props = await this.client.database.getDynamicGlobalProperties();
 
-        // Set the Hive API endpoint
-        hive.api.setOptions({ url: this.config.API_URL });
-
-        // Do we have any previously saved state to load?
-        if (fs.existsSync('hive-stream.json')) {
-            // Parse the object data from the JSON state file
-            const state = JSON.parse(fs.readFileSync('hive-stream.json') as unknown as string);
-            
-            if (state.lastBlockNumber) {
-                this.lastBlockNumber = state.lastBlockNumber;
-            }
-
-            if (state.transactionId) {
-                this.transactionId = state.transactionId;
-            }
-
-            if (state.refBlockNumber) {
-                this.refBlockNumber = state.refBlockNumber;
-            }
-
-            if (this.config.DEBUG_MODE) {
-                console.debug(`Restoring state from file: ${JSON.stringify(state)}`);
-            }
-        }
-
-        // Kicks off the blockchain streaming and operation parsing
-        this.getBlock();
-    }
-
-    /**
-     * Stop
-     *
-     * Stops the streamer from running
-     */
-    public stop(): void {
-        if (this.blockNumberTimeout) {
-            clearTimeout(this.blockNumberTimeout);
-        }
-    }
-
-    private async getBlock(): Promise<void> {
-        // Load global properties from the Hive API
-        const props = await hive.api.getDynamicGlobalPropertiesAsync();
-
-        // We have no props, so try loading them again.
-        if (!props) {
-            setTimeout(() => {
-                this.getBlock();
-            }, this.config.BLOCK_CHECK_INTERVAL);
-            return;
-        }
-
-        // If the block number we've got is zero
-        // set it to the last irreversible block number
-        if (this.lastBlockNumber === 0) {
-            this.lastBlockNumber = props.head_block_number - 1;
-        }
-
-        console.log(`Head block number: `, props.head_block_number);
-        console.log(`Last block number: `, this.lastBlockNumber);
-
-        // We are more than 25 blocks behind, uh oh, we gotta catch up
-        if (props.head_block_number >= (this.lastBlockNumber + this.config.BLOCKS_BEHIND_WARNING)) {
-            console.log(`We are more than 25 blocks behind`);
-
-            // We catch-up by running a while loop and incrementing the block number
-            while (props.head_block_number > this.lastBlockNumber) {
-                await this.loadBlock(this.lastBlockNumber + 1);
-            }
-        }
-
-        // Storing timeout allows us to clear it, as this just calls itself
-        this.blockNumberTimeout = setTimeout(() => {
-            this.getBlock();
+      // We have no props, so try loading them again.
+      if (!props) {
+        setTimeout(() => {
+          this.getBlock();
         }, this.config.BLOCK_CHECK_INTERVAL);
-    }
+        return;
+      }
 
-    // Takes the block from Hive and allows us to work with it
-    private async loadBlock(blockNumber: number): Promise<void> {
-        // Load the block itself from the Hive API
-        const block = await hive.api.getBlockAsync(blockNumber);
+      // If the block number we've got is zero
+      // set it to the last irreversible block number
+      if (this.lastBlockNumber === 0) {
+        this.lastBlockNumber = props.head_block_number - 1;
+      }
 
-        // The block doesn't exist, wait and try again
-        if (!block) {
-            await Utils.sleep(this.config.BLOCK_CHECK_INTERVAL);
-            return;
+      console.log(`Head block number: `, props.head_block_number);
+      console.log(`Last block number: `, this.lastBlockNumber);
+
+      // We are more than 25 blocks behind, uh oh, we gotta catch up
+      if (
+        props.head_block_number >=
+        this.lastBlockNumber + this.config.BLOCKS_BEHIND_WARNING
+      ) {
+        console.log(`We are more than 25 blocks behind`);
+
+        // We catch-up by running a while loop and incrementing the block number
+        while (props.head_block_number > this.lastBlockNumber) {
+          await this.loadBlock(this.lastBlockNumber + 1);
         }
+      }
 
-        // Get the block date and time
-        const blockTime = new Date(`${block.timestamp}`);
+      // Storing timeout allows us to clear it, as this just calls itself
+      this.blockNumberTimeout = setTimeout(() => { this.getBlock(); }, this.config.BLOCK_CHECK_INTERVAL);
+    } catch (e) {
+      const message = e.message.toLowerCase();
 
-        // Loop over all transactions in the block
-        for (const [i, transaction] of block.transactions.entries()) {
-            // Loop over operations in the block
-            for (const [opIndex, op] of transaction.operations.entries()) {
-                // For every operation, process it
-                await this.processOperation(op, blockNumber, block.block_id,
-                    block.previous, block.transaction_ids[i], blockTime);
+      if (message.includes('network') || message.includes('enotfound') && this.attempts < this.config.API_NODES.length - 1) {
+        // Increase by one as we are already using the first supplied API node URL
+        console.log(`There was an error, trying new node. Attempt number: ${this.attempts + 1}`);
 
-                // So users can query the latest details about the transaction
-                this.transactionId = transaction.transaction_id;
-                this.refBlockNumber = transaction.ref_block_num;
-                this.blockNumber = transaction.block_num;
-            }
-        }
+        console.log(`Timeout value based on attempt count: ${2000 * this.attempts}`);
+        console.log(`Trying node ${this.config.API_NODES[this.attempts + 1]}`);
 
-        this.lastBlockNumber = blockNumber;
-        this.saveStateToDisk();
-    }
-
-    public processOperation(op: any, blockNumber: number, blockId: string,
-                            prevBlockId: string, trxId: string, blockTime: Date): void {
-        // Operation is a "comment" which could either be a post or comment
-        if (op[0] === 'comment') {
-            // This is a post
-            if (op[1].parent_author === '') {
-                this.postSubscriptions.forEach((sub) => {
-                    sub.callback(op[1], blockNumber, blockId, prevBlockId, trxId, blockTime);
-                });
-            // This is a comment
-            } else {
-                this.commentSubscriptions.forEach((sub) => {
-                    sub.callback(op[1], blockNumber, blockId, prevBlockId, trxId, blockTime);
-                });
-            }
-        }
-
-        // This is a transfer
-        if (op[0] === 'transfer') {
-            this.transferSubscriptions.forEach((sub) => {
-                if (!Array.isArray(sub.account)) {
-                    if (sub.account === op[1].to) {
-                        sub.callback(op[1], blockNumber, blockId, prevBlockId, trxId, blockTime);
-                    }
-                } else {
-                    if (sub.account.includes(op[1].to)) {
-                        sub.callback(op[1], blockNumber, blockId, prevBlockId, trxId, blockTime);
-                    }
-                }
-            });
-        }
-
-        // This is a custom JSON operation
-        if (op[0] === 'custom_json') {
-            this.customJsonSubscriptions.forEach((sub) => {
-                let isSignedWithActiveKey = false;
-                let sender;
-
-                if (op[1].required_auths.length > 0) {
-                    sender = op[1].required_auths[0];
-                    isSignedWithActiveKey = true;
-                } else {
-                    sender = op[1].required_posting_auths[0];
-                    isSignedWithActiveKey = false;
-                }
-
-                sub.callback(op[1], { sender, isSignedWithActiveKey },
-                    blockNumber, blockId, prevBlockId, trxId, blockTime);
-            });
-
-            // Utils.asyncForEach(this.sscJsonSubscriptions, async (sub: any) => {
-            //     let isSignedWithActiveKey = null;
-            //     let sender;
-
-            //     if (op[1].required_auths.length > 0) {
-            //         sender = op[1].required_auths[0];
-            //         isSignedWithActiveKey = true;
-            //     } else {
-            //         sender = op[1].required_posting_auths[0];
-            //         isSignedWithActiveKey = false;
-            //     }
-
-            //     const id = op[1].id;
-            //     const json = Utils.jsonParse(op[1].json);
-
-            //     // SSC JSON operation
-            //     if (id === this.config.CHAIN_ID) {
-            //         const { contractName, contractAction, contractPayload } = json;
-
-            //         try {
-            //           // Attempt to get the transaction from Steem Engine itself
-            //           const txInfo = await ssc.getTransactionInfo(trxId);
-
-            //           const logs = txInfo && txInfo.logs ? Utils.jsonParse(txInfo.logs) : null;
-
-            //           // Do we have a valid transaction and are there no errors? It's a real transaction
-            //           if (txInfo && logs && typeof logs.errors === 'undefined') {
-            //               sub.callback(contractName, contractAction, contractPayload, sender,
-            //                   op[1], blockNumber, blockId, prevBlockId, trxId, blockTime);
-            //           }
-            //         } catch(e) {
-            //             console.error(e);
-            //             return;
-            //         }
-            //     }
-            // });
-        }
-    }
-
-    public async saveStateToDisk(): Promise<void> {
-        const state = {
-            lastBlockNumber: this.lastBlockNumber,
-            transactionId: this.transactionId,
-            refBlockNumber: this.refBlockNumber,
-        };
-
-        fs.writeFile('hive-stream.json', JSON.stringify(state), (err) => {
-            if (err) {
-                console.error(err);
-            }
+        this.client = new Client(this.config.API_NODES[this.attempts + 1], {
+          timeout: 2000 * this.attempts
         });
+
+        this.getBlock();
+
+        this.attempts++;
+      }
+    }
+  }
+
+  // Takes the block from Hive and allows us to work with it
+  private async loadBlock(blockNumber: number): Promise<void> {
+    // Load the block itself from the Hive API
+    const block = await this.client.database.getBlock(blockNumber);
+
+    // The block doesn't exist, wait and try again
+    if (!block) {
+      await Utils.sleep(this.config.BLOCK_CHECK_INTERVAL);
+      return;
     }
 
-    public transferHiveTokens(from: string, to: string, amount: string, symbol: string, memo: string = '') {
-        return Utils.transferHiveTokens(this.config, from, to, amount, symbol, memo);
+    // Get the block date and time
+    const blockTime = new Date(`${block.timestamp}`);
+
+    // Loop over all transactions in the block
+    for (const [i, transaction] of block.transactions.entries()) {
+      // Loop over operations in the block
+      for (const [opIndex, op] of transaction.operations.entries()) {
+        // For every operation, process it
+        await this.processOperation(
+          op,
+          blockNumber,
+          block.block_id,
+          block.previous,
+          block.transaction_ids[i],
+          blockTime
+        );
+      }
     }
 
-    // public transferSteemEngineTokens(from: string, to: string, symbol: string, quantity: string, memo: string = '') {
-    //     return Utils.transferSteemEngineTokens(this.config, from, to, symbol, quantity, memo);
-    // }
+    this.lastBlockNumber = blockNumber;
+    this.saveStateToDisk();
+  }
 
-    // public transferSteemEngineTokensMultiple(from: string, accounts: any[] = [],
-    //                                          symbol: string, memo: string = '', amount: string = '0') {
-    //     return Utils.transferSteemEngineTokensMultiple(this.config, from, accounts, symbol, memo, amount);
-    // }
-
-    // public issueSteemEngineTokens(from: string, to: string, symbol: string, quantity: string, memo: string = '') {
-    //     return Utils.issueSteemEngineTokens(this.config, from, to, symbol, quantity, memo);
-    // }
-
-    // public issueSteemEngineTokensMultiple(from: string, accounts: any[] = [],
-    //                                       symbol: string, memo: string = '', amount: string = '0') {
-    //     return Utils.issueSteemEngineTokensMultiple(this.config, from, accounts, symbol, memo, amount);
-    // }
-
-    public upvote(votePercentage: string = '100.0', username: string, permlink: string) {
-        return Utils.upvote(this.config, this.username, votePercentage, username, permlink);
-    }
-
-    public downvote(votePercentage: string = '100.0', username: string, permlink: string) {
-        return Utils.downvote(this.config, this.username, votePercentage, username, permlink);
-    }
-
-    public onComment(callback: any): void {
-        this.commentSubscriptions.push({
-            callback,
+  public processOperation(
+    op: any,
+    blockNumber: number,
+    blockId: string,
+    prevBlockId: string,
+    trxId: string,
+    blockTime: Date
+  ): void {
+    // Operation is a "comment" which could either be a post or comment
+    if (op[0] === 'comment') {
+      // This is a post
+      if (op[1].parent_author === '') {
+        this.postSubscriptions.forEach(sub => {
+          sub.callback(
+            op[1],
+            blockNumber,
+            blockId,
+            prevBlockId,
+            trxId,
+            blockTime
+          );
         });
-    }
-
-    public onPost(callback: any): void {
-        this.postSubscriptions.push({
-            callback,
+        // This is a comment
+      } else {
+        this.commentSubscriptions.forEach(sub => {
+          sub.callback(
+            op[1],
+            blockNumber,
+            blockId,
+            prevBlockId,
+            trxId,
+            blockTime
+          );
         });
+      }
     }
 
-    public onTransfer(account: string, callback: () => void): void {
-        this.transferSubscriptions.push({
-            account,
-            callback,
-        });
+    // This is a transfer
+    if (op[0] === 'transfer') {
+      this.transferSubscriptions.forEach(sub => {
+        if (!Array.isArray(sub.account)) {
+          if (sub.account === op[1].to) {
+            sub.callback(
+              op[1],
+              blockNumber,
+              blockId,
+              prevBlockId,
+              trxId,
+              blockTime
+            );
+          }
+        } else {
+          if (sub.account.includes(op[1].to)) {
+            sub.callback(
+              op[1],
+              blockNumber,
+              blockId,
+              prevBlockId,
+              trxId,
+              blockTime
+            );
+          }
+        }
+      });
     }
 
-    public onCustomJson(callback: any): void {
-        this.customJsonSubscriptions.push({ callback });
-    }
+    // This is a custom JSON operation
+    if (op[0] === 'custom_json') {
+      this.customJsonSubscriptions.forEach(sub => {
+        let isSignedWithActiveKey = false;
+        let sender;
 
-    // public onSscJson(callback: any): void {
-    //     this.sscJsonSubscriptions.push({ callback });
-    // }
+        if (op[1].required_auths.length > 0) {
+          sender = op[1].required_auths[0];
+          isSignedWithActiveKey = true;
+        } else {
+          sender = op[1].required_posting_auths[0];
+          isSignedWithActiveKey = false;
+        }
 
-    public getTransactionId(): string {
-        return this.transactionId;
-    }
+        sub.callback(
+          op[1],
+          { sender, isSignedWithActiveKey },
+          blockNumber,
+          blockId,
+          prevBlockId,
+          trxId,
+          blockTime
+        );
+      });
 
-    public getBlockNumber(): number {
-        return this.blockNumber;
-    }
+      // Utils.asyncForEach(this.sscJsonSubscriptions, async (sub: any) => {
+      //     let isSignedWithActiveKey = null;
+      //     let sender;
 
-    public getRefBlockNumber(): number {
-        return this.refBlockNumber;
+      //     if (op[1].required_auths.length > 0) {
+      //         sender = op[1].required_auths[0];
+      //         isSignedWithActiveKey = true;
+      //     } else {
+      //         sender = op[1].required_posting_auths[0];
+      //         isSignedWithActiveKey = false;
+      //     }
+
+      //     const id = op[1].id;
+      //     const json = Utils.jsonParse(op[1].json);
+
+      //     // SSC JSON operation
+      //     if (id === this.config.CHAIN_ID) {
+      //         const { contractName, contractAction, contractPayload } = json;
+
+      //         try {
+      //           // Attempt to get the transaction from Steem Engine itself
+      //           const txInfo = await ssc.getTransactionInfo(trxId);
+
+      //           const logs = txInfo && txInfo.logs ? Utils.jsonParse(txInfo.logs) : null;
+
+      //           // Do we have a valid transaction and are there no errors? It's a real transaction
+      //           if (txInfo && logs && typeof logs.errors === 'undefined') {
+      //               sub.callback(contractName, contractAction, contractPayload, sender,
+      //                   op[1], blockNumber, blockId, prevBlockId, trxId, blockTime);
+      //           }
+      //         } catch(e) {
+      //             console.error(e);
+      //             return;
+      //         }
+      //     }
+      // });
     }
+  }
+
+  public async saveStateToDisk(): Promise<void> {
+    const state = {
+      lastBlockNumber: this.lastBlockNumber
+    };
+
+    fs.writeFile('hive-stream.json', JSON.stringify(state), err => {
+      if (err) {
+        console.error(err);
+      }
+    });
+  }
+
+  public transferHiveTokens(
+    from: string,
+    to: string,
+    amount: string,
+    symbol: string,
+    memo: string = ''
+  ) {
+    return Utils.transferHiveTokens(
+      this.client,
+      this.config,
+      from,
+      to,
+      amount,
+      symbol,
+      memo
+    );
+  }
+
+  // public transferSteemEngineTokens(from: string, to: string, symbol: string, quantity: string, memo: string = '') {
+  //     return Utils.transferSteemEngineTokens(this.config, from, to, symbol, quantity, memo);
+  // }
+
+  // public transferSteemEngineTokensMultiple(from: string, accounts: any[] = [],
+  //                                          symbol: string, memo: string = '', amount: string = '0') {
+  //     return Utils.transferSteemEngineTokensMultiple(this.config, from, accounts, symbol, memo, amount);
+  // }
+
+  // public issueSteemEngineTokens(from: string, to: string, symbol: string, quantity: string, memo: string = '') {
+  //     return Utils.issueSteemEngineTokens(this.config, from, to, symbol, quantity, memo);
+  // }
+
+  // public issueSteemEngineTokensMultiple(from: string, accounts: any[] = [],
+  //                                       symbol: string, memo: string = '', amount: string = '0') {
+  //     return Utils.issueSteemEngineTokensMultiple(this.config, from, accounts, symbol, memo, amount);
+  // }
+
+  public upvote(
+    votePercentage: string = '100.0',
+    username: string,
+    permlink: string
+  ) {
+    return Utils.upvote(
+      this.client,
+      this.config,
+      this.username,
+      votePercentage,
+      username,
+      permlink
+    );
+  }
+
+  public downvote(
+    votePercentage: string = '100.0',
+    username: string,
+    permlink: string
+  ) {
+    return Utils.downvote(
+      this.client,
+      this.config,
+      this.username,
+      votePercentage,
+      username,
+      permlink
+    );
+  }
+
+  public onComment(callback: any): void {
+    this.commentSubscriptions.push({
+      callback
+    });
+  }
+
+  public onPost(callback: any): void {
+    this.postSubscriptions.push({
+      callback
+    });
+  }
+
+  public onTransfer(account: string, callback: () => void): void {
+    this.transferSubscriptions.push({
+      account,
+      callback
+    });
+  }
+
+  public onCustomJson(callback: any): void {
+    this.customJsonSubscriptions.push({ callback });
+  }
+
+  // public onSscJson(callback: any): void {
+  //     this.sscJsonSubscriptions.push({ callback });
+  // }
 }
