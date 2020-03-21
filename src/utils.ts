@@ -1,5 +1,5 @@
+import { Client } from 'dsteem';
 import { Config, ConfigInterface } from './config';
-import hive from 'steem';
 
 const MAX_PAYLOAD_SIZE = 2000;
 const MAX_ACCOUNTS_CHECK = 999;
@@ -23,10 +23,10 @@ export const Utils = {
         return obj;
     },
 
-    transferHiveTokens(config: ConfigInterface, from: string, to: string, amount: string,
+    transferHiveTokens(client: Client, config: ConfigInterface, from: string, to: string, amount: string,
                         symbol: string, memo: string = '') {
-        return hive.broadcast.transferAsync(config.ACTIVE_KEY, from, to,
-            `${parseFloat(amount).toFixed(3)} ${symbol}`, memo);
+        return client.broadcast.transfer({from, to,
+            amount: `${parseFloat(amount).toFixed(3)} ${symbol}`, memo}, config.ACTIVE_KEY as any);
     },
 
     // transferSteemEngineTokens(config: ConfigInterface, from: string, to: string, quantity: string,
@@ -165,8 +165,8 @@ export const Utils = {
     //     }
     // },
 
-    upvote(config: ConfigInterface, from: string, votePercentage: string = '100.0',
-           username: string, permlink: string) {
+    upvote(client: Client, config: ConfigInterface, voter: string, votePercentage: string = '100.0',
+           author: string, permlink: string) {
         const percentage = parseFloat(votePercentage);
 
         if (percentage < 0) {
@@ -175,26 +175,14 @@ export const Utils = {
 
         const weight = this.votingWeight(percentage);
 
-        return hive.broadcast.voteAsync(
-            config.POSTING_KEY,
-            from,
-            username,
-            permlink,
-            weight,
-        );
+        return client.broadcast.vote({voter, author, permlink, weight}, config.POSTING_KEY as any);
     },
 
-    downvote(config: ConfigInterface, from: string, votePercentage: string = '100.0',
-             username: string, permlink: string) {
+    downvote(client: Client, config: ConfigInterface, voter: string, votePercentage: string = '100.0',
+             author: string, permlink: string) {
         const weight = this.votingWeight(parseFloat(votePercentage)) * -1;
 
-        return hive.broadcast.voteAsync(
-            config.POSTING_KEY,
-            from,
-            username,
-            permlink,
-            weight,
-        );
+        return client.broadcast.vote({voter, author, permlink, weight}, config.POSTING_KEY as any);
     },
 
     votingWeight(votePercentage: number) {
