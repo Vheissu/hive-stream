@@ -3,10 +3,6 @@ import fs from 'fs';
 import { Utils } from './utils';
 import { Config, ConfigInterface } from './config';
 
-// import SSC from 'sscjs';
-
-// const ssc = new SSC('https://api.steem-engine.com/rpc');
-
 export class Streamer {
   private customJsonSubscriptions: any[] = [];
   private sscJsonSubscriptions: any[] = [];
@@ -40,8 +36,6 @@ export class Streamer {
     this.activeKey = this.config.ACTIVE_KEY;
 
     this.client = new Client(this.config.API_NODES[0], { timeout: 2000 });
-
-    this.start();
   }
 
   /**
@@ -66,7 +60,7 @@ export class Streamer {
    * Starts the streamer bot to get blocks from the Hive API
    *
    */
-  private start(): void {
+  public start(): void {
     console.log('Starting to stream the Hive blockchain');
 
     // Do we have any previously saved state to load?
