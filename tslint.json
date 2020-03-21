@@ -12,7 +12,8 @@
         "no-console": false,
         "member-ordering": false,
         "max-line-length": false,
-        "trailing-comma": false
+        "trailing-comma": false,
+        "no-string-literal": false
     },
     "rulesDirectory": []
   }
