@@ -15,9 +15,6 @@ const { Streamer } = require('hive-stream');
 
 const ss = new Streamer();
 
-// Kickstart the streamer to watch the Hive blockchain
-ss.start();
-
 // Watch for all custom JSON operations
 ss.onCustomJson((op, { sender, isSignedWithActiveKey }, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
   // React to custom JSON operations
@@ -54,7 +51,7 @@ const ss = new Streamer(options);
 The configuration itself can also be overloaded using the `setConfig` method which allows you to pass one or more of the above configuration options, useful in situations where multiple keys might be used for issuing.
 
 ```
-ss.setConfig({
+ss.init({
   ACTIVE_KEY: 'newactivekey',
   USERNAME: 'newusername'
 });
@@ -63,8 +60,6 @@ ss.setConfig({
 ## Streamer
 
 The following subscription methods are read only methods, they allow you to react to certain Hive and Hive Engine events on the blockchain. You do not need to pass in any keys to use these methods as they're purely read only.
-
-To use the following methods, you need to make sure you have started the streamer using the `start` method.
 
 #### Watch for transfers
 
@@ -105,8 +100,6 @@ ss.onComment((op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
 ## Actions (active key)
 
 All of the below methods require an active key has been supplied in the constructor above called `ACTIVE_KEY`. The methods below are all promised based, so you can `await` them or use `then` to confirm a successful result.
-
-**You are not required to start the streamer using the `start` method to call these methods.**
 
 ```javascript
 const ss = new Streamer({
