@@ -74,9 +74,7 @@ export class Streamer {
         this.lastBlockNumber = state.lastBlockNumber;
       }
 
-      if (this.config.DEBUG_MODE) {
-        console.debug(`Restoring state from file: ${JSON.stringify(state)}`);
-      }
+      console.log(`Restoring state from file`);
     }
 
     // Kicks off the blockchain streaming and operation parsing
@@ -116,17 +114,18 @@ export class Streamer {
       console.log(`Head block number: `, props.head_block_number);
       console.log(`Last block number: `, this.lastBlockNumber);
 
+      const BLOCKS_BEHIND = parseInt(this.config.BLOCKS_BEHIND_WARNING as any, 10);
+
       // We are more than 25 blocks behind, uh oh, we gotta catch up
-      if (
-        props.head_block_number >=
-        this.lastBlockNumber + this.config.BLOCKS_BEHIND_WARNING
-      ) {
-        console.log(`We are more than 25 blocks behind`);
+      if (props.head_block_number >= (this.lastBlockNumber + BLOCKS_BEHIND)) {
+        console.log(`We are more than 25 blocks behind ${props.head_block_number}, ${(this.lastBlockNumber + BLOCKS_BEHIND)}`);
 
         // We catch-up by running a while loop and incrementing the block number
         while (props.head_block_number > this.lastBlockNumber) {
           await this.loadBlock(this.lastBlockNumber + 1);
         }
+      } else {
+        await this.loadBlock(this.lastBlockNumber + 1);
       }
 
       // Storing timeout allows us to clear it, as this just calls itself
@@ -167,9 +166,9 @@ export class Streamer {
     const blockTime = new Date(`${block.timestamp}`);
 
     // Loop over all transactions in the block
-    for (const [i, transaction] of block.transactions.entries()) {
+    for (const [i, transaction] of Object.entries(block.transactions)) {
       // Loop over operations in the block
-      for (const [opIndex, op] of transaction.operations.entries()) {
+      for (const [opIndex, op] of Object.entries(transaction.operations)) {
         // For every operation, process it
         await this.processOperation(
           op,
