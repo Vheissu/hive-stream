@@ -225,8 +225,7 @@ export class Streamer {
     // This is a transfer
     if (op[0] === 'transfer') {
       this.transferSubscriptions.forEach(sub => {
-        if (!Array.isArray(sub.account)) {
-          if (sub.account === op[1].to) {
+        if (sub.account === op[1].to) {
             sub.callback(
               op[1],
               blockNumber,
@@ -236,18 +235,6 @@ export class Streamer {
               blockTime
             );
           }
-        } else {
-          if (sub.account.includes(op[1].to)) {
-            sub.callback(
-              op[1],
-              blockNumber,
-              blockId,
-              prevBlockId,
-              trxId,
-              blockTime
-            );
-          }
-        }
       });
     }
 
@@ -257,10 +244,10 @@ export class Streamer {
         let isSignedWithActiveKey = false;
         let sender;
 
-        if (op[1].required_auths.length > 0) {
+        if (op[1]?.required_auths?.length > 0) {
           sender = op[1].required_auths[0];
           isSignedWithActiveKey = true;
-        } else {
+        } else if (op[1]?.required_posting_auths?.length > 0) {
           sender = op[1].required_posting_auths[0];
           isSignedWithActiveKey = false;
         }
