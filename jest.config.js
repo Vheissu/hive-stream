@@ -4,6 +4,7 @@ module.exports = {
       tsConfig: 'tsconfig.json'
     }
   },
+  setupFilesAfterEnv: ["<rootDir>/test/setup.ts"],
   moduleFileExtensions: ['ts', 'js'],
   transform: {
     '^.+\\.(ts|tsx)$': 'ts-jest'
