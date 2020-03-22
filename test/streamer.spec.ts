@@ -14,6 +14,10 @@ describe('Streamer', () => {
         sut = new Streamer({});
     });
 
+    afterEach(() => {
+        sut.stop();
+    });
+
     test('Constructor should instantiate client instance', () => {
         expect(sut['client']).toBeInstanceOf(Client);
     });
@@ -69,8 +73,6 @@ describe('Streamer', () => {
         jest.spyOn(sut as any, 'loadBlock');
 
         sut['lastBlockNumber'] = 0;
-
-        jest.spyOn(sut as any, 'getBlock');
 
         await sut['getBlock']();
 
