@@ -139,4 +139,79 @@ describe('Streamer', () => {
         expect(sut['attempts']).toStrictEqual(1);
     });
 
+    test('processOperation calls post subscriber', () => {
+        const callback = jest.fn();
+
+        sut.onPost(callback);
+
+        const operation = [
+            'comment',
+            { parent_author: '' }
+        ];
+
+        sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
+
+        expect(callback).toBeCalledWith({'parent_author': ''}, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z');
+    });
+
+    test('processOperation calls comment subscriber', () => {
+        const callback = jest.fn();
+
+        sut.onComment(callback);
+
+        const operation = [
+            'comment',
+            { parent_author: 'beggars' }
+        ];
+
+        sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
+
+        expect(callback).toBeCalledWith({'parent_author': 'beggars'}, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z');
+    });
+
+    test('processOperation calls transfer subscriber', () => {
+        const callback = jest.fn();
+
+        sut.onTransfer('beggars', callback);
+
+        const operation = [
+            'transfer',
+            { to: 'beggars' }
+        ];
+
+        sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
+
+        expect(callback).toBeCalledWith({'to': 'beggars'}, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z');
+    });
+
+    test('processOperation calls custom json subscriber signed with active key', () => {
+        const callback = jest.fn();
+
+        sut.onCustomJson(callback);
+
+        const operation = [
+            'custom_json',
+            { required_auths: ['beggars'] }
+        ];
+
+        sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
+
+        expect(callback).toBeCalledWith({'required_auths': ['beggars']}, {'isSignedWithActiveKey': true, 'sender': 'beggars'}, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z');
+    });
+
+    test('processOperation calls custom json subscriber signed without active key', () => {
+        const callback = jest.fn();
+
+        sut.onCustomJson(callback);
+
+        const operation = [
+            'custom_json',
+            { required_posting_auths: ['beggars'] }
+        ];
+
+        sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
+
+        expect(callback).toBeCalledWith({'required_posting_auths': ['beggars']}, {'isSignedWithActiveKey': false, 'sender': 'beggars'}, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z');
+    });
+
 });
