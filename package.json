@@ -11,7 +11,7 @@
     "scripts": {
         "build": "tsc",
         "watch": "tsc -w",
-        "test": "jest"
+        "test": "jest --forceExit"
     },
     "dependencies": {
         "dotenv": "^8.2.0",

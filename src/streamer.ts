@@ -122,19 +122,18 @@ export class Streamer {
             const BLOCKS_BEHIND = parseInt(this.config.BLOCKS_BEHIND_WARNING as any, 10);
 
             // We are more than 25 blocks behind, uh oh, we gotta catch up
-            if (props.head_block_number >= (this.lastBlockNumber + BLOCKS_BEHIND) && !this.disableAllProcessing) {
-                console.log(`We are more than 25 blocks behind ${props.head_block_number}, ${(this.lastBlockNumber + BLOCKS_BEHIND)}`);
+            if (props.head_block_number >= (this.lastBlockNumber + BLOCKS_BEHIND)) {
+                console.log(`We are more than ${BLOCKS_BEHIND} blocks behind ${props.head_block_number}, ${(this.lastBlockNumber + BLOCKS_BEHIND)}`);
+            }
 
-                // We catch-up by running a while loop and incrementing the block number
-                while (props.head_block_number > this.lastBlockNumber) {
-                    await this.loadBlock(this.lastBlockNumber + 1);
-                }
-            } else {
-                await this.loadBlock(this.lastBlockNumber + 1);
+            if (!this.disableAllProcessing) {
+                await this.loadBlock(this.lastBlockNumber + 1); 
             }
 
             // Storing timeout allows us to clear it, as this just calls itself
-            this.blockNumberTimeout = setTimeout(() => { this.getBlock(); }, this.config.BLOCK_CHECK_INTERVAL);
+            if (!this.disableAllProcessing) {
+                this.blockNumberTimeout = setTimeout(() => { this.getBlock(); }, this.config.BLOCK_CHECK_INTERVAL);
+            }
         } catch (e) {
             const message = e.message.toLowerCase();
 
@@ -157,11 +156,7 @@ export class Streamer {
     }
 
     // Takes the block from Hive and allows us to work with it
-    private async loadBlock(blockNumber: number): Promise<void> {
-        if (this.disableAllProcessing) {
-            return;
-        }
-        
+    private async loadBlock(blockNumber: number): Promise<void> {        
         // Load the block itself from the Hive API
         const block = await this.client.database.getBlock(blockNumber);
 
