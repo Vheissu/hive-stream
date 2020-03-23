@@ -1,7 +1,7 @@
 {
     "name": "hive-stream",
     "version": "1.0.0",
-    "description": "A layer for streaming actions on the Hive blockchain.",
+    "description": "A layer for streaming actions on the Hive blockchain and reacting to them.",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "repository": "git@github.com:Vheissu/hive-stream.git",
