@@ -62,7 +62,9 @@ export class Streamer {
      *
      */
     public start(): void {
-        console.log('Starting to stream the Hive blockchain');
+        if (this.config.DEBUG_MODE) {
+            console.log('Starting to stream the Hive blockchain');
+        }
 
         this.disableAllProcessing = false;
 
@@ -77,7 +79,9 @@ export class Streamer {
                 this.lastBlockNumber = state.lastBlockNumber;
             }
 
-            console.log(`Restoring state from file`);
+            if (this.config.DEBUG_MODE) {
+                console.log(`Restoring state from file`);
+            }
         }
 
         // Kicks off the blockchain streaming and operation parsing
@@ -116,13 +120,15 @@ export class Streamer {
                 this.lastBlockNumber = props.head_block_number - 1;
             }
 
-            console.log(`Head block number: `, props.head_block_number);
-            console.log(`Last block number: `, this.lastBlockNumber);
+            if (this.config.DEBUG_MODE) {
+                console.log(`Head block number: `, props.head_block_number);
+                console.log(`Last block number: `, this.lastBlockNumber);
+            }
 
             const BLOCKS_BEHIND = parseInt(this.config.BLOCKS_BEHIND_WARNING as any, 10);
 
             // We are more than 25 blocks behind, uh oh, we gotta catch up
-            if (props.head_block_number >= (this.lastBlockNumber + BLOCKS_BEHIND)) {
+            if (props.head_block_number >= (this.lastBlockNumber + BLOCKS_BEHIND) && this.config.DEBUG_MODE) {
                 console.log(`We are more than ${BLOCKS_BEHIND} blocks behind ${props.head_block_number}, ${(this.lastBlockNumber + BLOCKS_BEHIND)}`);
             }
 
@@ -138,11 +144,13 @@ export class Streamer {
             const message = e.message.toLowerCase();
 
             if (message.includes('network') || message.includes('enotfound') && this.attempts < this.config.API_NODES.length - 1) {
-                // Increase by one as we are already using the first supplied API node URL
-                console.log(`There was an error, trying new node. Attempt number: ${this.attempts + 1}`);
+                if (this.config.DEBUG_MODE) {
+                    // Increase by one as we are already using the first supplied API node URL
+                    console.log(`There was an error, trying new node. Attempt number: ${this.attempts + 1}`);
 
-                console.log(`Timeout value based on attempt count: ${2000 * this.attempts}`);
-                console.log(`Trying node ${this.config.API_NODES[this.attempts + 1]}`);
+                    console.log(`Timeout value based on attempt count: ${2000 * this.attempts}`);
+                    console.log(`Trying node ${this.config.API_NODES[this.attempts + 1]}`);
+                }
 
                 this.client = new Client(this.config.API_NODES[this.attempts + 1], {
                     timeout: 2000 * this.attempts
