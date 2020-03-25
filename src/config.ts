@@ -25,7 +25,7 @@ export const Config: ConfigInterface = {
     BLOCKS_BEHIND_WARNING: 25,
 
     CHAIN_ID: 'ssc-mainnet1',
-    API_NODES: ['https://api.hive.blog', 'https://anyx.io'],
+    API_NODES: ['https://anyx.io', 'https://api.hive.blog'],
 
     DEBUG_MODE: false,
 };
