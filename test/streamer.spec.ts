@@ -171,12 +171,12 @@ describe('Streamer', () => {
 
         const operation = [
             'custom_json',
-            { required_auths: ['beggars'] }
+            { id: 'test', required_auths: ['beggars'] }
         ];
 
         sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
 
-        expect(callback).toBeCalledWith({'required_auths': ['beggars']}, {'isSignedWithActiveKey': true, 'sender': 'beggars'}, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z');
+        expect(callback).toBeCalledWith({'id': 'test', 'required_auths': ['beggars']}, {'isSignedWithActiveKey': true, 'sender': 'beggars'}, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z');
     });
 
     test('processOperation calls custom json subscriber signed without active key', () => {
@@ -186,12 +186,52 @@ describe('Streamer', () => {
 
         const operation = [
             'custom_json',
-            { required_posting_auths: ['beggars'] }
+            { id: 'test', required_posting_auths: ['beggars'] }
         ];
 
         sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
 
-        expect(callback).toBeCalledWith({'required_posting_auths': ['beggars']}, {'isSignedWithActiveKey': false, 'sender': 'beggars'}, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z');
+        expect(callback).toBeCalledWith({'id': 'test', 'required_posting_auths': ['beggars']}, {'isSignedWithActiveKey': false, 'sender': 'beggars'}, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z');
+    });
+
+    describe('Contracts', () => {
+
+        test('contract action should be called from payload', () => {
+            const contract = {
+                roll(payload: { roll: number, amount: string, direction: string }, { sender, isSignedWithActiveKey }) {
+
+                }
+            };
+
+            jest.spyOn(contract, 'roll');
+
+            // Register our contract
+            sut.registerContract('dice', contract);
+    
+            const operation = [
+                'custom_json',
+                {
+                    id: 'test',
+                    required_auths: ['beggars'], 
+                    json: JSON.stringify({
+                        hiveContract: {
+                            name: 'dice',
+                            action: 'roll',
+                            payload: {
+                                roll: 12,
+                                amount: '1',
+                                direction: 'lesserThan'
+                            }
+                        }
+                    })
+                }
+            ];
+    
+            sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
+
+            expect(contract.roll).toBeCalledWith({amount: '1', roll: 12, direction: 'lesserThan'}, { isSignedWithActiveKey: true, sender: 'beggars' }, 'test');
+        });
+
     });
 
 });
