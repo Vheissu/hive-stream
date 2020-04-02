@@ -3,6 +3,11 @@ import fs from 'fs';
 import { Utils } from './utils';
 import { Config, ConfigInterface } from './config';
 
+interface Contract {
+    name: string;
+    contract: any;
+}
+
 export class Streamer {
     private customJsonSubscriptions: any[] = [];
     private customJsonIdSubscriptions: any[] = [];
@@ -27,7 +32,7 @@ export class Streamer {
     private transactionId: string;
     private disableAllProcessing = false;
 
-    private contracts = [];
+    private contracts: Contract[] = [];
 
     constructor(userConfig: Partial<ConfigInterface> = {}) {
         this.config = Object.assign(Config, userConfig);
@@ -42,22 +47,33 @@ export class Streamer {
     }
 
     public registerContract(name: string, contract: any) {
+        // Call the contract create lifecycle method if it exists
         if (contract && typeof contract['create'] !== 'undefined') {
             contract.create();
         }
 
-        this.contracts.push({ name, contract });
+        const storedReference: Contract = { name, contract };
+
+        // Push the contract reference to be called later on
+        this.contracts.push(storedReference);
+
+        return this;
     }
 
     public unregisterContract(name: string) {
+        // Find the registered contract by it's ID
         const contractIndex = this.contracts.findIndex(c => c.name === name);
-        const contract = this.contracts.find(c => c.name === name);
 
         if (contractIndex >= 0) {
-            if (contract && typeof contract['destroy'] !== 'undefined') {
-                contract.destroy();
+            // Get the contract itself
+            const contract = this.contracts.find(c => c.name === name);
+
+            // Call the contract destroy lifecycle method if it exists
+            if (contract && typeof contract.contract['destroy'] !== 'undefined') {
+                contract.contract.destroy();
             }
 
+            // Remove the contract
             this.contracts.splice(contractIndex, 1);
         }
     }
@@ -76,6 +92,8 @@ export class Streamer {
         this.username = this.config.USERNAME;
         this.postingKey = this.config.POSTING_KEY;
         this.activeKey = this.config.ACTIVE_KEY;
+
+        return this;
     }
 
     /**
@@ -280,6 +298,8 @@ export class Streamer {
         if (op[0] === 'custom_json') {
             let isSignedWithActiveKey = false;
             let sender;
+            
+            const id = op[1]?.id;
 
             if (op[1]?.required_auths?.length > 0) {
                 sender = op[1].required_auths[0];
