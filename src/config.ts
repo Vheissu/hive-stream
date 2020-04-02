@@ -6,7 +6,6 @@ export interface ConfigInterface {
     LAST_BLOCK_NUMBER: number;
     BLOCK_CHECK_INTERVAL: number;
     BLOCKS_BEHIND_WARNING: number;
-    CHAIN_ID: string;
     API_NODES: string[];
     DEBUG_MODE: boolean;
 }
@@ -24,7 +23,6 @@ export const Config: ConfigInterface = {
     BLOCK_CHECK_INTERVAL: 1000,
     BLOCKS_BEHIND_WARNING: 25,
 
-    CHAIN_ID: 'ssc-mainnet1',
     API_NODES: ['https://anyx.io', 'https://api.hive.blog'],
 
     DEBUG_MODE: false,
