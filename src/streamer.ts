@@ -27,6 +27,8 @@ export class Streamer {
     private transactionId: string;
     private disableAllProcessing = false;
 
+    private contracts = [];
+
     constructor(userConfig: Partial<ConfigInterface> = {}) {
         this.config = Object.assign(Config, userConfig);
 
@@ -37,6 +39,18 @@ export class Streamer {
         this.activeKey = this.config.ACTIVE_KEY;
 
         this.client = new Client(this.config.API_NODES[0], { timeout: 2000 });
+    }
+
+    public registerContract(name: string, contract: any) {
+        this.contracts.push({ name, contract });
+    }
+
+    public unregisterContract(name: string) {
+        const contractIndex = this.contracts.findIndex(c => c.name === name);
+
+        if (contractIndex >= 0) {
+            this.contracts.splice(contractIndex, 1);
+        }
     }
 
     /**
@@ -255,6 +269,18 @@ export class Streamer {
 
         // This is a custom JSON operation
         if (op[0] === 'custom_json') {
+            const json = Utils.jsonParse(op[1].json);
+
+            if (json && json.hiveContract) {
+                const { name, action, payload } = json.hiveContract;
+
+                const contract = this.contracts.find(c => c.name === name);
+
+                if (contract && contract?.contract[action]) {
+                    contract.contract[action](payload);
+                }
+            }
+
             this.customJsonSubscriptions.forEach(sub => {
                 let isSignedWithActiveKey = false;
                 let sender;

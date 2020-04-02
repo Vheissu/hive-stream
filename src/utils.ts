@@ -13,7 +13,7 @@ export const Utils = {
     },
 
     jsonParse(str: string) {
-        let obj;
+        let obj = null;
 
         try {
             obj = JSON.parse(str);
