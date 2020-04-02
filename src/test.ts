@@ -5,6 +5,10 @@ const streamer = new Streamer();
 // Start streaming
 streamer.start();
 
-streamer.onPost((op: any) => {
+streamer.onCustomJsonId((op) => {
     console.log(op);
-});
+}, 'notify');
+
+// streamer.onPost((op: any) => {
+//     console.log(op);
+// });
