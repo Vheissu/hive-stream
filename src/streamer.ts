@@ -42,13 +42,22 @@ export class Streamer {
     }
 
     public registerContract(name: string, contract: any) {
+        if (contract && typeof contract['create'] !== 'undefined') {
+            contract.create();
+        }
+
         this.contracts.push({ name, contract });
     }
 
     public unregisterContract(name: string) {
         const contractIndex = this.contracts.findIndex(c => c.name === name);
+        const contract = this.contracts.find(c => c.name === name);
 
         if (contractIndex >= 0) {
+            if (contract && typeof contract['destroy'] !== 'undefined') {
+                contract.destroy();
+            }
+
             this.contracts.splice(contractIndex, 1);
         }
     }

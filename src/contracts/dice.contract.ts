@@ -7,8 +7,12 @@ const MIN_BET = 1;
 const MAX_BET = 10;
 
 export default {
-    init: () => {
-        // Runs every time the node starts
+    create: () => {
+        // Runs every time register is called on this contract
+    },
+
+    destroy: () => {
+        // Runs every time unregister is run for this contract
     },
 
     roll: (payload: { roll: number, amount: string, direction: string }, { sender, isSignedWithActiveKey }) => {
