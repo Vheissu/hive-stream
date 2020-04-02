@@ -292,12 +292,16 @@ export class Streamer {
             const json = Utils.jsonParse(op[1].json);
 
             if (json && json.hiveContract) {
+                // Pull out details of contract
                 const { name, action, payload } = json.hiveContract;
 
+                // Do we have a contract that matches the name in the payload?
                 const contract = this.contracts.find(c => c.name === name);
 
-                if (contract && contract?.contract[action]) {
-                    contract.contract[action](payload, { sender, isSignedWithActiveKey });
+                if (contract) {
+                    if (contract?.contract[action]) {
+                        contract.contract[action](payload, { sender, isSignedWithActiveKey }, id);
+                    }
                 }
             }
 
