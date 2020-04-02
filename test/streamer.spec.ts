@@ -194,16 +194,74 @@ describe('Streamer', () => {
         expect(callback).toBeCalledWith({'id': 'test', 'required_posting_auths': ['beggars']}, {'isSignedWithActiveKey': false, 'sender': 'beggars'}, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z');
     });
 
+    test('processOperation calls custom json ID subscriber signed with active key', () => {
+        const callback = jest.fn();
+
+        sut.onCustomJsonId(callback, 'test');
+
+        const operation = [
+            'custom_json',
+            { id: 'test', required_auths: ['beggars'] }
+        ];
+
+        sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
+
+        expect(callback).toBeCalledWith({'id': 'test', 'required_auths': ['beggars']}, {'isSignedWithActiveKey': true, 'sender': 'beggars'}, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z');
+    });
+
+    test('processOperation calls custom json ID subscriber signed without active key', () => {
+        const callback = jest.fn();
+
+        sut.onCustomJsonId(callback, 'test');
+
+        const operation = [
+            'custom_json',
+            { id: 'test', required_posting_auths: ['beggars'] }
+        ];
+
+        sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
+
+        expect(callback).toBeCalledWith({'id': 'test', 'required_posting_auths': ['beggars']}, {'isSignedWithActiveKey': false, 'sender': 'beggars'}, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z');
+    });
+
     describe('Contracts', () => {
+
+        test('contract create lifecycle function should be called', () => {
+            const contract = {
+                create: jest.fn()
+            };
+
+            // Register our contract
+            sut.registerContract('dice', contract);
+
+            const findContract = sut['contracts'].find(c => c.name === 'dice');
+
+            expect(contract.create).toBeCalled();
+            expect(findContract).not.toBeUndefined();
+        });
+
+        test('contract destroy lifecycle function should be called and unregistered', () => {
+            const contract = {
+                create: jest.fn(),
+                destroy: jest.fn()
+            };
+
+            // Register our contract
+            sut.registerContract('dice', contract);
+
+            sut.unregisterContract('dice');
+
+            expect(contract.destroy).toBeCalled();
+
+            const findContract = sut['contracts'].find(c => c.name === 'dice');
+
+            expect(findContract).toBeUndefined();
+        });
 
         test('contract action should be called from payload', () => {
             const contract = {
-                roll(payload: { roll: number, amount: string, direction: string }, { sender, isSignedWithActiveKey }) {
-
-                }
+                roll: jest.fn()
             };
-
-            jest.spyOn(contract, 'roll');
 
             // Register our contract
             sut.registerContract('dice', contract);
