@@ -147,6 +147,8 @@ unregisterContract('mycontract');
 JSON.stringify({ hiveContract: { name: 'hivedice', action: 'roll', payload: { roll: 22, amount: '1'} } })
 ```
 
+This will match a registered contract called `hivedice` and inside of the contract code, a function called `roll` and finally, the payload is sent to the function as an argument, allowing you to access the values inside of it. See the example file `dice.contract.ts` in the `src/contracts` folder in the repository.
+
 ## Permanently running with PM2
 
 Simply copy the `ecosystem.config.js` file from this repository into your application, globally install `pm2` via `npm install pm2 -g` and change the `script` value below to reflect the main file of your application.
