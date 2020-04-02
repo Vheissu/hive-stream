@@ -269,6 +269,17 @@ export class Streamer {
 
         // This is a custom JSON operation
         if (op[0] === 'custom_json') {
+            let isSignedWithActiveKey = false;
+            let sender;
+
+            if (op[1]?.required_auths?.length > 0) {
+                sender = op[1].required_auths[0];
+                isSignedWithActiveKey = true;
+            } else if (op[1]?.required_posting_auths?.length > 0) {
+                sender = op[1].required_posting_auths[0];
+                isSignedWithActiveKey = false;
+            }
+
             const json = Utils.jsonParse(op[1].json);
 
             if (json && json.hiveContract) {
@@ -277,22 +288,11 @@ export class Streamer {
                 const contract = this.contracts.find(c => c.name === name);
 
                 if (contract && contract?.contract[action]) {
-                    contract.contract[action](payload);
+                    contract.contract[action](payload, { sender, isSignedWithActiveKey });
                 }
             }
 
             this.customJsonSubscriptions.forEach(sub => {
-                let isSignedWithActiveKey = false;
-                let sender;
-
-                if (op[1]?.required_auths?.length > 0) {
-                    sender = op[1].required_auths[0];
-                    isSignedWithActiveKey = true;
-                } else if (op[1]?.required_posting_auths?.length > 0) {
-                    sender = op[1].required_posting_auths[0];
-                    isSignedWithActiveKey = false;
-                }
-
                 sub.callback(
                     op[1],
                     { sender, isSignedWithActiveKey },
@@ -305,17 +305,6 @@ export class Streamer {
             });
 
             this.customJsonIdSubscriptions.forEach(sub => {
-                let isSignedWithActiveKey = false;
-                let sender;
-
-                if (op[1]?.required_auths?.length > 0) {
-                    sender = op[1].required_auths[0];
-                    isSignedWithActiveKey = true;
-                } else if (op[1]?.required_posting_auths?.length > 0) {
-                    sender = op[1].required_posting_auths[0];
-                    isSignedWithActiveKey = false;
-                }
-
                 const byId = this.customJsonIdSubscriptions.find(s => s.id === op[1].id);
 
                 if (byId) {
