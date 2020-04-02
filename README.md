@@ -78,13 +78,6 @@ ss.onCustomJson((op, { sender, isSignedWithActiveKey }, blockNumber, blockId, pr
 })
 ```
 
-#### Watch for Hive Engine JSON operations
-```javascript
-ss.onSscJson((contractName, contractAction, contractPayload, sender, op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
-  
-})
-```
-
 #### Watch for post operations
 ```javascript
 ss.onPost((op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
@@ -111,63 +104,47 @@ const ss = new Streamer({
 });
 ```
 
-### Transfer Hive (STEEM or SBD)
+### Transfer Hive (HIVE or HBD)
 ```javascript
 transferHiveTokens(from, to, amount, symbol, memo = '') {
 
 }
 ```
 
-### Transfer Hive Engine tokens
-```javascript
-transferHiveEngineTokens(from, to, symbol, quantity, memo = '') {
+## Contracts
 
-}
-```
+Hive Stream allows you to write contracts which get executed when a custom JSON operation matches. The only requirement is sending a payload which contains `hiveContract` inside of it.
 
-### Transfer Multiple Hive Engine tokens
+The payload consists of:
 
-The accounts array should contain one or more objects with the following keys:
+`name` the name of the smart contract you registered.
 
-```
-{
-  account: 'hiveaccountname',
-  amount: '2.00'
-}
-```
+`action` matches the name of a function defined inside of your contract
 
-If the object does not contain an amount, you will need to supply a default amount to the function itself. By default the default amount if no value is supplied is '0'. If every object in the array has an amount specific, the default amount is ignored.
+`payload` an object of data which will be provided to the action
+
+### Register a contract
+
+Register a file containing contract code which will be executed.
 
 ```javascript
-transferHiveEngineTokensMultiple(from, accounts = [], symbol, memo = '', amount = '0') {
+import contract from './my-contract';
 
-}
+registerContract('mycontract', Contract);
 ```
 
-### Issue Hive Engine tokens
-```javascript
-issueHiveEngineTokens(from, to, symbol, quantity, memo = '') {
+### Unregister a contract
 
-}
-```
-
-### Issue Multiple Hive Engine tokens
-
-The accounts array should contain one or more objects with the following keys:
-
-```
-{
-  account: 'hiveaccountname',
-  amount: '2.00'
-}
-```
-
-If the object does not contain an amount, you will need to supply a default amount to the function itself. By default the default amount if no value is supplied is '0'. If every object in the array has an amount specific, the default amount is ignored.
+Unregister a contract that has been registered.
 
 ```javascript
-issueHiveEngineTokensMultiple(from, to, symbol, quantity, memo = '', amount = '0') {
+unregisterContract('mycontract');
+```
 
-}
+### Example Payload
+
+```javascript
+JSON.stringify({ hiveContract: { name: 'hivedice', action: 'roll', payload: { roll: 22, amount: '1'} } })
 ```
 
 ## Permanently running with PM2
