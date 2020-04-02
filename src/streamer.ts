@@ -5,7 +5,7 @@ import { Config, ConfigInterface } from './config';
 
 export class Streamer {
     private customJsonSubscriptions: any[] = [];
-    private sscJsonSubscriptions: any[] = [];
+    private customJsonIdSubscriptions: any[] = [];
     private commentSubscriptions: any[] = [];
     private postSubscriptions: any[] = [];
     private transferSubscriptions: any[] = [];
@@ -133,7 +133,7 @@ export class Streamer {
             }
 
             if (!this.disableAllProcessing) {
-                await this.loadBlock(this.lastBlockNumber + 1); 
+                await this.loadBlock(this.lastBlockNumber + 1);
             }
 
             // Storing timeout allows us to clear it, as this just calls itself
@@ -164,7 +164,7 @@ export class Streamer {
     }
 
     // Takes the block from Hive and allows us to work with it
-    private async loadBlock(blockNumber: number): Promise<void> {        
+    private async loadBlock(blockNumber: number): Promise<void> {
         // Load the block itself from the Hive API
         const block = await this.client.database.getBlock(blockNumber);
 
@@ -278,42 +278,32 @@ export class Streamer {
                 );
             });
 
-            // Utils.asyncForEach(this.sscJsonSubscriptions, async (sub: any) => {
-            //     let isSignedWithActiveKey = null;
-            //     let sender;
+            this.customJsonIdSubscriptions.forEach(sub => {
+                let isSignedWithActiveKey = false;
+                let sender;
 
-            //     if (op[1].required_auths.length > 0) {
-            //         sender = op[1].required_auths[0];
-            //         isSignedWithActiveKey = true;
-            //     } else {
-            //         sender = op[1].required_posting_auths[0];
-            //         isSignedWithActiveKey = false;
-            //     }
+                if (op[1]?.required_auths?.length > 0) {
+                    sender = op[1].required_auths[0];
+                    isSignedWithActiveKey = true;
+                } else if (op[1]?.required_posting_auths?.length > 0) {
+                    sender = op[1].required_posting_auths[0];
+                    isSignedWithActiveKey = false;
+                }
 
-            //     const id = op[1].id;
-            //     const json = Utils.jsonParse(op[1].json);
+                const byId = this.customJsonIdSubscriptions.find(s => s.id === op[1].id);
 
-            //     // SSC JSON operation
-            //     if (id === this.config.CHAIN_ID) {
-            //         const { contractName, contractAction, contractPayload } = json;
-
-            //         try {
-            //           // Attempt to get the transaction from Steem Engine itself
-            //           const txInfo = await ssc.getTransactionInfo(trxId);
-
-            //           const logs = txInfo && txInfo.logs ? Utils.jsonParse(txInfo.logs) : null;
-
-            //           // Do we have a valid transaction and are there no errors? It's a real transaction
-            //           if (txInfo && logs && typeof logs.errors === 'undefined') {
-            //               sub.callback(contractName, contractAction, contractPayload, sender,
-            //                   op[1], blockNumber, blockId, prevBlockId, trxId, blockTime);
-            //           }
-            //         } catch(e) {
-            //             console.error(e);
-            //             return;
-            //         }
-            //     }
-            // });
+                if (byId) {
+                    sub.callback(
+                        op[1],
+                        { sender, isSignedWithActiveKey },
+                        blockNumber,
+                        blockId,
+                        prevBlockId,
+                        trxId,
+                        blockTime
+                    ); 
+                }
+            });
         }
     }
 
@@ -346,24 +336,6 @@ export class Streamer {
             memo
         );
     }
-
-    // public transferSteemEngineTokens(from: string, to: string, symbol: string, quantity: string, memo: string = '') {
-    //     return Utils.transferSteemEngineTokens(this.config, from, to, symbol, quantity, memo);
-    // }
-
-    // public transferSteemEngineTokensMultiple(from: string, accounts: any[] = [],
-    //                                          symbol: string, memo: string = '', amount: string = '0') {
-    //     return Utils.transferSteemEngineTokensMultiple(this.config, from, accounts, symbol, memo, amount);
-    // }
-
-    // public issueSteemEngineTokens(from: string, to: string, symbol: string, quantity: string, memo: string = '') {
-    //     return Utils.issueSteemEngineTokens(this.config, from, to, symbol, quantity, memo);
-    // }
-
-    // public issueSteemEngineTokensMultiple(from: string, accounts: any[] = [],
-    //                                       symbol: string, memo: string = '', amount: string = '0') {
-    //     return Utils.issueSteemEngineTokensMultiple(this.config, from, accounts, symbol, memo, amount);
-    // }
 
     public upvote(
         votePercentage: string = '100.0',
@@ -415,10 +387,10 @@ export class Streamer {
     }
 
     public onCustomJson(callback: any): void {
-        this.customJsonSubscriptions.push({ callback });
+        this.customJsonSubscriptions.push({ callback }); 
     }
 
-    // public onSscJson(callback: any): void {
-    //     this.sscJsonSubscriptions.push({ callback });
-    // }
+    public onCustomJsonId(callback: any, id: string): void {
+        this.customJsonIdSubscriptions.push({ callback, id });
+    }
 }
