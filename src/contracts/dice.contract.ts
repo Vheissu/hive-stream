@@ -11,8 +11,10 @@ export default {
         // Runs every time the node starts
     },
 
-    roll: (payload: { roll: number, amount: string, direction: string }) => {
+    roll: (payload: { roll: number, amount: string, direction: string }, { sender, isSignedWithActiveKey }) => {
         const { roll, amount, direction } = payload;
+
+        console.log(sender, isSignedWithActiveKey);
 
         console.log(roll, amount, direction);
         
