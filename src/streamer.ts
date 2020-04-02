@@ -22,9 +22,9 @@ export class Streamer {
     private blockNumberTimeout: NodeJS.Timeout = null;
     private lastBlockNumber: number = 0;
 
-    private blockNumber: number;
+    private blockId: string;
+    private previousBlockId: string;
     private transactionId: string;
-    private refBlockNumber: number;
     private disableAllProcessing = false;
 
     constructor(userConfig: Partial<ConfigInterface> = {}) {
@@ -177,6 +177,9 @@ export class Streamer {
         // Get the block date and time
         const blockTime = new Date(`${block.timestamp}`);
 
+        this.blockId = block.block_id;
+        this.previousBlockId = block.previous;
+        this.transactionId = block.transaction_ids[1];
         // Loop over all transactions in the block
         for (const [i, transaction] of Object.entries(block.transactions)) {
             // Loop over operations in the block
