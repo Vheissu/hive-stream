@@ -29,7 +29,7 @@ The `BLOCK_CHECK_INTERVAL` value is how often to check for new blocks or in case
 
 The `BLOCKS_BEHIND_WARNING` value is a numeric value of the number of blocks your API will fall behind from the master before warning to the console.
 
-The `CHAIN_ID` value is only for Hive Engine related operations. The `API_URL` is the Hive API. If you want to enable debug mode, set to `DEBUG_MODE` to `true`. The configuration values and their defaults can be found [here](https://github.com/Vheissu/hive-stream/blob/master/config.js).
+The `API_URL` is the Hive API. If you want to enable debug mode, set to `DEBUG_MODE` to `true`. The configuration values and their defaults can be found [here](https://github.com/Vheissu/hive-stream/blob/master/config.js).
 
 ```
 const options = {
@@ -40,7 +40,6 @@ const options = {
   LAST_BLOCK_NUMBER: 0,
   BLOCK_CHECK_INTERVAL: 1000,
   BLOCKS_BEHIND_WARNING: 25,
-  CHAIN_ID: 'ssc-mainnet1',
   API_URL: 'https://api.hiveit.com',
   DEBUG_MODE: false
 }
@@ -66,7 +65,7 @@ The following subscription methods are read only methods, they allow you to reac
 #### Watch for transfers
 
 ```javascript
-ss.onTransfer((op,blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+ss.onTransfer((op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
 
 })
 ```
@@ -74,6 +73,13 @@ ss.onTransfer((op,blockNumber, blockId, prevBlockId, trxId, blockTime) => {
 #### Watch for custom JSON operations
 ```javascript
 ss.onCustomJson((op, { sender, isSignedWithActiveKey }, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+  
+})
+```
+
+#### Watch for custom JSON operations (with a specific ID)
+```javascript
+ss.onCustomJsonId((op, { sender, isSignedWithActiveKey }, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
   
 })
 ```
@@ -122,6 +128,10 @@ The payload consists of:
 `action` matches the name of a function defined inside of your contract
 
 `payload` an object of data which will be provided to the action
+
+### Writing contracts
+
+Really, a contract is nothing more than a bunch of functions which get matched to values inside of JSON payloads.
 
 ### Register a contract
 
