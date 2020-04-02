@@ -13,6 +13,8 @@ export default {
 
     roll: (payload: { roll: number, amount: string, direction: string }) => {
         const { roll, amount, direction } = payload;
+
+        console.log(roll, amount, direction);
         
         if (roll >= 2 && roll <= 96) {
 
