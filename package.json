@@ -16,6 +16,7 @@
     "dependencies": {
         "dotenv": "^8.2.0",
         "dsteem": "^0.11.3",
+        "seedrandom": "^3.0.5",
         "sscjs": "^0.0.8"
     },
     "devDependencies": {
@@ -23,6 +24,7 @@
         "@types/dotenv": "^8.2.0",
         "@types/jest": "^25.1.4",
         "@types/node": "^13.9.2",
+        "@types/seedrandom": "^2.4.28",
         "jest": "^25.1.0",
         "ts-jest": "^25.2.1",
         "ts-node": "^8.7.0",

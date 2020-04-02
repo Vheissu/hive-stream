@@ -1,5 +1,6 @@
 import { Client } from 'dsteem';
 import { Config, ConfigInterface } from './config';
+import seedrandom from 'seedrandom';
 
 const MAX_PAYLOAD_SIZE = 2000;
 const MAX_ACCOUNTS_CHECK = 999;
@@ -23,147 +24,16 @@ export const Utils = {
         return obj;
     },
 
-    transferHiveTokens(client: Client, config: ConfigInterface, from: string, to: string, amount: string,
-                        symbol: string, memo: string = '') {
+    transferHiveTokens(client: Client, config: ConfigInterface, from: string, to: string, amount: string, symbol: string, memo: string = '') {
         return client.broadcast.transfer({from, to,
             amount: `${parseFloat(amount).toFixed(3)} ${symbol}`, memo}, config.ACTIVE_KEY as any);
     },
 
-    // transferSteemEngineTokens(config: ConfigInterface, from: string, to: string, quantity: string,
-    //                           symbol: string, memo: string = '') {
-    //     const json = {
-    //         contractName: 'tokens',
-    //         contractAction: 'transfer',
-    //         contractPayload: {
-    //             symbol: symbol.toUpperCase(),
-    //             to,
-    //             quantity,
-    //             memo,
-    //         },
-    //     };
-
-    //     return hive.broadcast.customJsonAsync(config.ACTIVE_KEY, [from], null, config.CHAIN_ID, JSON.stringify(json));
-    // },
-
-    // async transferSteemEngineTokensMultiple(config: ConfigInterface, from: string, accounts: any[],
-    //                                         symbol: string, memo: string, amount: string = '0') {
-    //     const payloads: any[][] = [[]];
-    //     let completed: number = 0;
-
-    //     for (const user of accounts) {
-    //         const account: string = user.account.replace('@', '');
-    //         const quantity: string = user.amount ?
-    //                                  parseFloat(user.amount.replace(',', '.')).toString() :
-    //                                  parseFloat(amount).toString();
-
-    //         // 0 means no quantity supplied (either in accounts or default)
-    //         if (parseFloat(quantity) > 0) {
-    //             const json = {
-    //                 contractName: 'tokens',
-    //                 contractAction: 'transfer',
-    //                 contractPayload: {
-    //                     symbol: symbol.toUpperCase(),
-    //                     to: account,
-    //                     quantity,
-    //                     memo,
-    //                 },
-    //             };
-
-    //             const lastPayloadSize = JSON.stringify(payloads[payloads.length - 1]).length;
-    //             const payloadSize = JSON.stringify(json).length;
-
-    //             if (payloadSize + lastPayloadSize > MAX_PAYLOAD_SIZE) {
-    //                 payloads.push([json]);
-    //             } else {
-    //                 payloads[payloads.length - 1].push(json);
-    //             }
-    //         }
-    //     }
-
-    //     for (const payload of payloads) {
-    //         const requiredAuths = [from];
-    //         const requiredPostingAuths: any = null;
-
-    //         await steem.broadcast.customJsonAsync(config.ACTIVE_KEY, requiredAuths,
-    //             requiredPostingAuths, config.CHAIN_ID, JSON.stringify(payload));
-
-    //         completed++;
-
-    //         if (completed !== (payloads.length) && completed !== 0) {
-    //             await this.sleep(3000);
-    //         }
-    //     }
-    // },
-
-    // issueSteemEngineTokens(config: ConfigInterface, from: string, to: string,
-    //                        symbol: string, quantity: string, memo: string = '') {
-    //     const json = {
-    //         contractName: 'tokens',
-    //         contractAction: 'issue',
-    //         contractPayload: {
-    //             symbol,
-    //             to,
-    //             quantity,
-    //             memo,
-    //         },
-    //     };
-
-    //     if (config.DEBUG_MODE) {
-    //         console.log(`Issuing Steem Engine Token: `, json, JSON.stringify(json));
-    //     }
-
-    //     return steem.broadcast.customJsonAsync(config.ACTIVE_KEY, [from], null, config.CHAIN_ID, JSON.stringify(json));
-    // },
-
-    // async issueSteemEngineTokensMultiple(config: ConfigInterface, from: string, accounts: any[],
-    //                                      symbol: string, memo: string, amount: string = '0') {
-    //     const payloads: any[][] = [[]];
-    //     let completed = 0;
-
-    //     for (const user of accounts) {
-    //         const to = user.account.replace('@', '');
-    //         const quantity: string = user.amount ?
-    //                                  parseFloat(user.amount.replace(',', '.')).toString() :
-    //                                  parseFloat(amount).toString();
-
-    //         // 0 means no quantity supplied (either in accounts or default)
-    //         if (parseFloat(quantity) > 0) {
-    //             const json = {
-    //                 contractName: 'tokens',
-    //                 contractAction: 'issue',
-    //                 contractPayload: {
-    //                     symbol: symbol.toUpperCase(),
-    //                     to,
-    //                     quantity,
-    //                     memo,
-    //                 },
-    //             };
-
-    //             const lastPayloadSize = JSON.stringify(payloads[payloads.length - 1]).length;
-    //             const payloadSize = JSON.stringify(json).length;
-
-    //             if (payloadSize + lastPayloadSize > MAX_PAYLOAD_SIZE) {
-    //                 payloads.push([json]);
-    //             } else {
-    //                 payloads[payloads.length - 1].push(json);
-    //             }
-    //         }
-    //     }
-
-    //     for (const payload of payloads) {
-    //         const requiredAuths = [from];
-    //         const requiredPostingAuths: any = null;
-
-    //         await steem.broadcast.customJsonAsync(config.ACTIVE_KEY, requiredAuths, requiredPostingAuths,
-    //             config.CHAIN_ID, JSON.stringify(payload));
-
-    //         completed++;
-
-    //         if (completed !== (payloads.length) && completed !== 0) {
-    //             await this.sleep(3000);
-    //         }
-    //     }
-    // },
+    randomNumber(previousBlockId, blockId, transactionId) {
+        const random = seedrandom(`${previousBlockId}${blockId}${transactionId}`).double();
+        const randomRoll = Math.floor(random * 100) + 1;
+        return randomRoll;
+    },
 
     upvote(client: Client, config: ConfigInterface, voter: string, votePercentage: string = '100.0',
            author: string, permlink: string) {
