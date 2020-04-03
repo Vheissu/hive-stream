@@ -70,7 +70,6 @@ class DiceContract {
         // Transfer is valid
         if (verify) {
             // Bet amount is valid
-            console.log(amountParsed);
             if (amountParsed >= MIN_BET && amountParsed <= MAX_BET) {
                 // Validate roll is valid
                 if ((roll >= 2 && roll <= 96) && (direction === 'lesserThan' || direction === 'greaterThan') && VALID_CURRENCIES.includes(amountCurrency)) {
@@ -83,15 +82,15 @@ class DiceContract {
 
                     if (direction === 'lesserThan') {
                         if (roll < random) {                            
-                            await Utils.transferHiveTokens(this._config, this._config, ACCOUNT, sender, tokensWon, TOKEN_SYMBOL, winningMemo);
+                            await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, tokensWon, TOKEN_SYMBOL, winningMemo);
                         } else {
-                            await Utils.transferHiveTokens(this._config, this._config, ACCOUNT, sender, '0.001', TOKEN_SYMBOL, losingMemo);
+                            await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, '0.001', TOKEN_SYMBOL, losingMemo);
                         }
                     } else if (direction === 'greaterThan') {
                         if (roll > random) {
-                            await Utils.transferHiveTokens(this._config, this._config, ACCOUNT, sender, tokensWon, TOKEN_SYMBOL, winningMemo);
+                            await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, tokensWon, TOKEN_SYMBOL, winningMemo);
                         } else {
-                            await Utils.transferHiveTokens(this._config, this._config, ACCOUNT, sender, '0.001', TOKEN_SYMBOL, losingMemo);
+                            await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, '0.001', TOKEN_SYMBOL, losingMemo);
                         }
                     }
                 }
