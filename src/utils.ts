@@ -43,7 +43,7 @@ export const Utils = {
         return (operation.from === from && operation.to === to && operation.amount === amount);
     },
 
-    transferHiveTokens(client: Client, config: ConfigInterface, from: string, to: string, amount: string, symbol: string, memo: string = '') {
+    transferHiveTokens(client: Client, config: Partial<ConfigInterface>, from: string, to: string, amount: string, symbol: string, memo: string = '') {
         return client.broadcast.transfer({from, to,
             amount: `${parseFloat(amount).toFixed(3)} ${symbol}`, memo}, config.ACTIVE_KEY as any);
     },
@@ -54,7 +54,7 @@ export const Utils = {
         return randomRoll;
     },
 
-    upvote(client: Client, config: ConfigInterface, voter: string, votePercentage: string = '100.0',
+    upvote(client: Client, config: Partial<ConfigInterface>, voter: string, votePercentage: string = '100.0',
            author: string, permlink: string) {
         const percentage = parseFloat(votePercentage);
 
@@ -67,7 +67,7 @@ export const Utils = {
         return client.broadcast.vote({voter, author, permlink, weight}, config.POSTING_KEY as any);
     },
 
-    downvote(client: Client, config: ConfigInterface, voter: string, votePercentage: string = '100.0',
+    downvote(client: Client, config: Partial<ConfigInterface>, voter: string, votePercentage: string = '100.0',
              author: string, permlink: string) {
         const weight = this.votingWeight(parseFloat(votePercentage)) * -1;
 
