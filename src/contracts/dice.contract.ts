@@ -1,4 +1,4 @@
-import { Client } from 'dsteem';
+import { Client } from '@hivechain/dsteem';
 // import { Streamer, Utils } from 'hive-stream';
 import { Streamer } from './../streamer';
 import { Utils } from './../utils';

@@ -1,4 +1,4 @@
-import { Client } from 'dsteem';
+import { Client } from '@hivechain/dsteem';
 import { Streamer } from './../src/streamer';
 
 import fs from 'fs';
