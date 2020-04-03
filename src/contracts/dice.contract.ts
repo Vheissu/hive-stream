@@ -39,7 +39,7 @@ class DiceContract {
         this.transactionId = transactionId;
     }
 
-    roll(payload: { roll: number, direction: string }, { sender, amount }) {
+    async roll(payload: { roll: number, direction: string }, { sender, amount }) {
         const { roll, direction } = payload;
 
         const amountTrim = amount.split(' ');
@@ -54,13 +54,19 @@ class DiceContract {
                      Amount formatted: ${amountFormatted} 
                      Currency: ${amountCurrency}`);
 
-        // Bet amount is valid
-        if (amountParsed >= MIN_BET && amountParsed <= MAX_BET) {
-            // Validate roll is valid
+        const transaction = await Utils.getTransaction(this._client, this.blockNumber, this.transactionId);
+        const verify = await Utils.verifyTransfer(transaction, sender, 'beggars', amount);
+
+        // Transfer is valid
+        if (verify) {
+            // Bet amount is valid
+            if (amountParsed >= MIN_BET && amountParsed <= MAX_BET) {
+                // Validate roll is valid
             if ((roll >= 2 && roll <= 96) && (direction === 'lesserThan' || direction === 'greaterThan') && VALID_CURRENCIES.includes(amountCurrency)) {
                 const rolledValue = rng(this.previousBlockId, this.blockId, this.transactionId);
 
                 console.log(rolledValue);   
+            }
             }
         }
     }
