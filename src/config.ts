@@ -1,8 +1,10 @@
 export interface ConfigInterface {
     ACTIVE_KEY: string;
     POSTING_KEY: string;
+    JSON_ID: string;
     APP_NAME: string;
     USERNAME: string;
+    PAYLOAD_IDENTIFIER: string;
     LAST_BLOCK_NUMBER: number;
     BLOCK_CHECK_INTERVAL: number;
     BLOCKS_BEHIND_WARNING: number;
@@ -14,7 +16,11 @@ export const Config: ConfigInterface = {
     ACTIVE_KEY: process.env.ACTIVE_KEY,
     POSTING_KEY: process.env.POSTING_KEY,
 
+    JSON_ID: 'hivestream',
+
     APP_NAME: 'steem-stream',
+
+    PAYLOAD_IDENTIFIER: 'hivePayload',
 
     USERNAME: '',
 

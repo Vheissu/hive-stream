@@ -293,9 +293,9 @@ export class Streamer {
 
             const json = Utils.jsonParse(op[1].memo);
 
-            if (json && json?.hiveContract) {
+            if (json && json?.[this.config.PAYLOAD_IDENTIFIER]) {
                 // Pull out details of contract
-                const { name, action, payload } = json.hiveContract;
+                const { name, action, payload } = json[this.config.PAYLOAD_IDENTIFIER];
 
                 // Do we have a contract that matches the name in the payload?
                 const contract = this.contracts.find(c => c.name === name);
@@ -342,9 +342,9 @@ export class Streamer {
 
             const json = Utils.jsonParse(op[1].json);
 
-            if (json && json.hiveContract) {
+            if (json && json?.[this.config.PAYLOAD_IDENTIFIER]) {
                 // Pull out details of contract
-                const { name, action, payload } = json.hiveContract;
+                const { name, action, payload } = json[this.config.PAYLOAD_IDENTIFIER];
 
                 // Do we have a contract that matches the name in the payload?
                 const contract = this.contracts.find(c => c.name === name);
