@@ -11,7 +11,7 @@ const CONTRACT_NAME = 'hivedice';
 const ACCOUNT = 'beggars';
 const TOKEN_SYMBOL = 'HIVE';
 
-const HOUSE_EDGE = 0.05;
+const HOUSE_EDGE = 0.02;
 const MIN_BET = 1;
 const MAX_BET = 10;
 
@@ -22,7 +22,7 @@ const rng = (previousBlockId, blockId, transactionId) => {
     return randomRoll;
 };
 
-const VALID_CURRENCIES = ['HIVE', 'HBD'];
+const VALID_CURRENCIES = ['HIVE'];
 
 class DiceContract {
     private _client: Client;
@@ -49,6 +49,17 @@ class DiceContract {
         this.transactionId = transactionId;
     }
 
+    async getBalance() {
+        const account = await this._client.database.getAccounts([ACCOUNT]);
+
+        if (account?.[0]) {
+            const balance = (account[0].balance as string).split(' ');
+            const amount = balance[0];
+
+            return parseFloat(amount);
+        }
+    }
+
     async roll(payload: { roll: number, direction: string }, { sender, amount }) {
         const { roll, direction } = payload;
 
@@ -66,9 +77,17 @@ class DiceContract {
 
         const transaction = await Utils.getTransaction(this._client, this.blockNumber, this.transactionId);
         const verify = await Utils.verifyTransfer(transaction, sender, 'beggars', amount);
+        const balance = await this.getBalance();
 
         // Transfer is valid
         if (verify) {
+            // Server balance is less than the max bet, cancel and refund
+            if (balance < MAX_BET) {
+                await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] The server could not fufill your bet.`);
+
+                return;
+            }
+            
             // Bet amount is valid
             if (amountParsed >= MIN_BET && amountParsed <= MAX_BET) {
                 // Validate roll is valid
@@ -79,6 +98,13 @@ class DiceContract {
                     const tokensWon = new BigNumber(amountParsed).multipliedBy(multiplier).toFixed(3, BigNumber.ROUND_DOWN);
                     const winningMemo = `You won ${tokensWon} ${TOKEN_SYMBOL}. Roll: ${random}, Your guess: ${roll}`;
                     const losingMemo = `You lost ${amountParsed} ${TOKEN_SYMBOL}. Roll: ${random}, Your guess: ${roll}`;
+
+                    // User won more than the server can afford, refund the bet amount
+                    if (parseFloat(tokensWon) > balance) {
+                        await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] The server could not fufill your bet.`);
+
+                        return;
+                    }
 
                     if (direction === 'lesserThan') {
                         if (roll < random) {                            
