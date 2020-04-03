@@ -23,6 +23,7 @@ const VALID_CURRENCIES = ['HIVE', 'HBD'];
 
 class DiceContract {
     private _client: Client;
+    private _config: any;
 
     private blockNumber: number;
     private blockId;
@@ -73,6 +74,9 @@ class DiceContract {
 
                     console.log(rolledValue);   
                 }
+            } else {
+                // We need to refund the user
+                const transfer = await Utils.transferHiveTokens(this._client, this._config, 'beggars', sender, amountTrim[0], amountTrim[1], `[Refund] You sent an invalid bet amount.`);
             }
         }
     }
