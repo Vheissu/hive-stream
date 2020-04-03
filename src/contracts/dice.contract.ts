@@ -1,3 +1,7 @@
+import { Client } from 'dsteem';
+// import { Streamer, Utils } from 'hive-stream';
+import { Streamer } from './../streamer';
+import { Utils } from './../utils';
 import seedrandom from 'seedrandom';
 
 const CONTRACT_NAME = 'hivedice';
@@ -18,6 +22,8 @@ const rng = (previousBlockId, blockId, transactionId) => {
 const VALID_CURRENCIES = ['HIVE', 'HBD'];
 
 class DiceContract {
+    private _client: Client;
+
     private blockNumber: number;
     private blockId;
     private previousBlockId;
@@ -62,11 +68,11 @@ class DiceContract {
             // Bet amount is valid
             if (amountParsed >= MIN_BET && amountParsed <= MAX_BET) {
                 // Validate roll is valid
-            if ((roll >= 2 && roll <= 96) && (direction === 'lesserThan' || direction === 'greaterThan') && VALID_CURRENCIES.includes(amountCurrency)) {
-                const rolledValue = rng(this.previousBlockId, this.blockId, this.transactionId);
+                if ((roll >= 2 && roll <= 96) && (direction === 'lesserThan' || direction === 'greaterThan') && VALID_CURRENCIES.includes(amountCurrency)) {
+                    const rolledValue = rng(this.previousBlockId, this.blockId, this.transactionId);
 
-                console.log(rolledValue);   
-            }
+                    console.log(rolledValue);   
+                }
             }
         }
     }
