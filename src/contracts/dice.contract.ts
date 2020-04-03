@@ -3,10 +3,13 @@ import { Client } from '@hivechain/dsteem';
 import { Streamer } from './../streamer';
 import { Utils } from './../utils';
 import seedrandom from 'seedrandom';
+import BigNumber from 'bignumber.js';
+
 
 const CONTRACT_NAME = 'hivedice';
 
-const ACCOUNT = 'hivedice';
+const ACCOUNT = 'beggars';
+const TOKEN_SYMBOL = 'HIVE';
 
 const HOUSE_EDGE = 0.05;
 const MIN_BET = 1;
@@ -67,16 +70,40 @@ class DiceContract {
         // Transfer is valid
         if (verify) {
             // Bet amount is valid
+            console.log(amountParsed);
             if (amountParsed >= MIN_BET && amountParsed <= MAX_BET) {
                 // Validate roll is valid
                 if ((roll >= 2 && roll <= 96) && (direction === 'lesserThan' || direction === 'greaterThan') && VALID_CURRENCIES.includes(amountCurrency)) {
-                    const rolledValue = rng(this.previousBlockId, this.blockId, this.transactionId);
+                    const random = rng(this.previousBlockId, this.blockId, this.transactionId);
 
-                    console.log(rolledValue);   
+                    const multiplier = new BigNumber(1).minus(HOUSE_EDGE).multipliedBy(100).dividedBy(roll);
+                    const tokensWon = new BigNumber(amount).multipliedBy(multiplier).toFixed(3, BigNumber.ROUND_DOWN);
+                    const winningMemo = `You won ${tokensWon} ${TOKEN_SYMBOL}. Roll: ${random}, Your guess: ${roll}`;
+                    const losingMemo = `You lost ${amount} ${TOKEN_SYMBOL}. Roll: ${random}, Your guess: ${roll}`;
+
+                    if (direction === 'lesserThan') {
+                        if (roll < random) {                            
+                            await Utils.transferHiveTokens(this._config, this._config, ACCOUNT, sender, tokensWon, TOKEN_SYMBOL, winningMemo);
+                        } else {
+                            await Utils.transferHiveTokens(this._config, this._config, ACCOUNT, sender, '0.001', TOKEN_SYMBOL, losingMemo);
+                        }
+                    } else if (direction === 'greaterThan') {
+                        if (roll > random) {
+                            await Utils.transferHiveTokens(this._config, this._config, ACCOUNT, sender, tokensWon, TOKEN_SYMBOL, winningMemo);
+                        } else {
+                            await Utils.transferHiveTokens(this._config, this._config, ACCOUNT, sender, '0.001', TOKEN_SYMBOL, losingMemo);
+                        }
+                    }
                 }
             } else {
-                // We need to refund the user
-                const transfer = await Utils.transferHiveTokens(this._client, this._config, 'beggars', sender, amountTrim[0], amountTrim[1], `[Refund] You sent an invalid bet amount.`);
+                try {
+                    // We need to refund the user
+                    const transfer = await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] You sent an invalid bet amount.`);
+
+                    console.log(transfer);
+                } catch (e) {
+                    console.log(e);
+                }
             }
         }
     }
