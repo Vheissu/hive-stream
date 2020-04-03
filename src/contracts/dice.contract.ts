@@ -18,6 +18,7 @@ const rng = (previousBlockId, blockId, transactionId) => {
 const VALID_CURRENCIES = ['HIVE', 'HBD'];
 
 class DiceContract {
+    private blockNumber: number;
     private blockId;
     private previousBlockId;
     private transactionId;
@@ -30,8 +31,9 @@ class DiceContract {
         // Runs every time unregister is run for this contract
     }
 
-    updateBlockInfo(blockId, previousBlockId, transactionId) {
+    updateBlockInfo(blockNumber, blockId, previousBlockId, transactionId) {
         // Lifecycle method which sets block info 
+        this.blockNumber = blockNumber;
         this.blockId = blockId;
         this.previousBlockId = previousBlockId;
         this.transactionId = transactionId;
