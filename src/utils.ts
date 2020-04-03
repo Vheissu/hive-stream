@@ -1,4 +1,4 @@
-import { Client } from 'dsteem';
+import { Client, SignedTransaction } from 'dsteem';
 import { Config, ConfigInterface } from './config';
 import seedrandom from 'seedrandom';
 
@@ -22,6 +22,25 @@ export const Utils = {
         }
 
         return obj;
+    },
+
+    async getTransaction(client: Client, blockNumber: number, transactionId): Promise<SignedTransaction> {
+        const block = await client.database.getBlock(blockNumber);
+
+        const exists = block.transaction_ids.includes(transactionId);
+        const index = block.transaction_ids.indexOf(transactionId);
+
+        if (!exists) {
+            throw new Error(`Unable to find transaction ${ transactionId } in block ${ blockNumber }`)
+        }
+
+        return block.transactions[index] as SignedTransaction;
+    },
+
+    async verifyTransfer(transaction: SignedTransaction, from: string, to: string, amount: string) {
+        const operation = transaction.operations[0][1];
+
+        return (operation.from === from && operation.to === to && operation.amount === amount);
     },
 
     transferHiveTokens(client: Client, config: ConfigInterface, from: string, to: string, amount: string, symbol: string, memo: string = '') {
