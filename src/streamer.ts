@@ -447,6 +447,10 @@ export class Streamer {
         );
     }
 
+    public getTransaction(blockNumber: number, transactionId: string) {
+        return Utils.getTransaction(this.client, blockNumber, transactionId);
+    }
+
     public onComment(callback: any): void {
         this.commentSubscriptions.push({
             callback
