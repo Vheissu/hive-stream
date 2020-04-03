@@ -2,7 +2,7 @@ import { Client } from '@hivechain/dsteem';
 import { Streamer } from './../src/streamer';
 
 import fs from 'fs';
-import { sleep } from 'dsteem/lib/utils';
+import { sleep } from '@hivechain/dsteem/lib/utils';
 
 jest.mock('fs');
 
