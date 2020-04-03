@@ -290,6 +290,38 @@ describe('Streamer', () => {
             expect(contract.roll).toBeCalledWith({amount: '1', roll: 12, direction: 'lesserThan'}, { isSignedWithActiveKey: true, sender: 'beggars' }, 'test');
         });
 
+        test('contract should be updated with block info', () => {
+            const contract = {
+                updateBlockInfo: jest.fn()
+            };
+
+            // Register our contract
+            sut.registerContract('dice', contract);
+    
+            const operation = [
+                'custom_json',
+                {
+                    id: 'test',
+                    required_auths: ['beggars'], 
+                    json: JSON.stringify({
+                        hiveContract: {
+                            name: 'dice',
+                            action: 'roll',
+                            payload: {
+                                roll: 12,
+                                amount: '1',
+                                direction: 'lesserThan'
+                            }
+                        }
+                    })
+                }
+            ];
+    
+            sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
+
+            expect(contract.updateBlockInfo).toBeCalledWith('ffsdfsd', '34fdfsd', '4234ff');
+        });
+
     });
 
 });
