@@ -57,6 +57,9 @@ export class Streamer {
         // Store a reference to the client
         contract['_client'] = this.client;
 
+        // Pass in config
+        contract['_config'] = this.config;
+
         const storedReference: Contract = { name, contract };
 
         // Push the contract reference to be called later on
