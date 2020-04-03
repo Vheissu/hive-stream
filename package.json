@@ -15,10 +15,10 @@
         "test": "jest --forceExit"
     },
     "dependencies": {
+        "@hivechain/dsteem": "^0.12.14",
+        "bignumber.js": "^9.0.0",
         "dotenv": "^8.2.0",
-        "dsteem": "^0.11.3",
-        "seedrandom": "^3.0.5",
-        "sscjs": "^0.0.8"
+        "seedrandom": "^3.0.5"
     },
     "devDependencies": {
         "@types/bytebuffer": "^5.0.40",
