@@ -34,6 +34,8 @@ export class Streamer {
 
     private contracts: Contract[] = [];
 
+    private utils = Utils;
+
     constructor(userConfig: Partial<ConfigInterface> = {}) {
         this.config = Object.assign(Config, userConfig);
 
@@ -280,6 +282,29 @@ export class Streamer {
 
         // This is a transfer
         if (op[0] === 'transfer') {
+            const sender = op[1]?.from;
+            const amount = op[1]?.amount;
+
+            const json = Utils.jsonParse(op[1].memo);
+
+            if (json && json?.hiveContract) {
+                // Pull out details of contract
+                const { name, action, payload } = json.hiveContract;
+
+                // Do we have a contract that matches the name in the payload?
+                const contract = this.contracts.find(c => c.name === name);
+
+                if (contract) {
+                    if (contract?.contract?.updateBlockInfo) {
+                        contract.contract.updateBlockInfo(blockId, prevBlockId, trxId);
+                    }
+
+                    if (contract?.contract[action]) {
+                        contract.contract[action](payload, { sender, amount }, undefined);
+                    }
+                }
+            }
+
             this.transferSubscriptions.forEach(sub => {
                 if (sub.account === op[1].to) {
                     sub.callback(
@@ -319,6 +344,10 @@ export class Streamer {
                 const contract = this.contracts.find(c => c.name === name);
 
                 if (contract) {
+                    if (contract?.contract?.updateBlockInfo) {
+                        contract.contract.updateBlockInfo(blockId, prevBlockId, trxId);
+                    }
+
                     if (contract?.contract[action]) {
                         contract.contract[action](payload, { sender, isSignedWithActiveKey }, id);
                     }
