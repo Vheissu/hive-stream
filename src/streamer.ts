@@ -54,6 +54,9 @@ export class Streamer {
             contract.create();
         }
 
+        // Store a reference to the client
+        contract['_client'] = this.client;
+
         const storedReference: Contract = { name, contract };
 
         // Push the contract reference to be called later on
@@ -296,7 +299,7 @@ export class Streamer {
 
                 if (contract) {
                     if (contract?.contract?.updateBlockInfo) {
-                        contract.contract.updateBlockInfo(blockId, prevBlockId, trxId);
+                        contract.contract.updateBlockInfo(blockNumber, blockId, prevBlockId, trxId);
                     }
 
                     if (contract?.contract[action]) {
@@ -345,7 +348,7 @@ export class Streamer {
 
                 if (contract) {
                     if (contract?.contract?.updateBlockInfo) {
-                        contract.contract.updateBlockInfo(blockId, prevBlockId, trxId);
+                        contract.contract.updateBlockInfo(blockNumber, blockId, prevBlockId, trxId);
                     }
 
                     if (contract?.contract[action]) {
