@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import { Streamer } from './streamer';
 import diceContract from './contracts/dice.contract';
 
