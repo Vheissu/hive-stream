@@ -76,9 +76,9 @@ class DiceContract {
                     const random = rng(this.previousBlockId, this.blockId, this.transactionId);
 
                     const multiplier = new BigNumber(1).minus(HOUSE_EDGE).multipliedBy(100).dividedBy(roll);
-                    const tokensWon = new BigNumber(amount).multipliedBy(multiplier).toFixed(3, BigNumber.ROUND_DOWN);
+                    const tokensWon = new BigNumber(amountParsed).multipliedBy(multiplier).toFixed(3, BigNumber.ROUND_DOWN);
                     const winningMemo = `You won ${tokensWon} ${TOKEN_SYMBOL}. Roll: ${random}, Your guess: ${roll}`;
-                    const losingMemo = `You lost ${amount} ${TOKEN_SYMBOL}. Roll: ${random}, Your guess: ${roll}`;
+                    const losingMemo = `You lost ${amountParsed} ${TOKEN_SYMBOL}. Roll: ${random}, Your guess: ${roll}`;
 
                     if (direction === 'lesserThan') {
                         if (roll < random) {                            
