@@ -47,7 +47,7 @@ export const Utils = {
         const key = PrivateKey.fromString(config.ACTIVE_KEY);
         
         return client.broadcast.transfer({from, to,
-            amount: `${parseFloat(amount).toFixed(3)} ${symbol}`, memo}, key);
+            amount: `${parseInt(amount).toFixed(3)} ${symbol}`, memo}, key);
     },
 
     randomNumber(previousBlockId, blockId, transactionId) {
