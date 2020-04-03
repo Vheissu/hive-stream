@@ -319,7 +319,7 @@ describe('Streamer', () => {
     
             sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
 
-            expect(contract.updateBlockInfo).toBeCalledWith('ffsdfsd', '34fdfsd', '4234ff');
+            expect(contract.updateBlockInfo).toBeCalledWith(1234, 'ffsdfsd', '34fdfsd', '4234ff');
         });
 
     });
