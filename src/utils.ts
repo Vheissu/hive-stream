@@ -44,8 +44,10 @@ export const Utils = {
     },
 
     transferHiveTokens(client: Client, config: Partial<ConfigInterface>, from: string, to: string, amount: string, symbol: string, memo: string = '') {
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+        
         return client.broadcast.transfer({from, to,
-            amount: `${parseFloat(amount).toFixed(3)} ${symbol}`, memo}, config.ACTIVE_KEY as any);
+            amount: `${parseFloat(amount).toFixed(3)} ${symbol}`, memo}, key);
     },
 
     randomNumber(previousBlockId, blockId, transactionId) {
@@ -58,20 +60,23 @@ export const Utils = {
            author: string, permlink: string) {
         const percentage = parseFloat(votePercentage);
 
+        const key = PrivateKey.fromString(config.POSTING_KEY);
+
         if (percentage < 0) {
             throw new Error('Negative voting values are for downvotes, not upvotes');
         }
 
         const weight = this.votingWeight(percentage);
 
-        return client.broadcast.vote({voter, author, permlink, weight}, config.POSTING_KEY as any);
+        return client.broadcast.vote({voter, author, permlink, weight}, key);
     },
 
     downvote(client: Client, config: Partial<ConfigInterface>, voter: string, votePercentage: string = '100.0',
              author: string, permlink: string) {
         const weight = this.votingWeight(parseFloat(votePercentage)) * -1;
+        const key = PrivateKey.fromString(config.POSTING_KEY);
 
-        return client.broadcast.vote({voter, author, permlink, weight}, config.POSTING_KEY as any);
+        return client.broadcast.vote({voter, author, permlink, weight}, key);
     },
 
     votingWeight(votePercentage: number) {
