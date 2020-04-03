@@ -25,7 +25,10 @@ const rng = (previousBlockId, blockId, transactionId) => {
 const VALID_CURRENCIES = ['HIVE'];
 
 class DiceContract {
+    // tslint:disable-next-line: variable-name
     private _client: Client;
+
+    // tslint:disable-next-line: variable-name
     private _config: any;
 
     private blockNumber: number;
@@ -33,15 +36,15 @@ class DiceContract {
     private previousBlockId;
     private transactionId;
 
-    create() {
+    private create() {
         // Runs every time register is called on this contract
     }
 
-    destroy() {
+    private destroy() {
         // Runs every time unregister is run for this contract
     }
 
-    updateBlockInfo(blockNumber, blockId, previousBlockId, transactionId) {
+    private updateBlockInfo(blockNumber, blockId, previousBlockId, transactionId) {
         // Lifecycle method which sets block info 
         this.blockNumber = blockNumber;
         this.blockId = blockId;
@@ -49,7 +52,7 @@ class DiceContract {
         this.transactionId = transactionId;
     }
 
-    async getBalance() {
+    private async getBalance() {
         const account = await this._client.database.getAccounts([ACCOUNT]);
 
         if (account?.[0]) {
@@ -60,19 +63,22 @@ class DiceContract {
         }
     }
 
-    async roll(payload: { roll: number, direction: string }, { sender, amount }) {
+    private async roll(payload: { roll: number, direction: string }, { sender, amount }) {
         const { roll, direction } = payload;
 
         const amountTrim = amount.split(' ');
 
+        // tslint:disable-next-line: radix
         const amountParsed = parseInt(amountTrim[0]);
+
+        // tslint:disable-next-line: radix
         const amountFormatted = parseInt(amountTrim[0]).toFixed(3);
         const amountCurrency = amountTrim[1].trim();
 
-        console.log(`Roll: ${roll} 
-                     Direction: ${direction} 
-                     Amount parsed: ${amountParsed} 
-                     Amount formatted: ${amountFormatted} 
+        console.log(`Roll: ${roll}
+                     Direction: ${direction}
+                     Amount parsed: ${amountParsed}
+                     Amount formatted: ${amountFormatted}
                      Currency: ${amountCurrency}`);
 
         const transaction = await Utils.getTransaction(this._client, this.blockNumber, this.transactionId);
@@ -87,7 +93,7 @@ class DiceContract {
 
                 return;
             }
-            
+
             // Bet amount is valid
             if (amountParsed >= MIN_BET && amountParsed <= MAX_BET) {
                 // Validate roll is valid
@@ -107,7 +113,7 @@ class DiceContract {
                     }
 
                     if (direction === 'lesserThan') {
-                        if (roll < random) {                            
+                        if (roll < random) {
                             await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, tokensWon, TOKEN_SYMBOL, winningMemo);
                         } else {
                             await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, '0.001', TOKEN_SYMBOL, losingMemo);
