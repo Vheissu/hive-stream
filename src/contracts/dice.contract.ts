@@ -1,10 +1,8 @@
 import { Client } from '@hivechain/dsteem';
-// import { Streamer, Utils } from 'hive-stream';
 import { Streamer } from './../streamer';
 import { Utils } from './../utils';
 import seedrandom from 'seedrandom';
 import BigNumber from 'bignumber.js';
-
 
 const CONTRACT_NAME = 'hivedice';
 
@@ -15,6 +13,7 @@ const HOUSE_EDGE = 0.02;
 const MIN_BET = 1;
 const MAX_BET = 10;
 
+// Random Number Generator
 const rng = (previousBlockId, blockId, transactionId) => {
     const random = seedrandom(`${previousBlockId}${blockId}${transactionId}`).double();
     const randomRoll = Math.floor(random * 100) + 1;
@@ -22,6 +21,7 @@ const rng = (previousBlockId, blockId, transactionId) => {
     return randomRoll;
 };
 
+// Valid betting currencies
 const VALID_CURRENCIES = ['HIVE'];
 
 class DiceContract {
@@ -35,12 +35,16 @@ class DiceContract {
 
     create() {
         // Runs every time register is called on this contract
+        // Do setup logic and code in here (creating a database, etc)
     }
 
     destroy() {
         // Runs every time unregister is run for this contract
+        // Close database connections, write to a database with state, etc
     }
 
+    // Updates the contract with information about the current block
+    // This is a method automatically called if it exists
     updateBlockInfo(blockNumber, blockId, previousBlockId, transactionId) {
         // Lifecycle method which sets block info 
         this.blockNumber = blockNumber;
@@ -49,7 +53,15 @@ class DiceContract {
         this.transactionId = transactionId;
     }
 
-    async getBalance() {
+    /**
+     * Get Balance
+     * 
+     * Helper method for getting the contract account balance. In the case of our dice contract
+     * we want to make sure the account has enough money to pay out any bets
+     * 
+     * @returns number
+     */
+    async getBalance(): Promise<number> {
         const account = await this._client.database.getAccounts([ACCOUNT]);
 
         if (account?.[0]) {
@@ -60,13 +72,29 @@ class DiceContract {
         }
     }
 
+    /**
+     * Roll
+     * 
+     * Automatically called when a custom JSON action matches the following method
+     * 
+     * @param payload 
+     * @param param1 - sender and amount
+     */
     async roll(payload: { roll: number, direction: string }, { sender, amount }) {
+        // Destructure the values from the payload
         const { roll, direction } = payload;
 
+        // The amount is formatted like 100 HIVE
+        // The value is the first part, the currency symbol is the second
         const amountTrim = amount.split(' ');
 
-        const amountParsed = parseInt(amountTrim[0]);
-        const amountFormatted = parseInt(amountTrim[0]).toFixed(3);
+        // Parse the numeric value as a real value
+        const amountParsed = parseFloat(amountTrim[0]);
+
+        // Format the amount to 3 decimal places
+        const amountFormatted = parseFloat(amountTrim[0]).toFixed(3);
+
+        // Trim any space from the currency symbol
         const amountCurrency = amountTrim[1].trim();
 
         console.log(`Roll: ${roll} 
@@ -87,7 +115,7 @@ class DiceContract {
 
                 return;
             }
-            
+
             // Bet amount is valid
             if (amountParsed >= MIN_BET && amountParsed <= MAX_BET) {
                 // Validate roll is valid
