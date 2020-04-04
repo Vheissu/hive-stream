@@ -9,7 +9,7 @@ const CONTRACT_NAME = 'hivedice';
 const ACCOUNT = 'beggars';
 const TOKEN_SYMBOL = 'HIVE';
 
-const HOUSE_EDGE = 0.02;
+const HOUSE_EDGE = 0.05;
 const MIN_BET = 1;
 const MAX_BET = 10;
 
@@ -103,14 +103,20 @@ class DiceContract {
                      Amount formatted: ${amountFormatted} 
                      Currency: ${amountCurrency}`);
 
+        // Get the transaction from the blockchain
         const transaction = await Utils.getTransaction(this._client, this.blockNumber, this.transactionId);
+
+        // Call the verifyTransfer method to confirm the transfer happened
         const verify = await Utils.verifyTransfer(transaction, sender, 'beggars', amount);
+
+        // Get the balance of our contract account
         const balance = await this.getBalance();
 
         // Transfer is valid
         if (verify) {
             // Server balance is less than the max bet, cancel and refund
             if (balance < MAX_BET) {
+                // Send back what was sent, the server is broke
                 await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] The server could not fufill your bet.`);
 
                 return;
@@ -120,11 +126,19 @@ class DiceContract {
             if (amountParsed >= MIN_BET && amountParsed <= MAX_BET) {
                 // Validate roll is valid
                 if ((roll >= 2 && roll <= 96) && (direction === 'lesserThan' || direction === 'greaterThan') && VALID_CURRENCIES.includes(amountCurrency)) {
+                    // Roll a random value
                     const random = rng(this.previousBlockId, this.blockId, this.transactionId);
 
+                    // Calculate the multiplier percentage
                     const multiplier = new BigNumber(1).minus(HOUSE_EDGE).multipliedBy(100).dividedBy(roll);
+
+                    // Calculate the number of tokens won
                     const tokensWon = new BigNumber(amountParsed).multipliedBy(multiplier).toFixed(3, BigNumber.ROUND_DOWN);
+
+                    // Memo that shows in users memo when they win
                     const winningMemo = `You won ${tokensWon} ${TOKEN_SYMBOL}. Roll: ${random}, Your guess: ${roll}`;
+
+                    // Memo that shows in users memo when they lose
                     const losingMemo = `You lost ${amountParsed} ${TOKEN_SYMBOL}. Roll: ${random}, Your guess: ${roll}`;
 
                     // User won more than the server can afford, refund the bet amount
@@ -134,19 +148,25 @@ class DiceContract {
                         return;
                     }
 
+                    // User is guessing their value is under the server roll
                     if (direction === 'lesserThan') {
                         if (roll < random) {                            
                             await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, tokensWon, TOKEN_SYMBOL, winningMemo);
                         } else {
                             await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, '0.001', TOKEN_SYMBOL, losingMemo);
                         }
-                    } else if (direction === 'greaterThan') {
+                    } 
+                    // User is guessing their value is greater than the server roll
+                    else if (direction === 'greaterThan') {
                         if (roll > random) {
                             await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, tokensWon, TOKEN_SYMBOL, winningMemo);
                         } else {
                             await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, '0.001', TOKEN_SYMBOL, losingMemo);
                         }
                     }
+                } else {
+                    // Invalid bet parameters, refund the user their bet
+                    await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] Invalid bet params.`);
                 }
             } else {
                 try {
