@@ -293,7 +293,7 @@ export class Streamer {
 
             const json = Utils.jsonParse(op[1].memo);
 
-            if (json && json?.[this.config.PAYLOAD_IDENTIFIER] && json?.id === this.config.JSON_ID) {
+            if (json && json?.[this.config.PAYLOAD_IDENTIFIER] && json?.[this.config.PAYLOAD_IDENTIFIER]?.id === this.config.JSON_ID) {
                 // Pull out details of contract
                 const { name, action, payload } = json[this.config.PAYLOAD_IDENTIFIER];
 
