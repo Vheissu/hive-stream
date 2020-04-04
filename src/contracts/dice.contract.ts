@@ -82,7 +82,7 @@ class DiceContract {
      */
     async roll(payload: { roll: number, direction: string }, { sender, amount }) {
         // Destructure the values from the payload
-        const { roll, direction } = payload;
+        const { roll } = payload;
 
         // The amount is formatted like 100 HIVE
         // The value is the first part, the currency symbol is the second
@@ -98,7 +98,6 @@ class DiceContract {
         const amountCurrency = amountTrim[1].trim();
 
         console.log(`Roll: ${roll} 
-                     Direction: ${direction} 
                      Amount parsed: ${amountParsed} 
                      Amount formatted: ${amountFormatted} 
                      Currency: ${amountCurrency}`);
@@ -125,7 +124,7 @@ class DiceContract {
             // Bet amount is valid
             if (amountParsed >= MIN_BET && amountParsed <= MAX_BET) {
                 // Validate roll is valid
-                if ((roll >= 2 && roll <= 96) && (direction === 'lesserThan' || direction === 'greaterThan') && VALID_CURRENCIES.includes(amountCurrency)) {
+                if ((roll >= 2 && roll <= 96) && VALID_CURRENCIES.includes(amountCurrency)) {
                     // Roll a random value
                     const random = rng(this.previousBlockId, this.blockId, this.transactionId);
 
@@ -148,21 +147,11 @@ class DiceContract {
                         return;
                     }
 
-                    // User is guessing their value is under the server roll
-                    if (direction === 'lesserThan') {
-                        if (roll < random) {                            
-                            await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, tokensWon, TOKEN_SYMBOL, winningMemo);
-                        } else {
-                            await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, '0.001', TOKEN_SYMBOL, losingMemo);
-                        }
-                    } 
-                    // User is guessing their value is greater than the server roll
-                    else if (direction === 'greaterThan') {
-                        if (roll > random) {
-                            await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, tokensWon, TOKEN_SYMBOL, winningMemo);
-                        } else {
-                            await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, '0.001', TOKEN_SYMBOL, losingMemo);
-                        }
+                    // If random value is less than roll
+                    if (random < roll) {                            
+                        await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, tokensWon, TOKEN_SYMBOL, winningMemo);
+                    } else {
+                        await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, '0.001', TOKEN_SYMBOL, losingMemo);
                     }
                 } else {
                     // Invalid bet parameters, refund the user their bet

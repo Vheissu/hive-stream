@@ -45,7 +45,7 @@ export class Streamer {
         this.postingKey = this.config.POSTING_KEY;
         this.activeKey = this.config.ACTIVE_KEY;
 
-        this.client = new Client(this.config.API_NODES, { timeout: 3000 });
+        this.client = new Client(this.config.API_NODES);
     }
 
     public registerContract(name: string, contract: any) {
@@ -213,7 +213,7 @@ export class Streamer {
         this.blockId = block.block_id;
         this.previousBlockId = block.previous;
         this.transactionId = block.transaction_ids[1];
-        
+
         // Loop over all transactions in the block
         for (const [i, transaction] of Object.entries(block.transactions)) {
             // Loop over operations in the block
