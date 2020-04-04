@@ -45,7 +45,7 @@ export class Streamer {
         this.postingKey = this.config.POSTING_KEY;
         this.activeKey = this.config.ACTIVE_KEY;
 
-        this.client = new Client(this.config.API_NODES[0], { timeout: 2000 });
+        this.client = new Client(this.config.API_NODES, { timeout: 3000 });
     }
 
     public registerContract(name: string, contract: any) {
@@ -192,23 +192,7 @@ export class Streamer {
         } catch (e) {
             const message = e.message.toLowerCase();
 
-            if (message.includes('network') || message.includes('enotfound') && this.attempts < this.config.API_NODES.length - 1) {
-                if (this.config.DEBUG_MODE) {
-                    // Increase by one as we are already using the first supplied API node URL
-                    console.log(`There was an error, trying new node. Attempt number: ${this.attempts + 1}`);
-
-                    console.log(`Timeout value based on attempt count: ${2000 * this.attempts}`);
-                    console.log(`Trying node ${this.config.API_NODES[this.attempts + 1]}`);
-                }
-
-                this.client = new Client(this.config.API_NODES[this.attempts + 1], {
-                    timeout: 2000 * this.attempts
-                });
-
-                this.getBlock();
-
-                this.attempts++;
-            }
+            console.error(message);
         }
     }
 
@@ -229,6 +213,7 @@ export class Streamer {
         this.blockId = block.block_id;
         this.previousBlockId = block.previous;
         this.transactionId = block.transaction_ids[1];
+        
         // Loop over all transactions in the block
         for (const [i, transaction] of Object.entries(block.transactions)) {
             // Loop over operations in the block
