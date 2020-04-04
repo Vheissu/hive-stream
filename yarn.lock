@@ -151,10 +151,10 @@
     exec-sh "^0.3.2"
     minimist "^1.2.0"
 
-"@hivechain/dsteem@^0.12.14":
-  version "0.12.14"
-  resolved "https://registry.yarnpkg.com/@hivechain/dsteem/-/dsteem-0.12.14.tgz#2f9eda0e5aba0f93f160109e847518e758004bf1"
-  integrity sha512-VMjYWvuT9x84A+eJt1AmKQNBwtkzH+rj/CfYtkBKitJllbBc3zfrgfqIHbu1cKkw+gohsABhZlM1+/DW3Kw7gA==
+"@hivechain/dhive@^0.13.3":
+  version "0.13.3"
+  resolved "https://registry.yarnpkg.com/@hivechain/dhive/-/dhive-0.13.3.tgz#a97e64676163c232d6d1da22ab6f9a3d59a1ab43"
+  integrity sha512-VK3iC1I6qR9azWRfrkzyGr2+WgIJGr/sXsvsqJoFb9R+hBTuND71UGccKz1fkxczTl3fTvOSir1pZF/RCDM7eQ==
   dependencies:
     bs58 "^4.0.1"
     bytebuffer "^5.0.1"

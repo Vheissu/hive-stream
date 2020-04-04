@@ -1,4 +1,4 @@
-import { Client } from '@hivechain/dsteem';
+import { Client } from '@hivechain/dhive';
 import fs from 'fs';
 import { Utils } from './utils';
 import { Config, ConfigInterface } from './config';
