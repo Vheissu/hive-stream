@@ -1,4 +1,3 @@
-import { Client } from '@hivechain/dhive';
 import { Streamer } from './../streamer';
 import { Utils } from './../utils';
 import seedrandom from 'seedrandom';
@@ -26,10 +25,7 @@ const VALID_CURRENCIES = ['HIVE'];
 
 class DiceContract {
     // tslint:disable-next-line: variable-name
-    private _client: Client;
-
-    // tslint:disable-next-line: variable-name
-    private _config: any;
+    private _instance: Streamer;
 
     private blockNumber: number;
     private blockId;
@@ -48,7 +44,7 @@ class DiceContract {
 
     // Updates the contract with information about the current block
     // This is a method automatically called if it exists
-    updateBlockInfo(blockNumber, blockId, previousBlockId, transactionId) {
+    private updateBlockInfo(blockNumber, blockId, previousBlockId, transactionId) {
         // Lifecycle method which sets block info 
         this.blockNumber = blockNumber;
         this.blockId = blockId;
@@ -58,14 +54,14 @@ class DiceContract {
 
     /**
      * Get Balance
-     * 
+     *
      * Helper method for getting the contract account balance. In the case of our dice contract
      * we want to make sure the account has enough money to pay out any bets
-     * 
+     *
      * @returns number
      */
-    async getBalance(): Promise<number> {
-        const account = await this._client.database.getAccounts([ACCOUNT]);
+    private async getBalance(): Promise<number> {
+        const account = await this._instance['client'].database.getAccounts([ACCOUNT]);
 
         if (account?.[0]) {
             const balance = (account[0].balance as string).split(' ');
@@ -73,17 +69,19 @@ class DiceContract {
 
             return parseFloat(amount);
         }
+
+        return null;
     }
 
     /**
      * Roll
-     * 
+     *
      * Automatically called when a custom JSON action matches the following method
-     * 
-     * @param payload 
+     *
+     * @param payload
      * @param param1 - sender and amount
      */
-    async roll(payload: { roll: number, direction: string }, { sender, amount }) {
+    private async roll(payload: { roll: number }, { sender, amount }) {
         // Destructure the values from the payload
         const { roll } = payload;
 
@@ -100,16 +98,16 @@ class DiceContract {
         // Trim any space from the currency symbol
         const amountCurrency = amountTrim[1].trim();
 
-        console.log(`Roll: ${roll} 
-                     Amount parsed: ${amountParsed} 
-                     Amount formatted: ${amountFormatted} 
+        console.log(`Roll: ${roll}
+                     Amount parsed: ${amountParsed}
+                     Amount formatted: ${amountFormatted}
                      Currency: ${amountCurrency}`);
 
         // Get the transaction from the blockchain
-        const transaction = await Utils.getTransaction(this._client, this.blockNumber, this.transactionId);
+        const transaction = await this._instance.getTransaction(this.blockNumber, this.transactionId);
 
         // Call the verifyTransfer method to confirm the transfer happened
-        const verify = await Utils.verifyTransfer(transaction, sender, 'beggars', amount);
+        const verify = await this._instance.verifyTransfer(transaction, sender, 'beggars', amount);
 
         // Get the balance of our contract account
         const balance = await this.getBalance();
@@ -119,7 +117,7 @@ class DiceContract {
             // Server balance is less than the max bet, cancel and refund
             if (balance < MAX_BET) {
                 // Send back what was sent, the server is broke
-                await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] The server could not fufill your bet.`);
+                await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] The server could not fufill your bet.`);
 
                 return;
             }
@@ -145,25 +143,25 @@ class DiceContract {
 
                     // User won more than the server can afford, refund the bet amount
                     if (parseFloat(tokensWon) > balance) {
-                        await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] The server could not fufill your bet.`);
+                        await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] The server could not fufill your bet.`);
 
                         return;
                     }
 
                     // If random value is less than roll
-                    if (random < roll) {                            
-                        await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, tokensWon, TOKEN_SYMBOL, winningMemo);
+                    if (random < roll) {
+                        await this._instance.transferHiveTokens(ACCOUNT, sender, tokensWon, TOKEN_SYMBOL, winningMemo);
                     } else {
-                        await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, '0.001', TOKEN_SYMBOL, losingMemo);
+                        await this._instance.transferHiveTokens(ACCOUNT, sender, '0.001', TOKEN_SYMBOL, losingMemo);
                     }
                 } else {
                     // Invalid bet parameters, refund the user their bet
-                    await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] Invalid bet params.`);
+                    await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] Invalid bet params.`);
                 }
             } else {
                 try {
                     // We need to refund the user
-                    const transfer = await Utils.transferHiveTokens(this._client, this._config, ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] You sent an invalid bet amount.`);
+                    const transfer = await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] You sent an invalid bet amount.`);
 
                     console.log(transfer);
                 } catch (e) {
