@@ -7,7 +7,7 @@ hive_keychain.requestCustomJson('beggars', 'hivedice', 'active', JSON.stringify(
 42203941
 Transfer memo payload
 
-{"hiveContract":{"name":"hivedice","action":"roll","payload":{"roll":95,"direction":"greaterThan"}}}
+{"hiveContract":{"id":"testdice", "name":"hivedice","action":"roll","payload":{"roll":95,"direction":"greaterThan"}}}
 
 42208330
 Transfer memo, amount higher than max

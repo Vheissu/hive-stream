@@ -1,4 +1,4 @@
-import { Client, SignedTransaction, PrivateKey } from '@hivechain/dsteem';
+import { Client, SignedTransaction, PrivateKey } from '@hivechain/dhive';
 import { Config, ConfigInterface } from './config';
 import seedrandom from 'seedrandom';
 

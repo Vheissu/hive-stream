@@ -1,4 +1,4 @@
-import { Client } from '@hivechain/dsteem';
+import { Client } from '@hivechain/dhive';
 import fs from 'fs';
 import { Utils } from './utils';
 import { Config, ConfigInterface } from './config';
@@ -45,7 +45,7 @@ export class Streamer {
         this.postingKey = this.config.POSTING_KEY;
         this.activeKey = this.config.ACTIVE_KEY;
 
-        this.client = new Client(this.config.API_NODES[0], { timeout: 2000 });
+        this.client = new Client(this.config.API_NODES);
     }
 
     public registerContract(name: string, contract: any) {
@@ -192,23 +192,7 @@ export class Streamer {
         } catch (e) {
             const message = e.message.toLowerCase();
 
-            if (message.includes('network') || message.includes('enotfound') && this.attempts < this.config.API_NODES.length - 1) {
-                if (this.config.DEBUG_MODE) {
-                    // Increase by one as we are already using the first supplied API node URL
-                    console.log(`There was an error, trying new node. Attempt number: ${this.attempts + 1}`);
-
-                    console.log(`Timeout value based on attempt count: ${2000 * this.attempts}`);
-                    console.log(`Trying node ${this.config.API_NODES[this.attempts + 1]}`);
-                }
-
-                this.client = new Client(this.config.API_NODES[this.attempts + 1], {
-                    timeout: 2000 * this.attempts
-                });
-
-                this.getBlock();
-
-                this.attempts++;
-            }
+            console.error(message);
         }
     }
 
@@ -229,6 +213,7 @@ export class Streamer {
         this.blockId = block.block_id;
         this.previousBlockId = block.previous;
         this.transactionId = block.transaction_ids[1];
+
         // Loop over all transactions in the block
         for (const [i, transaction] of Object.entries(block.transactions)) {
             // Loop over operations in the block
@@ -293,7 +278,7 @@ export class Streamer {
 
             const json = Utils.jsonParse(op[1].memo);
 
-            if (json && json?.[this.config.PAYLOAD_IDENTIFIER]) {
+            if (json && json?.[this.config.PAYLOAD_IDENTIFIER] && json?.[this.config.PAYLOAD_IDENTIFIER]?.id === this.config.JSON_ID) {
                 // Pull out details of contract
                 const { name, action, payload } = json[this.config.PAYLOAD_IDENTIFIER];
 
@@ -342,7 +327,7 @@ export class Streamer {
 
             const json = Utils.jsonParse(op[1].json);
 
-            if (json && json?.[this.config.PAYLOAD_IDENTIFIER]) {
+            if (json && json?.[this.config.PAYLOAD_IDENTIFIER]  && id === this.config.JSON_ID) {
                 // Pull out details of contract
                 const { name, action, payload } = json[this.config.PAYLOAD_IDENTIFIER];
 
