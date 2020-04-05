@@ -2,7 +2,7 @@ import { Client } from '@hivechain/dhive';
 import { Streamer } from './../src/streamer';
 
 import fs from 'fs';
-import { sleep } from '@hivechain/dsteem/lib/utils';
+import { sleep } from '@hivechain/dhive/lib/utils';
 
 jest.mock('fs');
 
@@ -11,7 +11,10 @@ describe('Streamer', () => {
     let sut: Streamer;
 
     beforeEach(() => {
-        sut = new Streamer({});
+        sut = new Streamer({
+            JSON_ID: 'test',
+            PAYLOAD_IDENTIFIER: 'hiveContract'
+        });
     });
 
     afterEach(() => {
@@ -101,22 +104,6 @@ describe('Streamer', () => {
         sut['disableAllProcessing'] = true;
 
         expect(sut['getBlock']).toBeCalled();
-    });
-
-    test('getBlock client error should retry', async () => {
-        jest.spyOn(sut['client'].database, 'getDynamicGlobalProperties').mockRejectedValue({ message: 'network error' });
-        jest.spyOn(sut as any, 'getBlock');
-        jest.spyOn(sut as any, 'loadBlock');
-
-        expect(sut['attempts']).toStrictEqual(0);
-
-        await sut['getBlock']();
-
-        sut['disableAllProcessing'] = true;
-
-        expect(sut['loadBlock']).not.toBeCalled();
-
-        expect(sut['attempts']).toStrictEqual(1);
     });
 
     test('processOperation calls post subscriber', () => {
@@ -265,7 +252,7 @@ describe('Streamer', () => {
 
             // Register our contract
             sut.registerContract('dice', contract);
-    
+
             const operation = [
                 'custom_json',
                 {
@@ -276,18 +263,47 @@ describe('Streamer', () => {
                             name: 'dice',
                             action: 'roll',
                             payload: {
-                                roll: 12,
-                                amount: '1',
-                                direction: 'lesserThan'
+                                roll: 12
                             }
                         }
                     })
                 }
             ];
-    
+
             sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
 
-            expect(contract.roll).toBeCalledWith({amount: '1', roll: 12, direction: 'lesserThan'}, { isSignedWithActiveKey: true, sender: 'beggars' }, 'test');
+            expect(contract.roll).toBeCalledWith({roll: 12}, { isSignedWithActiveKey: true, sender: 'beggars' }, 'test');
+        });
+
+        test('contract action should be called from transfer memo', () => {
+            const contract = {
+                roll: jest.fn()
+            };
+
+            // Register our contract
+            sut.registerContract('dice', contract);
+
+            const operation = [
+                'transfer',
+                {
+                    from: 'beggars',
+                    amount: '3.000 HIVE',
+                    memo: JSON.stringify({
+                        hiveContract: {
+                            id: 'test',
+                            name: 'dice',
+                            action: 'roll',
+                            payload: {
+                                roll: 12
+                            }
+                        }
+                    })
+                }
+            ];
+
+            sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
+
+            expect(contract.roll).toBeCalledWith({roll: 12}, { amount: '3.000 HIVE', sender: 'beggars' });
         });
 
         test('contract should be updated with block info', () => {
@@ -297,26 +313,24 @@ describe('Streamer', () => {
 
             // Register our contract
             sut.registerContract('dice', contract);
-    
+
             const operation = [
                 'custom_json',
                 {
                     id: 'test',
-                    required_auths: ['beggars'], 
+                    required_auths: ['beggars'],
                     json: JSON.stringify({
                         hiveContract: {
                             name: 'dice',
                             action: 'roll',
                             payload: {
-                                roll: 12,
-                                amount: '1',
-                                direction: 'lesserThan'
+                                roll: 12
                             }
                         }
                     })
                 }
             ];
-    
+
             sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
 
             expect(contract.updateBlockInfo).toBeCalledWith(1234, 'ffsdfsd', '34fdfsd', '4234ff');
