@@ -123,7 +123,7 @@ export class Streamer {
 
         this.disableAllProcessing = false;
 
-        const state = this.adapter.load();
+        const state = this.adapter.loadState();
 
         if (this.config.DEBUG_MODE) {
             console.log(`Restoring state from file`);
@@ -371,7 +371,7 @@ export class Streamer {
     }
 
     public async saveStateToDisk(): Promise<void> {
-        this.adapter.save({lastBlockNumber: this.lastBlockNumber});
+        this.adapter.saveState({lastBlockNumber: this.lastBlockNumber});
     }
 
     public transferHiveTokens(from: string, to: string, amount: string, symbol: string, memo: string = '') {
