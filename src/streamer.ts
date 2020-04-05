@@ -54,11 +54,8 @@ export class Streamer {
             contract.create();
         }
 
-        // Store a reference to the client
-        contract['_client'] = this.client;
-
-        // Pass in config
-        contract['_config'] = this.config;
+        // Store an instance of the streamer
+        contract['_instance'] = this;
 
         const storedReference: Contract = { name, contract };
 
@@ -234,14 +231,7 @@ export class Streamer {
         this.saveStateToDisk();
     }
 
-    public processOperation(
-        op: any,
-        blockNumber: number,
-        blockId: string,
-        prevBlockId: string,
-        trxId: string,
-        blockTime: Date
-    ): void {
+    public processOperation(op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date): void {
         // Operation is a "comment" which could either be a post or comment
         if (op[0] === 'comment') {
             // This is a post
@@ -278,7 +268,7 @@ export class Streamer {
 
             const json = Utils.jsonParse(op[1].memo);
 
-            if (json && json?.[this.config.PAYLOAD_IDENTIFIER] && json?.[this.config.PAYLOAD_IDENTIFIER]?.id === this.config.JSON_ID) {
+            if (json?.[this.config.PAYLOAD_IDENTIFIER] && json?.[this.config.PAYLOAD_IDENTIFIER]?.id === this.config.JSON_ID) {
                 // Pull out details of contract
                 const { name, action, payload } = json[this.config.PAYLOAD_IDENTIFIER];
 
@@ -291,7 +281,7 @@ export class Streamer {
                     }
 
                     if (contract?.contract[action]) {
-                        contract.contract[action](payload, { sender, amount }, undefined);
+                        contract.contract[action](payload, { sender, amount });
                     }
                 }
             }
@@ -314,7 +304,7 @@ export class Streamer {
         if (op[0] === 'custom_json') {
             let isSignedWithActiveKey = false;
             let sender;
-            
+
             const id = op[1]?.id;
 
             if (op[1]?.required_auths?.length > 0) {
@@ -387,13 +377,7 @@ export class Streamer {
         });
     }
 
-    public transferHiveTokens(
-        from: string,
-        to: string,
-        amount: string,
-        symbol: string,
-        memo: string = ''
-    ) {
+    public transferHiveTokens(from: string, to: string, amount: string, symbol: string, memo: string = '') {
         return Utils.transferHiveTokens(
             this.client,
             this.config,
@@ -405,11 +389,7 @@ export class Streamer {
         );
     }
 
-    public upvote(
-        votePercentage: string = '100.0',
-        username: string,
-        permlink: string
-    ) {
+    public upvote(votePercentage: string = '100.0', username: string, permlink: string) {
         return Utils.upvote(
             this.client,
             this.config,
@@ -420,11 +400,7 @@ export class Streamer {
         );
     }
 
-    public downvote(
-        votePercentage: string = '100.0',
-        username: string,
-        permlink: string
-    ) {
+    public downvote(votePercentage: string = '100.0', username: string, permlink: string) {
         return Utils.downvote(
             this.client,
             this.config,
@@ -437,6 +413,10 @@ export class Streamer {
 
     public getTransaction(blockNumber: number, transactionId: string) {
         return Utils.getTransaction(this.client, blockNumber, transactionId);
+    }
+
+    public verifyTransfer(transaction, from: string, to: string, amount: string) {
+        return Utils.verifyTransfer(transaction, from, to, amount);
     }
 
     public onComment(callback: any): void {
