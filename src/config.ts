@@ -20,7 +20,7 @@ export const Config: ConfigInterface = {
 
     APP_NAME: 'steem-stream',
 
-    PAYLOAD_IDENTIFIER: 'hiveContract',
+    PAYLOAD_IDENTIFIER: 'hivePayload',
 
     USERNAME: '',
 
