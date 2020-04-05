@@ -270,7 +270,7 @@ describe('Streamer', () => {
                 'custom_json',
                 {
                     id: 'test',
-                    required_auths: ['beggars'], 
+                    required_auths: ['beggars'],
                     json: JSON.stringify({
                         hiveContract: {
                             name: 'dice',
