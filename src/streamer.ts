@@ -1,3 +1,5 @@
+import { FileAdapter } from './adapters/file.adapter';
+import { AdapterBase } from './adapters/base.adapter';
 import { Client } from '@hivechain/dhive';
 import fs from 'fs';
 import { Utils } from './utils';
@@ -33,6 +35,7 @@ export class Streamer {
     private disableAllProcessing = false;
 
     private contracts: Contract[] = [];
+    private adapter;
 
     private utils = Utils;
 
@@ -46,6 +49,12 @@ export class Streamer {
         this.activeKey = this.config.ACTIVE_KEY;
 
         this.client = new Client(this.config.API_NODES);
+
+        this.addAdapter(new FileAdapter());
+    }
+
+    public addAdapter(adapter: any) {
+        this.adapter = adapter;
     }
 
     public registerContract(name: string, contract: any) {
@@ -114,19 +123,15 @@ export class Streamer {
 
         this.disableAllProcessing = false;
 
-        // Do we have any previously saved state to load?
-        if (fs.existsSync('hive-stream.json')) {
-            // Parse the object data from the JSON state file
-            const state = JSON.parse(
-                (fs.readFileSync('hive-stream.json') as unknown) as string
-            );
+        const state = this.adapter.load();
 
+        if (this.config.DEBUG_MODE) {
+            console.log(`Restoring state from file`);
+        }
+
+        if (state?.lastBlockNumber) {
             if (state.lastBlockNumber) {
                 this.lastBlockNumber = state.lastBlockNumber;
-            }
-
-            if (this.config.DEBUG_MODE) {
-                console.log(`Restoring state from file`);
             }
         }
 
@@ -366,15 +371,7 @@ export class Streamer {
     }
 
     public async saveStateToDisk(): Promise<void> {
-        const state = {
-            lastBlockNumber: this.lastBlockNumber
-        };
-
-        fs.writeFile('hive-stream.json', JSON.stringify(state), err => {
-            if (err) {
-                console.error(err);
-            }
-        });
+        this.adapter.save({lastBlockNumber: this.lastBlockNumber});
     }
 
     public transferHiveTokens(from: string, to: string, amount: string, symbol: string, memo: string = '') {
