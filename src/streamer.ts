@@ -55,8 +55,6 @@ export class Streamer {
 
     public registerAdapter(adapter: any) {
         this.adapter = adapter;
-
-        this.adapter.create();
     }
 
     public registerContract(name: string, contract: any) {
@@ -122,6 +120,8 @@ export class Streamer {
         if (this.config.DEBUG_MODE) {
             console.log('Starting to stream the Hive blockchain');
         }
+
+        await this.adapter.create();
 
         this.disableAllProcessing = false;
 
