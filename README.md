@@ -159,6 +159,12 @@ JSON.stringify({ hiveContract: { name: 'hivedice', action: 'roll', payload: { ro
 
 This will match a registered contract called `hivedice` and inside of the contract code, a function called `roll` and finally, the payload is sent to the function as an argument, allowing you to access the values inside of it. See the example file `dice.contract.ts` in the `src/contracts` folder in the repository.
 
+## Adapters
+
+The Hive Stream library supports custom adapters for various actions that take place in the library. When the library first loads, it makes a call to get the last block number or when a block is processed, storing the processed block number. This library ships with two adapters; File and SQLite, both of which are file based adapters. The SQLite database works more like a traditional database and shows how you might create an adapter for a database like MongoDB or MySQL.
+
+When creating an adapter, at a minimum your adapter requires two methods: `loadState` and `saveState`. It must also extend `AdapterBase` which is exported from the package.
+
 ## Permanently running with PM2
 
 Simply copy the `ecosystem.config.js` file from this repository into your application, globally install `pm2` via `npm install pm2 -g` and change the `script` value below to reflect the main file of your application.

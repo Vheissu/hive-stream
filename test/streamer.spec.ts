@@ -52,6 +52,8 @@ describe('Streamer', () => {
             loadState: jest.fn()
         };
 
+        sut['lastBlockNumber'] = 0;
+
         await sut.start();
 
         expect(sut['lastBlockNumber']).toStrictEqual(0);
