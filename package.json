@@ -18,6 +18,7 @@
         "@hivechain/dhive": "^0.13.3",
         "bignumber.js": "^9.0.0",
         "dotenv": "^8.2.0",
+        "mongodb": "^3.5.5",
         "seedrandom": "^3.0.5",
         "sqlite3": "^4.1.1"
     },
@@ -25,6 +26,7 @@
         "@types/bytebuffer": "^5.0.40",
         "@types/dotenv": "^8.2.0",
         "@types/jest": "^25.2.1",
+        "@types/mongodb": "^3.5.4",
         "@types/node": "^13.11.0",
         "@types/seedrandom": "^2.4.28",
         "@types/sqlite3": "^3.1.6",
