@@ -24,7 +24,7 @@ export class AdapterBase {
         
     }
 
-    protected processCustomJson(operation, payload: ContractPayload, metadata: { sender: string, isSignedWithActiveKey: boolean }) {
+    protected async processCustomJson(operation, payload: ContractPayload, metadata: { sender: string, isSignedWithActiveKey: boolean }) {
 
     }
 }
