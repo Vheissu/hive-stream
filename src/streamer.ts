@@ -50,11 +50,13 @@ export class Streamer {
 
         this.client = new Client(this.config.API_NODES);
 
-        this.addAdapter(new FileAdapter());
+        this.registerAdapter(new FileAdapter());
     }
 
-    public addAdapter(adapter: any) {
+    public registerAdapter(adapter: any) {
         this.adapter = adapter;
+
+        this.adapter.create();
     }
 
     public registerContract(name: string, contract: any) {
@@ -116,14 +118,14 @@ export class Streamer {
      * Starts the streamer bot to get blocks from the Hive API
      *
      */
-    public start(): void {
+    public async start(): Promise<void> {
         if (this.config.DEBUG_MODE) {
             console.log('Starting to stream the Hive blockchain');
         }
 
         this.disableAllProcessing = false;
 
-        const state = this.adapter.loadState();
+        const state = await this.adapter.loadState();
 
         if (this.config.DEBUG_MODE) {
             console.log(`Restoring state from file`);
@@ -150,6 +152,8 @@ export class Streamer {
         if (this.blockNumberTimeout) {
             clearTimeout(this.blockNumberTimeout);
         }
+
+        this.adapter.destroy();
     }
 
     private async getBlock(): Promise<void> {
@@ -237,6 +241,8 @@ export class Streamer {
     }
 
     public processOperation(op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date): void {
+        this.adapter.processOperation(op, blockNumber, blockId, prevBlockId, trxId, blockTime);
+
         // Operation is a "comment" which could either be a post or comment
         if (op[0] === 'comment') {
             // This is a post
@@ -281,6 +287,8 @@ export class Streamer {
                 const contract = this.contracts.find(c => c.name === name);
 
                 if (contract) {
+                    this.adapter.processTransfer(op[1], { name, action, payload }, { sender, amount });
+
                     if (contract?.contract?.updateBlockInfo) {
                         contract.contract.updateBlockInfo(blockNumber, blockId, prevBlockId, trxId);
                     }
@@ -330,6 +338,8 @@ export class Streamer {
                 const contract = this.contracts.find(c => c.name === name);
 
                 if (contract) {
+                    this.adapter.processCustomJson(op[1], { name, action, payload }, { sender, isSignedWithActiveKey });
+
                     if (contract?.contract?.updateBlockInfo) {
                         contract.contract.updateBlockInfo(blockNumber, blockId, prevBlockId, trxId);
                     }
