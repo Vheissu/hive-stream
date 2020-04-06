@@ -33,17 +33,36 @@ describe('Streamer', () => {
         expect(sut['config'].LAST_BLOCK_NUMBER).toStrictEqual(1234);
     });
 
-    test('state file does not exist', () => {
-        (fs as any).existsSync.mockReturnValue(false);
+    test('should get last block number from load state call', async () => {
+        sut['adapter'] = {
+            create: jest.fn(),
+            destroy: jest.fn(),
+            loadState: jest.fn().mockResolvedValue({lastBlockNumber: 27777})
+        };
 
-        jest.spyOn(fs, 'readFileSync');
+        await sut.start();
 
-        sut.start();
+        expect(sut['lastBlockNumber']).toStrictEqual(27777);
+    });
 
-        expect(fs.readFileSync).not.toBeCalled();
+    test('load state method is not implemented in adapter', async () => {
+        sut['adapter'] = {
+            create: jest.fn(),
+            destroy: jest.fn(),
+            loadState: jest.fn()
+        };
+
+        await sut.start();
+
+        expect(sut['lastBlockNumber']).toStrictEqual(0);
     });
 
     test('getBlock gets a block', async () => {
+        sut['adapter'] = {
+            create: jest.fn(),
+            destroy: jest.fn()
+        };
+
         jest.spyOn(sut['client'].database, 'getDynamicGlobalProperties').mockResolvedValue({head_block_number: 8882} as any);
 
         jest.spyOn(sut['client'].database, 'getBlock').mockResolvedValue({
@@ -67,7 +86,7 @@ describe('Streamer', () => {
 
         await sut['getBlock']();
 
-        expect(sut['lastBlockNumber']).toStrictEqual(8882);
+        expect(sut['lastBlockNumber']).toStrictEqual(8881);
 
         // Wait for 3 block cycles to be called
         await sleep(3000);
@@ -75,8 +94,6 @@ describe('Streamer', () => {
         sut['disableAllProcessing'] = true;
 
         expect(sut['loadBlock']).toBeCalledWith(8882);
-
-        expect(sut['getBlock']).toBeCalledTimes(3);
     });
 
     test('getBlock global properties returns null', async () => {
