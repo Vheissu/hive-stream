@@ -1,13 +1,17 @@
 import { ContractPayload } from './../types/hive-stream';
 import { AdapterBase } from './base.adapter';
 
-import path, { resolve } from 'path';
-
-import { MongoClient } from 'mongodb';
+import { MongoClient, Db } from 'mongodb';
 
 export class MongodbAdapter extends AdapterBase {
-    private client;
-    private db;
+    private client: MongoClient;
+    private db: Db;
+
+    private mongo = {
+        uri: '',
+        database: '',
+        options: {}
+    };
 
     private blockNumber: number;
     private lastBlockNumber: number;
@@ -15,49 +19,48 @@ export class MongodbAdapter extends AdapterBase {
     private prevBlockId;
     private transactionId: string;
 
-    constructor(uri, options = {}) {
+    constructor(uri: string, database: string, options = { useNewUrlParser: true,  useUnifiedTopology: true }) {
         super();
-        this.client = new MongoClient(uri, options);
+
+        this.mongo.uri = uri;
+        this.mongo.database = database;
+        this.mongo.options = options;
     }
 
     protected async create(): Promise<boolean> {
-        return new Promise((resolve) => {
-            this.db.serialize(() => {
-                const params = `CREATE TABLE IF NOT EXISTS params ( id INTEGER PRIMARY KEY, lastBlockNumber NUMERIC )`;
-                const transfers = `CREATE TABLE IF NOT EXISTS transfers ( id TEXT NOT NULL UNIQUE, blockId TEXT, blockNumber INTEGER, sender TEXT, amount TEXT, contractName TEXT, contractAction TEXT, contractPayload TEXT)`;
-                const transactions = `CREATE TABLE IF NOT EXISTS transactions ( id TEXT NOT NULL UNIQUE, blockId TEXT, blockNumber INTEGER, sender TEXT, isSignedWithActiveKey INTEGER, contractName TEXT, contractAction TEXT, contractPayload TEXT)`;
-        
-                this.db.run(params).run(transfers).run(transactions, () => {
-                    resolve(true);
-                });
-            });
-        })
+        try {
+            this.client = await MongoClient.connect(this.mongo.uri, this.mongo.options);
+            this.db = this.client.db(this.mongo.database);
+
+            return true;
+        } catch (e) {
+            throw e;
+        }
     }
 
     protected async loadState(): Promise<any> {
-        return new Promise((resolve, reject) => {
-            this.db.all('SELECT lastBlockNumber FROM params LIMIT 1', (err, rows) => {
-                if (!err) {
-                    resolve(rows[0]);
-                } else {
-                    reject(err);
-                }
-            });
-        });
+        try {
+            const collection = this.db.collection('params');
+            const params = await collection.findOne({});
+
+            if (params) {
+                return params;
+            }
+        } catch (e) {
+            throw e;
+        }
     }
 
     protected async saveState(data: any): Promise<boolean> {
-        return new Promise((resolve, reject) => {
-            const sql = `REPLACE INTO params (id, lastBlockNumber) VALUES(1, '${data.lastBlockNumber}')`;
+        try {
+            const collection = this.db.collection('params');
 
-            this.db.run(sql, [], (err, result) => {
-                if (!err) {
-                    resolve(true);
-                } else {
-                    reject(err);
-                }
-            });
-        });
+            await collection.replaceOne({}, data, {  upsert: true});
+
+            return true;
+        } catch (e) {
+            throw e;
+        }
     }
 
     protected async processOperation(op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) {
@@ -68,44 +71,46 @@ export class MongodbAdapter extends AdapterBase {
     }
 
     protected async processTransfer(operation, payload: ContractPayload, metadata: { sender: string, amount: string }): Promise<boolean> {
-        return new Promise((resolve, reject) => {
-            const sql = `INSERT INTO transfers (id, blockId, blockNumber, sender, amount, contractName, contractAction, contractPayload) 
-            VALUES ('${this.transactionId}', '${this.blockId}', ${this.blockNumber}, '${metadata.sender}', '${metadata.amount}', '${payload.name}', '${payload.action}', '${JSON.stringify(payload.payload)}')`;
+        const collection = this.db.collection('transfers');
 
-            this.db.run(sql, [], (err, result) => {
-                if (!err) {
-                    resolve(true);
-                } else {
-                    reject(err);
-                }
-            });
-        });
+        const data = {
+            id: this.transactionId,
+            blockId: this.blockId,
+            blockNumber: this.blockNumber,
+            sender: metadata.sender,
+            amount: metadata.amount,
+            contractName: payload.name,
+            contractAction: payload.action,
+            ContractPayload: payload.payload
+        };
+
+        await collection.insertOne(data);
+
+        return true;
     }
 
     protected async processCustomJson(operation, payload: ContractPayload, metadata: { sender: string, isSignedWithActiveKey: boolean }): Promise<boolean> {
-        return new Promise((resolve, reject) => {
-            const sql = `INSERT INTO transfers (id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload) 
-            VALUES ('${this.transactionId}', '${this.blockId}', ${this.blockNumber},'${metadata.sender}', ${metadata.isSignedWithActiveKey}, '${payload.name}', '${payload.action}', '${JSON.stringify(payload.payload)}')`;
+        const collection = this.db.collection('transfers');
 
-            this.db.run(sql, [], (err, result) => {
-                if (!err) {
-                    resolve(true);
-                } else {
-                    reject(err);
-                }
-            });
-        });
+        const data = {
+            id: this.transactionId,
+            blockId: this.blockId,
+            blockNumber: this.blockNumber,
+            sender: metadata.sender,
+            isSignedWithActiveKey: metadata.isSignedWithActiveKey,
+            contractName: payload.name,
+            contractAction: payload.action,
+            ContractPayload: payload.payload
+        };
+
+        await collection.insertOne(data);
+
+        return true;
     }
 
     protected async destroy(): Promise<boolean> {
-        return new Promise((resolve, reject) => {
-            this.db.close((err) => {
-                if (!err) {
-                    resolve(true);
-                } else {
-                    reject(err);
-                }
-            });
-        });
+        await this.client.close();
+
+        return true;
     }
 }
