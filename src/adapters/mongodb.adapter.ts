@@ -90,7 +90,7 @@ export class MongodbAdapter extends AdapterBase {
     }
 
     protected async processCustomJson(operation, payload: ContractPayload, metadata: { sender: string, isSignedWithActiveKey: boolean }): Promise<boolean> {
-        const collection = this.db.collection('transfers');
+        const collection = this.db.collection('transactions');
 
         const data = {
             id: this.transactionId,
