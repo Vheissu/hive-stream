@@ -9,7 +9,6 @@
         "sourceMap": true,
         "outDir": "dist",
         "baseUrl": ".",
-        "typeRoots": ["src/types"],
         "paths": {
             "*": [
                 "node_modules/*",
