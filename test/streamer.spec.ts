@@ -43,18 +43,6 @@ describe('Streamer', () => {
         expect(fs.readFileSync).not.toBeCalled();
     });
 
-    test('state file does exist', () => {
-        (fs as any).existsSync.mockReturnValue(true);
-
-        jest.spyOn(fs, 'readFileSync').mockReturnValue(`{"lastBlockNumber": 27777}`);
-
-        sut.start();
-
-        expect(fs.readFileSync).toBeCalledWith('hive-stream.json');
-
-        expect(sut['lastBlockNumber']).toStrictEqual(27777);
-    });
-
     test('getBlock gets a block', async () => {
         jest.spyOn(sut['client'].database, 'getDynamicGlobalProperties').mockResolvedValue({head_block_number: 8882} as any);
 
