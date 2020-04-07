@@ -456,7 +456,7 @@ export class Streamer {
                 break;
 
                 case '30s':
-                    difference = date.diff(blockDate, 's');
+                    difference = blockDate.diff(date, 's');
 
                     // 30 seconds or more has passed
                     if (difference >= 30) {
