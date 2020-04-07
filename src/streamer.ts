@@ -41,6 +41,7 @@ export class Streamer {
     private previousBlockId: string;
     private transactionId: string;
     private blockTime: Date;
+    private latestBlockchainTime: Date;
     private disableAllProcessing = false;
 
     private contracts: Contract[] = [];
@@ -167,6 +168,8 @@ export class Streamer {
 
         // Kicks off the blockchain streaming and operation parsing
         this.getBlock();
+
+        setInterval(() => { this.getLatestBlock(); }, this.config.BLOCK_CHECK_INTERVAL);
     }
 
     /**
@@ -182,6 +185,14 @@ export class Streamer {
         }
 
         this.adapter.destroy();
+    }
+
+    private async getLatestBlock() {
+        const props = await this.client.database.getDynamicGlobalProperties();
+
+        if (props) {
+            this.latestBlockchainTime = new Date(`${props.time}Z`);
+        }
     }
 
     private async getBlock(): Promise<void> {
@@ -245,7 +256,7 @@ export class Streamer {
         const blockTime = new Date(`${block.timestamp}Z`);
 
         if (!this.blockTime || this.blockTime < blockTime) {
-            this.processActions(blockTime);
+            this.processActions();
         }
 
         this.blockId = block.block_id;
@@ -415,8 +426,8 @@ export class Streamer {
         }
     }
 
-    private processActions(datetime: Date) {
-        const blockDate = moment.utc(datetime);
+    private processActions() {
+        const blockDate = moment.utc(this.latestBlockchainTime);
 
         for (const action of this.actions) {
             const date = moment.utc(action.date);
@@ -445,7 +456,7 @@ export class Streamer {
                 break;
 
                 case '30s':
-                    difference = blockDate.diff(date, 's');
+                    difference = date.diff(blockDate, 's');
 
                     // 30 seconds or more has passed
                     if (difference >= 30) {
