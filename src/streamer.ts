@@ -4,6 +4,8 @@ import { Client } from '@hivechain/dhive';
 import { Utils } from './utils';
 import { Config, ConfigInterface } from './config';
 
+import moment from 'moment';
+
 interface Contract {
     name: string;
     contract: any;
