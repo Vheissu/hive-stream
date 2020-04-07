@@ -1,13 +1,18 @@
 import { FileAdapter } from './adapters/file.adapter';
-import { AdapterBase } from './adapters/base.adapter';
 import { Client } from '@hivechain/dhive';
-import fs from 'fs';
 import { Utils } from './utils';
 import { Config, ConfigInterface } from './config';
 
 interface Contract {
     name: string;
     contract: any;
+}
+
+interface Action {
+    when: number;
+    what: string;
+    params: any;
+    pending: boolean;
 }
 
 export class Streamer {
@@ -36,6 +41,7 @@ export class Streamer {
 
     private contracts: Contract[] = [];
     private adapter;
+    private actions = [];
 
     private utils = Utils;
 
@@ -55,6 +61,10 @@ export class Streamer {
 
     public registerAdapter(adapter: any) {
         this.adapter = adapter;
+    }
+
+    public getAdapter() {
+        return this.adapter;
     }
 
     public registerContract(name: string, contract: any) {
