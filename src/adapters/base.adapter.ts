@@ -16,8 +16,12 @@ export class AdapterBase {
         throw new Error('Save state method not implemented in adapter');
     }
 
-    protected async processOperation(op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) {
+    protected async processBlock(block: SignedBlock): Promise<any> {
+        return true;
+    }
 
+    protected async processOperation(op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date): Promise<any> {
+        return true;
     }
 
     protected async processTransfer(operation, payload: ContractPayload, metadata: { sender: string, amount: string }): Promise<boolean> {
