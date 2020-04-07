@@ -255,7 +255,7 @@ export class Streamer {
         // Get the block date and time
         const blockTime = new Date(`${block.timestamp}Z`);
 
-        if (!this.blockTime || this.blockTime < blockTime) {
+        if (this.lastBlockNumber !== blockNumber) {
             this.processActions();
         }
 
