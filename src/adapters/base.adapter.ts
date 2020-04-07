@@ -1,5 +1,10 @@
+import { TimeAction } from './../actions';
 import { TransactionType, ContractPayload } from './../types/hive-stream';
+import { SignedBlock } from '@hivechain/dhive';
 export class AdapterBase {
+    private client;
+    private db;
+
     protected async create(): Promise<boolean> {
         return true;
     }
