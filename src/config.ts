@@ -2,6 +2,7 @@ export interface ConfigInterface {
     ACTIVE_KEY: string;
     POSTING_KEY: string;
     JSON_ID: string;
+    HIVE_ENGINE_API: string;
     HIVE_ENGINE_ID: string;
     APP_NAME: string;
     USERNAME: string;
@@ -19,7 +20,8 @@ export const Config: ConfigInterface = {
 
     JSON_ID: 'hivestream',
 
-    HIVE_ENGINE_ID: 'mainnet-hive',
+    HIVE_ENGINE_API: 'https://api.hive-engine.com/rpc',
+    HIVE_ENGINE_ID: 'ssc-mainnet-hive',
 
     APP_NAME: 'steem-stream',
 

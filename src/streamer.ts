@@ -62,7 +62,7 @@ export class Streamer {
         this.postingKey = this.config.POSTING_KEY;
         this.activeKey = this.config.ACTIVE_KEY;
 
-        this.hive = new hivejs(`https://api.hive-engine.com`);
+        this.hive = new hivejs(this.config.HIVE_ENGINE_API);
 
         this.client = new Client(this.config.API_NODES);
 
