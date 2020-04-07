@@ -21,7 +21,8 @@
         "moment": "^2.24.0",
         "mongodb": "^3.5.5",
         "seedrandom": "^3.0.5",
-        "sqlite3": "^4.1.1"
+        "sqlite3": "^4.1.1",
+        "sscjs": "^0.0.8"
     },
     "devDependencies": {
         "@types/bytebuffer": "^5.0.40",

@@ -5,6 +5,7 @@ import { Utils } from './utils';
 import { Config, ConfigInterface } from './config';
 
 import moment from 'moment';
+import hivejs from 'sscjs';
 
 interface Contract {
     name: string;
@@ -21,6 +22,7 @@ interface Action {
 export class Streamer {
     private customJsonSubscriptions: any[] = [];
     private customJsonIdSubscriptions: any[] = [];
+    private customJsonHiveEngineSubscriptions: any[] = [];
     private commentSubscriptions: any[] = [];
     private postSubscriptions: any[] = [];
     private transferSubscriptions: any[] = [];
@@ -29,6 +31,7 @@ export class Streamer {
 
     private config: ConfigInterface = Config;
     private client: Client;
+    private hive;
 
     private username: string;
     private postingKey: string;
@@ -58,6 +61,8 @@ export class Streamer {
         this.username = this.config.USERNAME;
         this.postingKey = this.config.POSTING_KEY;
         this.activeKey = this.config.ACTIVE_KEY;
+
+        this.hive = new hivejs(`https://api.hive-engine.com`);
 
         this.client = new Client(this.config.API_NODES);
 
@@ -427,6 +432,43 @@ export class Streamer {
                     ); 
                 }
             });
+
+            Utils.asyncForEach(this.customJsonHiveEngineSubscriptions, async (sub: any) => {
+                let isSignedWithActiveKey = null;
+                let sender;
+
+                if (op[1].required_auths.length > 0) {
+                    sender = op[1].required_auths[0];
+                    isSignedWithActiveKey = true;
+                } else {
+                    sender = op[1].required_posting_auths[0];
+                    isSignedWithActiveKey = false;
+                }
+
+                const id = op[1].id;
+                const json = Utils.jsonParse(op[1].json);
+
+                // Hive Engine JSON operation
+                if (id === this.config.HIVE_ENGINE_ID) {
+                    const { contractName, contractAction, contractPayload } = json;
+
+                    try {
+                        // Attempt to get the transaction from Hive Engine itself
+                        const txInfo = await this.hive.getTransactionInfo(trxId);
+
+                        const logs = txInfo && txInfo.logs ? Utils.jsonParse(txInfo.logs) : null;
+
+                        // Do we have a valid transaction and are there no errors? It's a real transaction
+                        if (txInfo && logs && typeof logs.errors === 'undefined') {
+                            sub.callback(contractName, contractAction, contractPayload, sender,
+                                op[1], blockNumber, blockId, prevBlockId, trxId, blockTime);
+                        }
+                    } catch(e) {
+                        console.error(e);
+                        return;
+                    }
+                }
+            });
         }
     }
 
@@ -616,5 +658,9 @@ export class Streamer {
 
     public onCustomJsonId(callback: any, id: string): void {
         this.customJsonIdSubscriptions.push({ callback, id });
+    }
+
+    public onHiveEngine(callback: any): void {
+        this.customJsonHiveEngineSubscriptions.push({ callback });
     }
 }
