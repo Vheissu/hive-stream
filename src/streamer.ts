@@ -145,8 +145,6 @@ export class Streamer {
             console.log('Starting to stream the Hive blockchain');
         }
 
-        this.actions = await this.adapter.loadActions() as TimeAction[];
-
         await this.adapter.create();
 
         this.disableAllProcessing = false;
