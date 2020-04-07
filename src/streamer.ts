@@ -401,6 +401,12 @@ export class Streamer {
         }
     }
 
+    private processActions(datetime: Date) {
+        for (const action of this.actions) {
+            const date = new Date(action.date);
+        }
+    }
+
     public async saveStateToDisk(): Promise<void> {
         this.adapter.saveState({lastBlockNumber: this.lastBlockNumber});
     }
