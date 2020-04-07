@@ -1,3 +1,4 @@
+import { TimeAction } from './../actions';
 import { ContractPayload } from './../types/hive-stream';
 import { AdapterBase } from './base.adapter';
 
@@ -27,6 +28,17 @@ export class MongodbAdapter extends AdapterBase {
         this.mongo.options = options;
     }
 
+    protected async getDbInstance() {
+        try {
+            this.client = await MongoClient.connect(this.mongo.uri, this.mongo.options);
+            this.db = this.client.db(this.mongo.database);
+
+            return this.db;
+        } catch (e) {
+            throw e;
+        }
+    }
+
     protected async create(): Promise<boolean> {
         try {
             this.client = await MongoClient.connect(this.mongo.uri, this.mongo.options);
@@ -38,8 +50,26 @@ export class MongodbAdapter extends AdapterBase {
         }
     }
 
+    protected async loadActions(): Promise<TimeAction[]> {
+        if (!this.db) {
+            await this.getDbInstance();
+        }
+
+        const state = await this.loadState();
+
+        if (state) {
+            return (state?.actions) ? state.actions : [];
+        }
+
+        return [];
+    }
+
     protected async loadState(): Promise<any> {
         try {
+            if (!this.db) {
+                await this.getDbInstance();
+            }
+
             const collection = this.db.collection('params');
             const params = await collection.findOne({});
 
@@ -53,6 +83,10 @@ export class MongodbAdapter extends AdapterBase {
 
     protected async saveState(data: any): Promise<boolean> {
         try {
+            if (!this.db) {
+                await this.getDbInstance();
+            }
+
             const collection = this.db.collection('params');
 
             await collection.replaceOne({}, data, {  upsert: true});
@@ -71,6 +105,10 @@ export class MongodbAdapter extends AdapterBase {
     }
 
     protected async processTransfer(operation, payload: ContractPayload, metadata: { sender: string, amount: string }): Promise<boolean> {
+        if (!this.db) {
+            await this.getDbInstance();
+        }
+
         const collection = this.db.collection('transfers');
 
         const data = {
@@ -90,6 +128,10 @@ export class MongodbAdapter extends AdapterBase {
     }
 
     protected async processCustomJson(operation, payload: ContractPayload, metadata: { sender: string, isSignedWithActiveKey: boolean }): Promise<boolean> {
+        if (!this.db) {
+            await this.getDbInstance();
+        }
+        
         const collection = this.db.collection('transactions');
 
         const data = {
