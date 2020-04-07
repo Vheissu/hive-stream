@@ -159,6 +159,51 @@ JSON.stringify({ hiveContract: { name: 'hivedice', action: 'roll', payload: { ro
 
 This will match a registered contract called `hivedice` and inside of the contract code, a function called `roll` and finally, the payload is sent to the function as an argument, allowing you to access the values inside of it. See the example file `dice.contract.ts` in the `src/contracts` folder in the repository.
 
+## Time-based Actions
+
+It's like a cron job for your contracts. Time-based actions allow you to execute contract functions over a wide variety of different time periods. Want to call a function every 3 seconds block time or want to call a function once per day? Time-based actions are an easy way to run time code.
+
+The following example will run a contract action every 30 seconds. All you do is register a new `TimeAction` instance.
+
+```
+import { TimeAction, Streamer } from 'hive-stream';
+
+const streamer = new Streamer({
+    ACTIVE_KEY: ''
+});
+
+const testAction = new TimeAction('30s', 'test30s', 'hivedice', 'testauto');
+
+streamer.registerAction(testAction);
+
+streamer.start();
+```
+
+The `TimeAction` instance accepts the following values:
+
+- timeValue - When should this action be run?
+- uniqueId - A unique ID to describe your action
+- contractName - The name of the contract
+- contractMethod - The method we are calling inside of the contract
+- date - An optional final parameter that accepts a date of creation
+
+```
+new TimeAction(timeValue, uniqueId, contractName, contractMethod, date)
+```
+
+### Valid time values
+
+At the moment, the `timeValue` passed in as the first argument to `TimeAction` cannot accept just any value. However, there are many available out-of-the-box with more flexibility to come in the future.
+
+- `3s` or `block` will run a task every block (3 seconds, approximately)
+- `30s` will run a task every 30 seconds
+- `1m` or `minute` will run a task every 60 seconds (1 minute)
+- `15m` or `quarter` will run a task every 15 minutes
+- `30m` or `halfhour` will run a task every 30 minutes
+- `1h` or `hourly` will run a task every 60 minutes (every hour)
+- `12h` or `halfday` will run a task every 12 hours (half a day)
+- `24h` or `day` will run a task every 24 hours (day)
+
 ## Adapters
 
 The Hive Stream library supports custom adapters for various actions that take place in the library. When the library first loads, it makes a call to get the last block number or when a block is processed, storing the processed block number. This library ships with two adapters; File and SQLite, both of which are file based adapters. The SQLite database works more like a traditional database and shows how you might create an adapter for a database like MongoDB or MySQL.
