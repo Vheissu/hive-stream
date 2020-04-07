@@ -26,8 +26,15 @@ export class FileAdapter extends AdapterBase {
             }
         });
     }
+
+    protected async loadActions(): Promise<TimeAction[]> {
+        if (fs.existsSync('hive-stream.json')) {
+            const file = JSON.parse((fs.readFileSync('hive-stream.json') as unknown) as string);
+
+            return (file?.actions) ? file.actions : [];
+        }
     }
-    }
+
     protected loadState() {
         if (fs.existsSync('hive-stream.json')) {
             const state = JSON.parse((fs.readFileSync('hive-stream.json') as unknown) as string);
