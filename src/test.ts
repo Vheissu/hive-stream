@@ -6,7 +6,7 @@ import { Streamer } from './streamer';
 import { DiceContract } from './contracts/dice.contract';
 
 import { SqliteAdapter } from './adapters/sqlite.adapter';
-import { TimeAction, TimeValue } from './actions';
+import { TimeAction } from './actions';
 
 const streamer = new Streamer({
     JSON_ID: 'testdice',
@@ -19,7 +19,7 @@ const streamer = new Streamer({
 // Register contract
 streamer.registerContract('hivedice', new DiceContract());
 
-const testAction = new TimeAction(TimeValue.Hourly, 'hivedice', 'testauto');
+const testAction = new TimeAction('hourly', 'testhourly', 'hivedice', 'testauto');
 
 streamer.registerAction(testAction);
 
