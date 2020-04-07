@@ -3,9 +3,10 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { Streamer } from './streamer';
-import diceContract from './contracts/dice.contract';
+import { DiceContract } from './contracts/dice.contract';
 
 import { SqliteAdapter } from './adapters/sqlite.adapter';
+import { TimeAction, TimeValue } from './actions';
 
 const streamer = new Streamer({
     JSON_ID: 'testdice',
@@ -16,7 +17,11 @@ const streamer = new Streamer({
 //streamer.registerAdapter(new MongodbAdapter('mongodb://127.0.0.1:27017', 'hivestream'));
 
 // Register contract
-streamer.registerContract('hivedice', diceContract);
+streamer.registerContract('hivedice', new DiceContract());
+
+const testAction = new TimeAction(TimeValue.Hourly, 'hivedice', 'testauto');
+
+streamer.registerAction(testAction);
 
 // Start streaming
 streamer.start();
