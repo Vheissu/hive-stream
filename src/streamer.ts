@@ -71,8 +71,14 @@ export class Streamer {
         return this.adapter;
     }
 
-    public registerAction(action: TimeAction) {
-        this.actions.push(action);
+    public async registerAction(action: TimeAction) {
+        this.actions = [...this.actions, ...await this.adapter.loadActions() as TimeAction[]];
+
+        const exists = this.actions.find(a => a.id === action.id);
+
+        if (!exists) {
+            this.actions.push(action);
+        }
     }
 
     public registerContract(name: string, contract: any) {
