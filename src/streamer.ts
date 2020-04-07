@@ -239,6 +239,8 @@ export class Streamer {
         this.transactionId = block.transaction_ids[1];
         this.blockTime = blockTime;
 
+        this.adapter.processBlock(block);
+
         // Loop over all transactions in the block
         for (const [i, transaction] of Object.entries(block.transactions)) {
             // Loop over operations in the block
