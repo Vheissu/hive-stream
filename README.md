@@ -204,6 +204,8 @@ At the moment, the `timeValue` passed in as the first argument to `TimeAction` c
 - `12h` or `halfday` will run a task every 12 hours (half a day)
 - `24h` or `day` will run a task every 24 hours (day)
 
+Values will be persisted if using one of the three adapters that ship with the library.
+
 ## Adapters
 
 The Hive Stream library supports custom adapters for various actions that take place in the library. When the library first loads, it makes a call to get the last block number or when a block is processed, storing the processed block number. This library ships with two adapters; File and SQLite, both of which are file based adapters. The SQLite database works more like a traditional database and shows how you might create an adapter for a database like MongoDB or MySQL.
