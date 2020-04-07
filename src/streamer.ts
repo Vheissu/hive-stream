@@ -418,7 +418,7 @@ export class Streamer {
     }
 
     public async saveStateToDisk(): Promise<void> {
-        this.adapter.saveState({lastBlockNumber: this.lastBlockNumber});
+        this.adapter.saveState({lastBlockNumber: this.lastBlockNumber, actions: this.actions});
     }
 
     public transferHiveTokens(from: string, to: string, amount: string, symbol: string, memo: string = '') {
