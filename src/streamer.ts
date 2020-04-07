@@ -68,13 +68,13 @@ export class Streamer {
     }
 
     public registerContract(name: string, contract: any) {
+        // Store an instance of the streamer
+        contract['_instance'] = this;
+
         // Call the contract create lifecycle method if it exists
         if (contract && typeof contract['create'] !== 'undefined') {
             contract.create();
         }
-
-        // Store an instance of the streamer
-        contract['_instance'] = this;
 
         const storedReference: Contract = { name, contract };
 
