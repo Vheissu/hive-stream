@@ -33,6 +33,8 @@ export class FileAdapter extends AdapterBase {
 
             return (file?.actions) ? file.actions : [];
         }
+
+        return [];
     }
 
     protected loadState() {
