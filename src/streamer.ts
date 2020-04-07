@@ -412,8 +412,117 @@ export class Streamer {
     }
 
     private processActions(datetime: Date) {
+        const blockDate = moment.utc(datetime);
+
         for (const action of this.actions) {
-            const date = new Date(action.date);
+            const date = moment.utc(action.date);
+            const frequency = action.timeValue;
+
+            const contract = this.contracts.find(c => c.name === action.contractName);
+
+            // Contract doesn't exist or action doesn't exist, carry on
+            if (!contract || !contract?.contract?.[action.contractMethod]) {
+                continue;
+            }
+
+            let difference = 0;
+
+            switch (frequency) {
+                case '3s':
+                case 'block':
+                    difference = blockDate.diff(date, 's');
+
+                    // 3 seconds or more has passed
+                    if (difference >= 3) {
+                        contract.contract[action.contractMethod]();
+
+                        action.reset();
+                    }
+                break;
+
+                case '30s':
+                    difference = blockDate.diff(date, 's');
+
+                    // 30 seconds or more has passed
+                    if (difference >= 30) {
+                        contract.contract[action.contractMethod]();
+                        
+                        action.reset();
+                    }
+                break;
+
+                case '1m':
+                case 'minute':
+                    difference = blockDate.diff(date, 'm');
+
+                    // One minute has passed
+                    if (difference >= 1) {
+                        contract.contract[action.contractMethod]();
+                        
+                        action.reset();
+                    }
+                break;
+
+                case '15m':
+                case 'quarter':
+                    difference = blockDate.diff(date, 'm');
+
+                    // 15 minutes has passed
+                    if (difference >= 15) {
+                        contract.contract[action.contractMethod]();
+                        
+                        action.reset();
+                    }
+                break;
+
+                case '30m':
+                case 'halfhour':
+                    difference = blockDate.diff(date, 'm');
+
+                    // 30 minutes has passed
+                    if (difference >= 30) {
+                        contract.contract[action.contractMethod]();
+                        
+                        action.reset();
+                    }
+                break;
+
+                case 'hourly':
+                case '1h':
+                    difference = blockDate.diff(date, 'h');
+
+                    // One our or more has passed
+                    if (difference >= 1) {
+                        contract.contract[action.contractMethod]();
+                        
+                        action.reset();
+                    }
+                break;
+
+                case '12h':
+                case 'halfday':
+                    difference = blockDate.diff(date, 'h');
+
+                    // Twelve hours or more has passed
+                    if (difference >= 12) {
+                        contract.contract[action.contractMethod]();
+                        
+                        action.reset();
+                    }
+                break;
+
+                case '24h':
+                case 'day':
+                    difference = blockDate.diff(date, 'd');
+
+                    // One day (24 hours) has passed
+                    if (difference >= 1) {
+                        contract.contract[action.contractMethod]();
+                        
+                        action.reset();
+                    }
+                break;
+            }
         }
     }
 
