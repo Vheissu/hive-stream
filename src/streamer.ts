@@ -434,7 +434,7 @@ export class Streamer {
             switch (frequency) {
                 case '3s':
                 case 'block':
-                    difference = blockDate.diff(date, 's');
+                    difference = date.diff(blockDate, 's');
 
                     // 3 seconds or more has passed
                     if (difference >= 3) {
