@@ -234,6 +234,10 @@ export class Streamer {
         // Get the block date and time
         const blockTime = new Date(`${block.timestamp}`);
 
+        if (!this.blockTime || this.blockTime < blockTime) {
+            this.processActions(blockTime);
+        }
+
         this.blockId = block.block_id;
         this.previousBlockId = block.previous;
         this.transactionId = block.transaction_ids[1];
