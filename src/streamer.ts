@@ -72,7 +72,11 @@ export class Streamer {
     }
 
     public async registerAction(action: TimeAction) {
-        this.actions = [...this.actions, ...await this.adapter.loadActions() as TimeAction[]];
+        const loadedActions: TimeAction[] = await this.adapter.loadActions() as TimeAction[];
+
+        for (const a of loadedActions) {
+            this.actions.push(new TimeAction(a.timeValue, a.id, a.contractName, a.contractMethod, a.date));
+        }
 
         const exists = this.actions.find(a => a.id === action.id);
 
