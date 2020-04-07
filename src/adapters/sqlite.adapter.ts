@@ -1,9 +1,10 @@
+import { TimeAction } from './../actions';
 import { ContractPayload } from './../types/hive-stream';
 import { AdapterBase } from './base.adapter';
 
 import { Database } from 'sqlite3';
 
-import path, { resolve } from 'path';
+import path from 'path';
 
 export class SqliteAdapter extends AdapterBase {
     private db = new Database(path.resolve(__dirname, 'hive-stream.db'));
@@ -17,7 +18,7 @@ export class SqliteAdapter extends AdapterBase {
     protected async create(): Promise<boolean> {
         return new Promise((resolve) => {
             this.db.serialize(() => {
-                const params = `CREATE TABLE IF NOT EXISTS params ( id INTEGER PRIMARY KEY, lastBlockNumber NUMERIC )`;
+                const params = `CREATE TABLE IF NOT EXISTS params ( id INTEGER PRIMARY KEY, lastBlockNumber NUMERIC, actions TEXT )`;
                 const transfers = `CREATE TABLE IF NOT EXISTS transfers ( id TEXT NOT NULL UNIQUE, blockId TEXT, blockNumber INTEGER, sender TEXT, amount TEXT, contractName TEXT, contractAction TEXT, contractPayload TEXT)`;
                 const transactions = `CREATE TABLE IF NOT EXISTS transactions ( id TEXT NOT NULL UNIQUE, blockId TEXT, blockNumber INTEGER, sender TEXT, isSignedWithActiveKey INTEGER, contractName TEXT, contractAction TEXT, contractPayload TEXT)`;
         
@@ -28,11 +29,27 @@ export class SqliteAdapter extends AdapterBase {
         })
     }
 
+    protected async loadActions(): Promise<TimeAction[]> {
+        const state = await this.loadState();
+
+        if (state) {
+            return (state?.actions) ? state.actions : [];
+        }
+
+        return [];
+    }
+
     protected async loadState(): Promise<any> {
         return new Promise((resolve, reject) => {
-            this.db.all('SELECT lastBlockNumber FROM params LIMIT 1', (err, rows) => {
+            this.db.all('SELECT actions, lastBlockNumber FROM params LIMIT 1', (err, rows) => {
                 if (!err) {
-                    resolve(rows[0]);
+                    if (rows.length) {
+                        const row = rows[0];
+                        row.actions = JSON.parse(row.actions) ?? [];
+                        resolve(row);
+                    } else {
+                        resolve(null);
+                    }
                 } else {
                     reject(err);
                 }
@@ -42,7 +59,7 @@ export class SqliteAdapter extends AdapterBase {
 
     protected async saveState(data: any): Promise<boolean> {
         return new Promise((resolve, reject) => {
-            const sql = `REPLACE INTO params (id, lastBlockNumber) VALUES(1, '${data.lastBlockNumber}')`;
+            const sql = `REPLACE INTO params (id, actions, lastBlockNumber) VALUES(1, '${JSON.stringify(data.actions)}', '${data.lastBlockNumber}')`;
 
             this.db.run(sql, [], (err, result) => {
                 if (!err) {
