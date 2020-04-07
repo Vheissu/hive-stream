@@ -26,7 +26,7 @@ function rng(previousBlockId, blockId, transactionId, maximum = 100) {
     return randomRoll;
 }
 
-class LottoContract {
+export class LottoContract {
     // tslint:disable-next-line: variable-name
     private _instance: Streamer;
     private adapter: MongodbAdapter | SqliteAdapter;
@@ -133,5 +133,3 @@ class LottoContract {
         }
     }
 }
-
-export default new LottoContract();

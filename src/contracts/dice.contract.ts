@@ -23,7 +23,7 @@ const rng = (previousBlockId, blockId, transactionId) => {
 // Valid betting currencies
 const VALID_CURRENCIES = ['HIVE'];
 
-class DiceContract {
+export class DiceContract {
     // tslint:disable-next-line: variable-name
     private _instance: Streamer;
 
@@ -170,6 +170,9 @@ class DiceContract {
             }
         }
     }
-}
 
-export default new DiceContract();
+    // Called by our time-based action
+    private testauto() {
+        
+    }
+}
