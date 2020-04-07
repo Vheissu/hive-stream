@@ -173,6 +173,6 @@ export class DiceContract {
 
     // Called by our time-based action
     private testauto() {
-        
+        console.log('test');
     }
 }
