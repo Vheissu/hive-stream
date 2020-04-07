@@ -20,8 +20,10 @@ const streamer = new Streamer({
 streamer.registerContract('hivedice', new DiceContract());
 
 const testAction = new TimeAction('hourly', 'testhourly', 'hivedice', 'testauto');
+const testAction2 = new TimeAction('1m', 'test1m', 'hivedice', 'testauto');
 
 streamer.registerAction(testAction);
+streamer.registerAction(testAction2);
 
 // Start streaming
 streamer.start();
