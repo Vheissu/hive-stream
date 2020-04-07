@@ -13,6 +13,10 @@ export class AdapterBase {
         return true;
     }
 
+    protected async loadActions(): Promise<TimeAction[]> {
+        return [];
+    }
+
     protected async loadState(): Promise<any> {
         throw new Error('Load state method not implemented in adapter');
     }
