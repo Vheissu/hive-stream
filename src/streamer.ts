@@ -1,3 +1,4 @@
+import { TimeAction } from './actions';
 import { FileAdapter } from './adapters/file.adapter';
 import { Client } from '@hivechain/dhive';
 import { Utils } from './utils';
@@ -41,7 +42,7 @@ export class Streamer {
 
     private contracts: Contract[] = [];
     private adapter;
-    private actions = [];
+    private actions: TimeAction[] = [];
 
     private utils = Utils;
 
@@ -65,6 +66,10 @@ export class Streamer {
 
     public getAdapter() {
         return this.adapter;
+    }
+
+    public registerAction(action: TimeAction) {
+        this.actions.push(action);
     }
 
     public registerContract(name: string, contract: any) {
@@ -130,6 +135,8 @@ export class Streamer {
         if (this.config.DEBUG_MODE) {
             console.log('Starting to stream the Hive blockchain');
         }
+
+        this.actions = await this.adapter.loadActions() as TimeAction[];
 
         await this.adapter.create();
 
