@@ -603,6 +603,22 @@ export class Streamer {
         );
     }
 
+    public transferHiveEngineTokens(from: string, to: string, symbol: string, quantity: string, memo: string = '') {
+        return Utils.transferHiveEngineTokens(this.client, this.config, from, to, symbol, quantity, memo);
+    }
+
+    public transferHiveEngineTokensMultiple(from: string, accounts: any[] = [], symbol: string, memo: string = '', amount: string = '0') {
+        return Utils.transferHiveEngineTokensMultiple(this.client, this.config, from, accounts, symbol, memo, amount);
+    }
+
+    public issueHiveEngineTokens(from: string, to: string, symbol: string, quantity: string, memo: string = '') {
+        return Utils.issueHiveEngineTokens(this.client, this.config, from, to, symbol, quantity, memo);
+    }
+
+    public issueHiveEngineTokensMultiple(from: string, accounts: any[] = [], symbol: string, memo: string = '', amount: string = '0') {
+        return Utils.issueHiveEngineTokensMultiple(this.client, this.config, from, accounts, symbol, memo, amount);
+    }
+
     public upvote(votePercentage: string = '100.0', username: string, permlink: string) {
         return Utils.upvote(
             this.client,
