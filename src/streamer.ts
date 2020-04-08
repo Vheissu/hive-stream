@@ -273,7 +273,9 @@ export class Streamer {
         this.transactionId = block.transaction_ids[1];
         this.blockTime = blockTime;
 
-        this.adapter.processBlock(block);
+        if (this.adapter?.processBlock) {
+            this.adapter.processBlock(block);
+        }
 
         // Loop over all transactions in the block
         for (const [i, transaction] of Object.entries(block.transactions)) {
@@ -296,7 +298,9 @@ export class Streamer {
     }
 
     public processOperation(op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date): void {
-        this.adapter.processOperation(op, blockNumber, blockId, prevBlockId, trxId, blockTime);
+        if (this.adapter?.processOperation) {
+            this.adapter.processOperation(op, blockNumber, blockId, prevBlockId, trxId, blockTime);
+        }
 
         // Operation is a "comment" which could either be a post or comment
         if (op[0] === 'comment') {
@@ -588,7 +592,9 @@ export class Streamer {
     }
 
     public async saveStateToDisk(): Promise<void> {
-        this.adapter.saveState({lastBlockNumber: this.lastBlockNumber, actions: this.actions});
+        if (this.adapter?.saveState) {
+            this.adapter.saveState({lastBlockNumber: this.lastBlockNumber, actions: this.actions});
+        }
     }
 
     public transferHiveTokens(from: string, to: string, amount: string, symbol: string, memo: string = '') {
