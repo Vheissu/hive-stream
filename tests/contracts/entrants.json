@@ -3,8 +3,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -17,8 +17,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -31,8 +31,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -45,8 +45,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -59,8 +59,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -73,8 +73,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -87,8 +87,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -101,8 +101,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -115,8 +115,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -129,8 +129,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -143,8 +143,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -157,8 +157,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -171,8 +171,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -185,8 +185,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -199,8 +199,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -213,8 +213,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -227,8 +227,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -241,8 +241,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -255,8 +255,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -269,8 +269,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -283,8 +283,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -297,8 +297,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -311,8 +311,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -325,8 +325,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -339,8 +339,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -353,8 +353,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -367,8 +367,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -381,8 +381,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -395,8 +395,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -409,8 +409,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -423,8 +423,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -437,8 +437,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -451,8 +451,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -465,8 +465,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -479,8 +479,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -493,8 +493,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -507,8 +507,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -521,8 +521,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -535,8 +535,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -549,8 +549,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -563,8 +563,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -577,8 +577,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -591,8 +591,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -605,8 +605,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -619,8 +619,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -633,8 +633,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -647,8 +647,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -661,8 +661,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -675,8 +675,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"
@@ -689,8 +689,8 @@
         "amount": "10.000 HIVE",
         "memo": {
             "hiveContract": {
-                "id": "test",
-                "name": "lotto",
+                "id": "hivestream",
+                "name": "testlotto",
                 "action": "buy",
                 "payload": {
                     "type": "hourly"

@@ -107,13 +107,8 @@ export class LottoContract {
             // Get database reference from adapter
             const db: Db = this.adapter['db'];
 
-            console.log(db);
-
             const collection = db.collection(COLLECTION_LOTTERY);
-            console.log(collection);
-            const lotto = await collection.find().sort({'_id': -1}).limit(1).toArray();
-
-            console.log('Lotto', lotto);
+            const lotto = await collection.find({ status: 'active', type: type }).limit(1).toArray();
 
             // We have a lotto
             if (lotto.length) {
@@ -128,6 +123,14 @@ export class LottoContract {
 
                 // The amount minus the percentage to pay out to winners
                 const payout = new BigNumber(balance).minus(percentageFee).toPrecision(3);
+
+                item.entries.push({
+                    account: sender,
+                    transactionId: this.transactionId,
+                    date: new Date()
+                });
+
+                await collection.replaceOne({ _id: item._id }, item, { upsert: true });
 
                 if (type === 'hourly') {
                     // Total number of entries including this one hits the limit
