@@ -11,6 +11,7 @@ const CONTRACT_NAME = 'hivelotto';
 const ACCOUNT = 'beggars';
 const TOKEN_SYMBOL = 'HIVE';
 const VALID_CURRENCIES = ['HIVE'];
+const VALID_DRAW_TYPES = ['hourly', 'daily'];
 
 const COST = 10;
 const MAX_ENTRIES = 50;
@@ -67,6 +68,8 @@ export class LottoContract {
     }
 
     async buy(payload, { sender, amount }) {
+        const { type } = payload;
+
         const amountTrim = amount.split(' ');
         const amountParsed = parseFloat(amountTrim[0]);
         const amountFormatted = parseFloat(amountTrim[0]).toFixed(3);
@@ -86,6 +89,12 @@ export class LottoContract {
             // User sent too much
             if (amountParsed > COST) {
                 await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] A ticket costs ${COST} HIVE. You sent ${amount}`);
+                return;
+            }
+
+            // User did not specify a valid entry type, refund them
+            if (!VALID_DRAW_TYPES.includes(type)) {
+                await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] You specified an invalid draw type`);
                 return;
             }
 

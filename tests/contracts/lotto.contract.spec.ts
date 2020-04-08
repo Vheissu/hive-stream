@@ -43,7 +43,9 @@ describe('Lotto Contract', () => {
                     id: 'test',
                     name: 'lotto',
                     action: 'buy',
-                    payload: {}
+                    payload: {
+                        type: 'hourly'
+                    }
                 }
             })
 
@@ -56,7 +58,9 @@ describe('Lotto Contract', () => {
                     id: 'test',
                     name: 'lotto',
                     action: 'buy',
-                    payload: {}
+                    payload: {
+                        type: 'daily'
+                    }
                 }
             })
         });
@@ -69,8 +73,8 @@ describe('Lotto Contract', () => {
 
         expect(lottoContract.buy).toBeCalledTimes(5);
 
-        expect(lottoContract.buy).toBeCalledWith({}, {amount: '10.000 HIVE', sender: 'beggars'});
-        expect(lottoContract.buy).toBeCalledWith({}, {amount: '10.000 HIVE', sender: 'aggroed'});
+        expect(lottoContract.buy).toBeCalledWith({type: 'hourly'}, {amount: '10.000 HIVE', sender: 'beggars'});
+        expect(lottoContract.buy).toBeCalledWith({type: 'daily'}, {amount: '10.000 HIVE', sender: 'aggroed'});
     });
 });
 
