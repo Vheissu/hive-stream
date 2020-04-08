@@ -7,3 +7,5 @@
     info: console.info,
     debug: console.debug,
 };
+
+jasmine.DEFAULT_TIMEOUT_INTERVAL = 600000;
