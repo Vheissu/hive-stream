@@ -73,7 +73,9 @@ export class Streamer {
     public registerAdapter(adapter: any) {
         this.adapter = adapter;
 
-        this.adapter.create();
+        if (this?.adapter?.create) {
+            this.adapter.create();
+        }
     }
 
     public getAdapter() {
@@ -200,7 +202,7 @@ export class Streamer {
             clearInterval(this.latestBlockTimer);
         }
 
-        if (this.adapter?.destroy) {
+        if (this?.adapter?.destroy) {
             this.adapter.destroy();
         }
     }
@@ -355,7 +357,9 @@ export class Streamer {
                 const contract = this.contracts.find(c => c.name === name);
 
                 if (contract) {
-                    this.adapter.processTransfer(op[1], { name, action, payload }, { sender, amount });
+                    if (this?.adapter?.processTransfer) {
+                        this.adapter.processTransfer(op[1], { name, action, payload }, { sender, amount });
+                    }
 
                     if (contract?.contract?.updateBlockInfo) {
                         contract.contract.updateBlockInfo(blockNumber, blockId, prevBlockId, trxId);
