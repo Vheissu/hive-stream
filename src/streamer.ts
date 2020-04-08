@@ -1,3 +1,4 @@
+import { sleep } from '@hivechain/dhive/lib/utils';
 import { TimeAction } from './actions';
 import { FileAdapter } from './adapters/file.adapter';
 import { Client } from '@hivechain/dhive';
@@ -191,7 +192,7 @@ export class Streamer {
      *
      * Stops the streamer from running
      */
-    public stop(): void {
+    public async stop(): Promise<void> {
         this.disableAllProcessing = true;
 
         if (this.blockNumberTimeout) {
@@ -205,6 +206,8 @@ export class Streamer {
         if (this?.adapter?.destroy) {
             this.adapter.destroy();
         }
+
+        await sleep(800);
     }
 
     private async getLatestBlock() {
@@ -221,7 +224,7 @@ export class Streamer {
             const props = await this.client.database.getDynamicGlobalProperties();
 
             // We have no props, so try loading them again.
-            if (!props) {
+            if (!props && !this.disableAllProcessing) {
                 this.blockNumberTimeout = setTimeout(() => {
                     this.getBlock();
                 }, this.config.BLOCK_CHECK_INTERVAL);
