@@ -21,13 +21,15 @@ describe('Lotto Contract', () => {
         }
     });
 
-    beforeEach(() => {
+    beforeEach(async () => {
         sut = new Streamer();
         contract = new LottoContract();
+
+        await sut.start();
     });
 
     afterEach(async () => {
-        sut.stop();
+        await sut.stop();
 
         await db.collection('lottery').deleteMany({});
     });
@@ -77,57 +79,6 @@ describe('Lotto Contract', () => {
             sut.processOperation(['transfer', { from: 'testuser', amount: '10.000 HIVE', memo }], 778782, 'dfjfsdfsdfsd34hfkj88787', 'fkjsdkfj', 'fhkjsdhfkjsdf', '2019-06-23' as any);
     
             await sleep(100);
-    
-            expect(contract.buy).toBeCalled();
-        } catch (e) {
-            throw e;
-        }
-    });
-
-    test('Lotto draw is activated after hitting hourly entry limit', async () => {
-        try {
-            sut.registerContract('testlotto', contract);
-
-            contract['_instance'] = sut;
-            
-            contract['adapter']['db'] = db;
-
-            const entries = [];
-
-            const fortynineEntrants = fiftyValidEntrants.slice(0, 49);
-
-            for (const entrant of fortynineEntrants) {
-                entries.push({
-                    account: entrant.from,
-                    transactionId: Array(15).fill(null).map(() => Math.random().toString(36).substr(2)).join(''),
-                    date: new Date()
-                });
-            }
-
-            const lottery = db.collection('lottery');
-            await lottery.insertOne({ startDate: new Date(), type: 'hourly', status: 'active', entries });
-    
-            jest.spyOn(contract, 'buy');
-            jest.spyOn(contract as any, 'getBalance').mockResolvedValue(2000);
-    
-            jest.spyOn(sut, 'getTransaction').mockResolvedValue({test: 123} as any);
-            jest.spyOn(sut, 'verifyTransfer').mockResolvedValue(true as any);
-            jest.spyOn(sut, 'transferHiveTokens').mockResolvedValue(true as any);
-
-            const memo = JSON.stringify({
-                hivePayload: {
-                    id: 'hivestream',
-                    name: 'testlotto',
-                    action: 'buy',
-                    payload: {
-                        type: 'hourly'
-                    }
-                }
-            });
-    
-            sut.processOperation(['transfer', { from: 'testuser', amount: '10.000 HIVE', memo }], 778782, 'dfjfsdfsdfsd34hfkj88787', 'fkjsdkfj', 'fhkjsdhfkjsdf', '2019-06-23' as any);
-    
-            await sleep(15000);
     
             expect(contract.buy).toBeCalled();
         } catch (e) {
