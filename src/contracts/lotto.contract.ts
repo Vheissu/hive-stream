@@ -13,20 +13,27 @@ const TOKEN_SYMBOL = 'HIVE';
 const VALID_CURRENCIES = ['HIVE'];
 const VALID_DRAW_TYPES = ['hourly', 'daily'];
 
+// How much does a ticket cost?
 const COST = 10;
 
+// Minimum number of entries required for draws to payout
 const MIN_ENTRIES_HOURLY = 25;
-const MAX_ENTRIES_HOURLY = 50;
 const MIN_ENTRIES_DAILY = 100;
-const MAX_ENTRIES_DAILY = 500;
 
+// How many winners to pick for the hourly draw
+const HOURLY_WINNERS_PICK = 3;
+
+// How many winners to pick for the daily draw
+const DAILY_WINNERS_PICK = 10;
+
+// The percentage the site keeps (5%)
 const PERCENTAGE = 5;
 
 const COLLECTION_LOTTERY = 'lottery';
 const COLLECTION_WINNERS = 'winners';
 
-function rng(previousBlockId, blockId, transactionId, maximum = 100) {
-    const random = seedrandom(`${previousBlockId}${blockId}${transactionId}`).double();
+function rng(previousBlockId, blockId, transactionId, entropy, maximum = 100) {
+    const random = seedrandom(`${previousBlockId}${blockId}${transactionId}${entropy}`).double();
     const randomRoll = Math.floor(random * maximum) + 1;
 
     return randomRoll;
@@ -112,9 +119,7 @@ export class LottoContract {
 
             // We have a lotto
             if (lotto.length) {
-                const item = lotto[0];
-
-                const total = item.entries.length + 1;
+                const draw = lotto[0];
 
                 const balance = await this.getBalance();
 
@@ -124,42 +129,40 @@ export class LottoContract {
                 // The amount minus the percentage to pay out to winners
                 const payout = new BigNumber(balance).minus(percentageFee).toPrecision(3);
 
-                item.entries.push({
+                draw.entries.push({
                     account: sender,
                     transactionId: this.transactionId,
                     date: new Date()
                 });
 
-                await collection.replaceOne({ _id: item._id }, item, { upsert: true });
-
-                if (type === 'hourly') {
-                    // Total number of entries including this one hits the limit
-                    // Lets pay out the lottery
-                    if (total === MAX_ENTRIES_HOURLY) {
-                        const entrant1 = item.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
-
-                        await sleep(3000);
-
-                        const entrant2 = item.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
-
-                        await sleep(3000);
-                        
-                        const entrant3 = item.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
-
-                        await sleep(3000);
-
-                        const entrant4 = item.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
-
-                        await sleep(3000);
-
-                        const entrant5 = item.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
-                    } else {
-
-                    }
-                } else if (type === 'daily') {
-
-                }
+                await collection.replaceOne({ _id: draw._id }, draw, { upsert: true });
             }
+        }
+    }
+
+    async drawHourlyLottery() {
+        const db: Db = this.adapter['db'];
+
+        const collection = db.collection(COLLECTION_LOTTERY);
+        const lotto = await collection.find({ status: 'active', type: 'hourly' }).limit(1).toArray();
+
+        // We found an hourly draw
+        if (lotto.length) {
+            const draw = lotto[0];
+
+            const total = draw.entries.length;
+
+            // Get the balance
+            const balance = await this.getBalance();
+
+            // Calculate how much the account gets to keep
+            const percentageFee = new BigNumber(balance).dividedBy(100).multipliedBy(PERCENTAGE);
+
+            // The amount minus the percentage to pay out to winners
+            const payoutTotal = new BigNumber(balance).minus(percentageFee);
+
+            // Amount each winner gets
+            const amountPerWinner = new BigNumber(payoutTotal).dividedBy(5).toPrecision(3);
         }
     }
 }
