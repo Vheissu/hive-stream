@@ -38,6 +38,7 @@ export class Streamer {
     private activeKey: string;
 
     private blockNumberTimeout: NodeJS.Timeout = null;
+    private latestBlockTimer: NodeJS.Timeout = null;
     private lastBlockNumber: number = 0;
 
     private blockId: string;
@@ -156,7 +157,7 @@ export class Streamer {
      * Starts the streamer bot to get blocks from the Hive API
      *
      */
-    public async start(): Promise<void> {
+    public async start(): Promise<Streamer> {
         if (this.config.DEBUG_MODE) {
             console.log('Starting to stream the Hive blockchain');
         }
@@ -178,7 +179,9 @@ export class Streamer {
         // Kicks off the blockchain streaming and operation parsing
         this.getBlock();
 
-        setInterval(() => { this.getLatestBlock(); }, this.config.BLOCK_CHECK_INTERVAL);
+        this.latestBlockTimer = setInterval(() => { this.getLatestBlock(); }, this.config.BLOCK_CHECK_INTERVAL);
+
+        return this;
     }
 
     /**
@@ -193,7 +196,13 @@ export class Streamer {
             clearTimeout(this.blockNumberTimeout);
         }
 
-        this.adapter.destroy();
+        if (this.latestBlockTimer) {
+            clearInterval(this.latestBlockTimer);
+        }
+
+        if (this.adapter?.destroy) {
+            this.adapter.destroy();
+        }
     }
 
     private async getLatestBlock() {

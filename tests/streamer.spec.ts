@@ -132,4 +132,21 @@ describe('Streamer', () => {
             expect(sut['contracts'].length).toStrictEqual(0);
         });
     });
+
+    test('Start method should resume from previous block number', async () => {
+        const adapter = {
+            loadState: jest.fn().mockResolvedValue({ lastBlockNumber: 509992 })
+        };
+
+        sut.registerAdapter(adapter);
+
+        jest.spyOn(sut as any, 'getBlock').mockImplementation(() => true);
+        jest.spyOn(sut as any, 'getLatestBlock').mockImplementation(() => true);
+
+        await sut.start();
+
+        sut.stop();
+
+        expect(sut['lastBlockNumber']).toStrictEqual(509992);
+    });
 });
