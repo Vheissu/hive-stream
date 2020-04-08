@@ -9,3 +9,7 @@
 };
 
 jasmine.DEFAULT_TIMEOUT_INTERVAL = 600000;
+
+process.on('unhandledRejection', (error) => {
+    throw error; // Or whatever you like...
+  });

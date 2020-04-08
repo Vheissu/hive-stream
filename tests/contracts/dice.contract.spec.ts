@@ -1,30 +1,38 @@
 import { DiceContract } from '../../src/contracts/dice.contract';
 
 describe('Dice Contract', () => {
-    const sut: any = new DiceContract();
+    let sut: DiceContract;
 
     beforeEach(() => {
-        sut['_client'] = {
+        sut = new DiceContract();
+
+    (sut as any)['_instance'] = {};
+
+        sut['_instance']['client'] = {
             database: {
                 getAccounts: jest.fn()
             }
-        };
+        } as any;
     });
 
-    test('Gets balance', async () => {
-        sut['_client'].database.getAccounts = jest.fn(() => Promise.resolve([
+    test('Gets balance', () => {
+        sut['_instance']['client'].database.getAccounts = jest.fn(() => Promise.resolve([
             {
                 balance: '2000.234 HIVE'
             }
-        ]));
+        ])) as any;
 
-        expect(sut.getBalance()).resolves.toBe(2000.234);
+        expect(sut['getBalance']()).resolves.toBe(2000.234);
     });
 
     test('Balance call does not have an account', async () => {
-        sut['_client'].database.getAccounts = jest.fn(() => Promise.resolve(null));
+        try {
+            sut['_instance']['client'].database.getAccounts = jest.fn(() => Promise.resolve(null));
 
-        expect(sut.getBalance()).resolves.toBeNull();
+            expect(sut['getBalance']()).resolves.toBeNull();
+        } catch (e) {
+            console.error(e);
+        }
     });
 
     test('winning roll and transfers winnings', async () => {
@@ -48,13 +56,13 @@ describe('Dice Contract', () => {
             getTransaction: jest.fn(),
             transferHiveTokens: jest.fn(),
             verifyTransfer: jest.fn().mockResolvedValue(true)
-        };
+        } as any;
 
         sut['blockId'] = '473847834';
         sut['previousBlockId'] = 'fdf34342342342342sdfgsdgsdg';
         sut['transactionId'] = 'jfkdjfkdf777jhfjshdf';
 
-        await sut['roll'](payload, args);
+        await sut['roll'](payload as any, args);
 
         expect(sut['_instance']['transferHiveTokens']).toBeCalledWith('beggars', 'beggars', '9.747', 'HIVE', 'You won 9.747 HIVE. Roll: 51, Your guess: 90');
     });
@@ -80,13 +88,13 @@ describe('Dice Contract', () => {
             getTransaction: jest.fn(),
             transferHiveTokens: jest.fn(),
             verifyTransfer: jest.fn().mockResolvedValue(true)
-        };
+        } as any;
 
         sut['blockId'] = '473847834';
         sut['previousBlockId'] = 'fdf34342342342342sdfgsdgsdg';
         sut['transactionId'] = 'jfkdjfkdf777jhfjshdf';
 
-        await sut['roll'](payload, args);
+        await sut['roll'](payload as any, args);
 
         expect(sut['_instance']['transferHiveTokens']).toBeCalledWith('beggars', 'beggars', '0.001', 'HIVE', 'You lost 9.234 HIVE. Roll: 51, Your guess: 22');
     });
@@ -112,13 +120,13 @@ describe('Dice Contract', () => {
             getTransaction: jest.fn(),
             transferHiveTokens: jest.fn(),
             verifyTransfer: jest.fn().mockResolvedValue(true)
-        };
+        } as any;
 
         sut['blockId'] = '473847834';
         sut['previousBlockId'] = 'fdf34342342342342sdfgsdgsdg';
         sut['transactionId'] = 'jfkdjfkdf777jhfjshdf';
 
-        await sut['roll'](payload, args);
+        await sut['roll'](payload as any, args);
 
         expect(sut['_instance']['transferHiveTokens']).toBeCalledWith('beggars', 'beggars', '9.234', 'HIVE', '[Refund] The server could not fufill your bet.');
     });
@@ -144,13 +152,13 @@ describe('Dice Contract', () => {
             getTransaction: jest.fn(),
             transferHiveTokens: jest.fn(),
             verifyTransfer: jest.fn().mockResolvedValue(true)
-        };
+        } as any;
 
         sut['blockId'] = '473847834';
         sut['previousBlockId'] = 'fdf34342342342342sdfgsdgsdg';
         sut['transactionId'] = 'jfkdjfkdf777jhfjshdf';
 
-        await sut['roll'](payload, args);
+        await sut['roll'](payload as any, args);
 
         expect(sut['_instance']['transferHiveTokens']).toBeCalledWith('beggars', 'beggars', '9.234', 'HIVE', '[Refund] The server could not fufill your bet.');
     });
@@ -176,13 +184,13 @@ describe('Dice Contract', () => {
             getTransaction: jest.fn(),
             transferHiveTokens: jest.fn(),
             verifyTransfer: jest.fn().mockResolvedValue(true)
-        };
+        } as any;
 
         sut['blockId'] = '473847834';
         sut['previousBlockId'] = 'fdf34342342342342sdfgsdgsdg';
         sut['transactionId'] = 'jfkdjfkdf777jhfjshdf';
 
-        await sut['roll'](payload, args);
+        await sut['roll'](payload as any, args);
 
         expect(sut['_instance']['transferHiveTokens']).toBeCalledWith('beggars', 'beggars', '52.023', 'HIVE', '[Refund] You sent an invalid bet amount.');
     });
@@ -208,13 +216,13 @@ describe('Dice Contract', () => {
             getTransaction: jest.fn(),
             transferHiveTokens: jest.fn(),
             verifyTransfer: jest.fn().mockResolvedValue(true)
-        };
+        } as any;
 
         sut['blockId'] = '473847834';
         sut['previousBlockId'] = 'fdf34342342342342sdfgsdgsdg';
         sut['transactionId'] = 'jfkdjfkdf777jhfjshdf';
 
-        await sut['roll'](payload, args);
+        await sut['roll'](payload as any, args);
 
         expect(sut['_instance']['transferHiveTokens']).toBeCalledWith('beggars', 'beggars', '9.023', 'HIVE', '[Refund] Invalid bet params.');
     });
@@ -240,13 +248,13 @@ describe('Dice Contract', () => {
             getTransaction: jest.fn(),
             transferHiveTokens: jest.fn(),
             verifyTransfer: jest.fn().mockResolvedValue(true)
-        };
+        } as any;
 
         sut['blockId'] = '473847834';
         sut['previousBlockId'] = 'fdf34342342342342sdfgsdgsdg';
         sut['transactionId'] = 'jfkdjfkdf777jhfjshdf';
 
-        await sut['roll'](payload, args);
+        await sut['roll'](payload as any, args);
 
         expect(sut['_instance']['transferHiveTokens']).toBeCalledWith('beggars', 'beggars', '9.234', 'HIVE', '[Refund] The server could not fufill your bet.');
     });
