@@ -1,8 +1,9 @@
 import { Streamer } from '../../src/streamer';
-import lottoContract from '../../src/contracts/lotto.contract';
+import { LottoContract } from '../../src/contracts/lotto.contract';
 
 describe('Lotto Contract', () => {
     let sut: Streamer;
+    let lottoContract: LottoContract;
 
     beforeEach(() => {
         sut = new Streamer({
@@ -15,6 +16,8 @@ describe('Lotto Contract', () => {
                 getAccounts: jest.fn()
             }
         };
+
+        lottoContract = new LottoContract();
     });
 
     afterEach(() => {

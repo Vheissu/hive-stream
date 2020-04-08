@@ -1,7 +1,7 @@
-import DiceContract from '../../src/contracts/dice.contract';
+import { DiceContract } from '../../src/contracts/dice.contract';
 
 describe('Dice Contract', () => {
-    const sut: any = DiceContract;
+    const sut: any = new DiceContract();
 
     beforeEach(() => {
         sut['_client'] = {

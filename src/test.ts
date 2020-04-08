@@ -14,7 +14,7 @@ const streamer = new Streamer({
 });
 
 //streamer.registerAdapter(new SqliteAdapter());
-//streamer.registerAdapter(new MongodbAdapter('mongodb://127.0.0.1:27017', 'hivestream'));
+streamer.registerAdapter(new MongodbAdapter('mongodb://127.0.0.1:27017', 'hivestream'));
 
 // Register contract
 streamer.registerContract('hivedice', new DiceContract());
@@ -27,6 +27,10 @@ streamer.registerAction(testAction2);
 
 // Start streaming
 streamer.start();
+
+streamer.onHiveEngine((contractName, contractAction, contractPayload, sender, op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+    console.log(contractName, contractAction, contractPayload, sender, op, blockNumber, blockId, prevBlockId, trxId, blockTime);
+});
 
 // streamer.onPost((op: any) => {
 //     console.log(op);
