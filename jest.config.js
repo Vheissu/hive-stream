@@ -9,6 +9,6 @@ module.exports = {
     transform: {
         '^.+\\.(ts|tsx)$': 'ts-jest'
     },
-    preset: '@shelf/jest-mongodb',
-    testMatch: ['**/tests/**/*.spec.(ts)']
+    testMatch: ['**/tests/**/*.spec.(ts)'],
+    testEnvironment: 'node'
 };

@@ -1,19 +1,12 @@
-import { Client } from '@hivechain/dhive';
-import { Streamer } from './../src/streamer';
-
-import fs from 'fs';
-import { sleep } from '@hivechain/dhive/lib/utils';
-
-jest.mock('fs');
+import { TimeAction } from '../src/actions';
+import { Streamer } from '../src/streamer';
 
 describe('Streamer', () => {
-
     let sut: Streamer;
 
     beforeEach(() => {
         sut = new Streamer({
-            JSON_ID: 'test',
-            PAYLOAD_IDENTIFIER: 'hiveContract'
+            JSON_ID: 'testing'
         });
     });
 
@@ -21,328 +14,122 @@ describe('Streamer', () => {
         sut.stop();
     });
 
-    test('Constructor should instantiate client instance', () => {
-        expect(sut['client']).toBeInstanceOf(Client);
-    });
-
-    test('setConfig properly assigns multiple values', () => {
-        sut.setConfig({
-            LAST_BLOCK_NUMBER: 1234
-        });
-
-        expect(sut['config'].LAST_BLOCK_NUMBER).toStrictEqual(1234);
-    });
-
-    test('should get last block number from load state call', async () => {
-        sut['adapter'] = {
-            create: jest.fn(),
-            destroy: jest.fn(),
-            loadState: jest.fn().mockResolvedValue({lastBlockNumber: 27777})
-        };
-
-        await sut.start();
-
-        expect(sut['lastBlockNumber']).toStrictEqual(27777);
-    });
-
-    test('load state method is not implemented in adapter', async () => {
-        sut['adapter'] = {
-            create: jest.fn(),
-            destroy: jest.fn(),
-            loadState: jest.fn()
-        };
-
-        sut['lastBlockNumber'] = 0;
-
-        await sut.start();
-
-        expect(sut['lastBlockNumber']).toStrictEqual(0);
-    });
-
-    test('getBlock gets a block', async () => {
-        sut['adapter'] = {
-            create: jest.fn(),
-            destroy: jest.fn()
-        };
-
-        jest.spyOn(sut['client'].database, 'getDynamicGlobalProperties').mockResolvedValue({head_block_number: 8882} as any);
-
-        jest.spyOn(sut['client'].database, 'getBlock').mockResolvedValue({
-            block_id: 1234,
-            previous: 1233,
-            transaction_ids: ['sdasd', 'dasdad'],
-            timestamp: new Date().toDateString(),
-            transactions: {
-                0: {
-                    operations: {
-                        0: {}
-                    }
-                }
-            }
-        } as any);
-
-        jest.spyOn(sut as any, 'getBlock');
-        jest.spyOn(sut as any, 'loadBlock');
-
-        sut['lastBlockNumber'] = 0;
-
-        await sut['getBlock']();
-
-        expect(sut['lastBlockNumber']).toStrictEqual(8882);
-
-        // Wait for 3 block cycles to be called
-        await sleep(3000);
-
-        sut['disableAllProcessing'] = true;
-
-        expect(sut['loadBlock']).toBeCalledWith(8882);
-    });
-
-    test('getBlock global properties returns null', async () => {
-        jest.spyOn(sut['client'].database, 'getDynamicGlobalProperties').mockResolvedValue(null);
-
-        jest.spyOn(sut as any, 'getBlock');
-        jest.spyOn(sut as any, 'loadBlock');
-
-        await sut['getBlock']();
-
-        await sleep(1000);
-
-        sut['disableAllProcessing'] = true;
-
-        expect(sut['getBlock']).toBeCalled();
-    });
-
-    test('processOperation calls post subscriber', () => {
-        const callback = jest.fn();
-
-        sut.onPost(callback);
-
-        const operation = [
-            'comment',
-            { parent_author: '' }
-        ];
-
-        sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
-
-        expect(callback).toBeCalledWith({'parent_author': ''}, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z');
-    });
-
-    test('processOperation calls comment subscriber', () => {
-        const callback = jest.fn();
-
-        sut.onComment(callback);
-
-        const operation = [
-            'comment',
-            { parent_author: 'beggars' }
-        ];
-
-        sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
-
-        expect(callback).toBeCalledWith({'parent_author': 'beggars'}, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z');
-    });
-
-    test('processOperation calls transfer subscriber', () => {
-        const callback = jest.fn();
-
-        sut.onTransfer('beggars', callback);
-
-        const operation = [
-            'transfer',
-            { to: 'beggars' }
-        ];
-
-        sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
-
-        expect(callback).toBeCalledWith({'to': 'beggars'}, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z');
-    });
-
-    test('processOperation calls custom json subscriber signed with active key', () => {
-        const callback = jest.fn();
-
-        sut.onCustomJson(callback);
-
-        const operation = [
-            'custom_json',
-            { id: 'test', required_auths: ['beggars'] }
-        ];
-
-        sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
-
-        expect(callback).toBeCalledWith({'id': 'test', 'required_auths': ['beggars']}, {'isSignedWithActiveKey': true, 'sender': 'beggars'}, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z');
-    });
-
-    test('processOperation calls custom json subscriber signed without active key', () => {
-        const callback = jest.fn();
-
-        sut.onCustomJson(callback);
-
-        const operation = [
-            'custom_json',
-            { id: 'test', required_posting_auths: ['beggars'] }
-        ];
-
-        sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
-
-        expect(callback).toBeCalledWith({'id': 'test', 'required_posting_auths': ['beggars']}, {'isSignedWithActiveKey': false, 'sender': 'beggars'}, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z');
-    });
-
-    test('processOperation calls custom json ID subscriber signed with active key', () => {
-        const callback = jest.fn();
-
-        sut.onCustomJsonId(callback, 'test');
-
-        const operation = [
-            'custom_json',
-            { id: 'test', required_auths: ['beggars'] }
-        ];
-
-        sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
-
-        expect(callback).toBeCalledWith({'id': 'test', 'required_auths': ['beggars']}, {'isSignedWithActiveKey': true, 'sender': 'beggars'}, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z');
-    });
-
-    test('processOperation calls custom json ID subscriber signed without active key', () => {
-        const callback = jest.fn();
-
-        sut.onCustomJsonId(callback, 'test');
-
-        const operation = [
-            'custom_json',
-            { id: 'test', required_posting_auths: ['beggars'] }
-        ];
-
-        sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
-
-        expect(callback).toBeCalledWith({'id': 'test', 'required_posting_auths': ['beggars']}, {'isSignedWithActiveKey': false, 'sender': 'beggars'}, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z');
-    });
-
-    describe('Contracts', () => {
-
-        test('contract create lifecycle function should be called', () => {
-            const contract = {
-                create: jest.fn()
-            };
-
-            // Register our contract
-            sut.registerContract('dice', contract);
-
-            const findContract = sut['contracts'].find(c => c.name === 'dice');
-
-            expect(contract.create).toBeCalled();
-            expect(findContract).not.toBeUndefined();
-        });
-
-        test('contract destroy lifecycle function should be called and unregistered', () => {
-            const contract = {
-                create: jest.fn(),
+    describe('Adapters', () => {
+        test('Registers adapter and calls the create lifecycle method', () => {
+            const adapter = {
+                create: jest.fn().mockResolvedValue(true),
                 destroy: jest.fn()
             };
 
-            // Register our contract
-            sut.registerContract('dice', contract);
+            sut.registerAdapter(adapter);
 
-            sut.unregisterContract('dice');
-
-            expect(contract.destroy).toBeCalled();
-
-            const findContract = sut['contracts'].find(c => c.name === 'dice');
-
-            expect(findContract).toBeUndefined();
+            expect(adapter.create).toBeCalled();
         });
-
-        test('contract action should be called from payload', () => {
-            const contract = {
-                roll: jest.fn()
-            };
-
-            // Register our contract
-            sut.registerContract('dice', contract);
-
-            const operation = [
-                'custom_json',
-                {
-                    id: 'test',
-                    required_auths: ['beggars'],
-                    json: JSON.stringify({
-                        hiveContract: {
-                            name: 'dice',
-                            action: 'roll',
-                            payload: {
-                                roll: 12
-                            }
-                        }
-                    })
-                }
-            ];
-
-            sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
-
-            expect(contract.roll).toBeCalledWith({roll: 12}, { isSignedWithActiveKey: true, sender: 'beggars' }, 'test');
-        });
-
-        test('contract action should be called from transfer memo', () => {
-            const contract = {
-                roll: jest.fn()
-            };
-
-            // Register our contract
-            sut.registerContract('dice', contract);
-
-            const operation = [
-                'transfer',
-                {
-                    from: 'beggars',
-                    amount: '3.000 HIVE',
-                    memo: JSON.stringify({
-                        hiveContract: {
-                            id: 'test',
-                            name: 'dice',
-                            action: 'roll',
-                            payload: {
-                                roll: 12
-                            }
-                        }
-                    })
-                }
-            ];
-
-            sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
-
-            expect(contract.roll).toBeCalledWith({roll: 12}, { amount: '3.000 HIVE', sender: 'beggars' });
-        });
-
-        test('contract should be updated with block info', () => {
-            const contract = {
-                updateBlockInfo: jest.fn()
-            };
-
-            // Register our contract
-            sut.registerContract('dice', contract);
-
-            const operation = [
-                'custom_json',
-                {
-                    id: 'test',
-                    required_auths: ['beggars'],
-                    json: JSON.stringify({
-                        hiveContract: {
-                            name: 'dice',
-                            action: 'roll',
-                            payload: {
-                                roll: 12
-                            }
-                        }
-                    })
-                }
-            ];
-
-            sut.processOperation(operation, 1234, 'ffsdfsd', '34fdfsd', '4234ff', '2020-03-22T10:19:24.228Z' as any);
-
-            expect(contract.updateBlockInfo).toBeCalledWith(1234, 'ffsdfsd', '34fdfsd', '4234ff');
-        });
-
     });
 
+    describe('Actions', () => {
+        test('Registers a new action', async () => {
+            const adapter = {
+                create: jest.fn().mockResolvedValue(true),
+                destroy: jest.fn(),
+                loadActions: jest.fn().mockResolvedValue([])
+            };
+
+            sut.registerAdapter(adapter);
+
+            const action = new TimeAction('1m', 'testoneminute', 'testcontract', 'testmethod');
+
+            await sut.registerAction(action);
+
+            const foundAction = sut['actions'].find(a => a.id === 'testoneminute');
+
+            expect(foundAction).not.toBeUndefined();
+        });
+
+        test('Does not allow duplicate actions of the same id', async () => {
+            const adapter = {
+                create: jest.fn().mockResolvedValue(true),
+                destroy: jest.fn(),
+                loadActions: jest.fn().mockResolvedValue([])
+            };
+
+            sut.registerAdapter(adapter);
+
+            const action = new TimeAction('1m', 'testoneminute', 'testcontract', 'testmethod');
+            const action2 = new TimeAction('1m', 'testoneminute', 'testcontract', 'testmethod');
+
+            await sut.registerAction(action);
+            await sut.registerAction(action2);
+
+            expect(sut['actions'].length).toStrictEqual(1);
+        });
+
+        test('Registers actions loaded from adapter loadActions call', async () => {
+            const adapter = {
+                create: jest.fn().mockResolvedValue(true),
+                destroy: jest.fn(),
+                loadActions: jest.fn().mockResolvedValue([new TimeAction('1m', 'testoneminute', 'testcontract', 'testmethod')])
+            };
+
+            sut.registerAdapter(adapter);
+
+            const action = new TimeAction('1h', 'testonehour', 'testcontract', 'testmethod');
+
+            await sut.registerAction(action);
+
+            const foundAction = sut['actions'].find(a => a.id === 'testoneminute');
+
+            expect(foundAction).not.toBeUndefined();
+        });
+    });
+
+    describe('Contracts', () => {
+        test('Should register a new contract', () => {
+            const contract = {
+                myMethod: jest.fn()
+            };
+
+            sut.registerContract('testcontract', contract);
+
+            expect(contract['_instance']).toBeInstanceOf(Streamer);
+            expect(sut['contracts'].length).toStrictEqual(1);
+        });
+
+        test('Should register a new contract and call its create method', () => {
+            const contract = {
+                create: jest.fn(),
+                myMethod: jest.fn()
+            };
+
+            sut.registerContract('testcontract', contract);
+
+            expect(contract.create).toBeCalled();
+            expect(contract['_instance']).toBeInstanceOf(Streamer);
+            expect(sut['contracts'].length).toStrictEqual(1);
+        });
+
+        test('Should unregister a registered contract', () => {
+            const contract = {
+                myMethod: jest.fn()
+            };
+
+            sut.registerContract('testcontract', contract);
+            sut.unregisterContract('testcontract');
+
+            expect(sut['contracts'].length).toStrictEqual(0);
+        });
+
+        test('Should unregister a registered contract and call its destroy method', () => {
+            const contract = {
+                destroy: jest.fn(),
+                myMethod: jest.fn()
+            };
+
+            sut.registerContract('testcontract', contract);
+            sut.unregisterContract('testcontract');
+
+            expect(contract.destroy).toBeCalled();
+            expect(sut['contracts'].length).toStrictEqual(0);
+        });
+    });
 });
