@@ -107,12 +107,19 @@ export class LottoContract {
             // Get database reference from adapter
             const db: Db = this.adapter['db'];
 
+            console.log(db);
+
             const collection = db.collection(COLLECTION_LOTTERY);
+            console.log(collection);
             const lotto = await collection.find().sort({'_id': -1}).limit(1).toArray();
+
+            console.log('Lotto', lotto);
 
             // We have a lotto
             if (lotto.length) {
-                const total = lotto.entries.length + 1;
+                const item = lotto[0];
+
+                const total = item.entries.length + 1;
 
                 const balance = await this.getBalance();
 
@@ -126,23 +133,23 @@ export class LottoContract {
                     // Total number of entries including this one hits the limit
                     // Lets pay out the lottery
                     if (total === MAX_ENTRIES_HOURLY) {
-                        const entrant1 = lotto.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
+                        const entrant1 = item.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
 
                         await sleep(3000);
 
-                        const entrant2 = lotto.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
+                        const entrant2 = item.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
 
                         await sleep(3000);
                         
-                        const entrant3 = lotto.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
+                        const entrant3 = item.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
 
                         await sleep(3000);
 
-                        const entrant4 = lotto.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
+                        const entrant4 = item.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
 
                         await sleep(3000);
 
-                        const entrant5 = lotto.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
+                        const entrant5 = item.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
                     } else {
 
                     }
