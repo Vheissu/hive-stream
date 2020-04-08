@@ -495,7 +495,7 @@ export class Streamer {
 
                     // 3 seconds or more has passed
                     if (difference >= 3) {
-                        contract.contract[action.contractMethod]();
+                        contract.contract[action.contractMethod](action.payload);
 
                         action.reset();
                     }
@@ -506,7 +506,7 @@ export class Streamer {
 
                     // 30 seconds or more has passed
                     if (difference >= 30) {
-                        contract.contract[action.contractMethod]();
+                        contract.contract[action.contractMethod](action.payload);
                         
                         action.reset();
                     }
@@ -518,7 +518,7 @@ export class Streamer {
 
                     // One minute has passed
                     if (difference >= 1) {
-                        contract.contract[action.contractMethod]();
+                        contract.contract[action.contractMethod](action.payload);
                         
                         action.reset();
                     }
@@ -530,7 +530,7 @@ export class Streamer {
 
                     // 15 minutes has passed
                     if (difference >= 15) {
-                        contract.contract[action.contractMethod]();
+                        contract.contract[action.contractMethod](action.payload);
                         
                         action.reset();
                     }
@@ -542,7 +542,7 @@ export class Streamer {
 
                     // 30 minutes has passed
                     if (difference >= 30) {
-                        contract.contract[action.contractMethod]();
+                        contract.contract[action.contractMethod](action.payload);
                         
                         action.reset();
                     }
@@ -554,7 +554,7 @@ export class Streamer {
 
                     // One our or more has passed
                     if (difference >= 1) {
-                        contract.contract[action.contractMethod]();
+                        contract.contract[action.contractMethod](action.payload);
                         
                         action.reset();
                     }
@@ -566,7 +566,7 @@ export class Streamer {
 
                     // Twelve hours or more has passed
                     if (difference >= 12) {
-                        contract.contract[action.contractMethod]();
+                        contract.contract[action.contractMethod](action.payload);
                         
                         action.reset();
                     }
@@ -578,7 +578,7 @@ export class Streamer {
 
                     // One day (24 hours) has passed
                     if (difference >= 1) {
-                        contract.contract[action.contractMethod]();
+                        contract.contract[action.contractMethod](action.payload);
                         
                         action.reset();
                     }
