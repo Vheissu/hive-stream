@@ -14,8 +14,13 @@ const VALID_CURRENCIES = ['HIVE'];
 const VALID_DRAW_TYPES = ['hourly', 'daily'];
 
 const COST = 10;
-const MAX_ENTRIES = 50;
-const PERCENTAGE_FEE = 25; // 5% of 500 total = 25 HIVE
+
+const MIN_ENTRIES_HOURLY = 25;
+const MAX_ENTRIES_HOURLY = 50;
+const MIN_ENTRIES_DAILY = 100;
+const MAX_ENTRIES_DAILY = 500;
+
+const PERCENTAGE = 5;
 
 const COLLECTION_LOTTERY = 'lottery';
 const COLLECTION_WINNERS = 'winners';
@@ -82,8 +87,9 @@ export class LottoContract {
 
         if (verify) {
             // User sent an invalid currency
-            if (!VALID_CURRENCIES.includes(amountFormatted)) {
+            if (!VALID_CURRENCIES.includes(amountCurrency)) {
                 await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] You sent an invalid currency.`);
+                return;
             }
 
             // User sent too much
@@ -109,33 +115,38 @@ export class LottoContract {
                 const total = lotto.entries.length + 1;
 
                 const balance = await this.getBalance();
-                const payout = new BigNumber(balance).minus(PERCENTAGE_FEE).toPrecision(3);
 
-                
+                // Calculate how much the account gets to keep
+                const percentageFee = new BigNumber(balance).dividedBy(100).multipliedBy(PERCENTAGE);
 
-                // Total number of entries including this one hits the limit
-                // Lets pay out the lottery
-                if (total === MAX_ENTRIES) {
-                    collection
+                // The amount minus the percentage to pay out to winners
+                const payout = new BigNumber(balance).minus(percentageFee).toPrecision(3);
 
-                    const entrant1 = lotto.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
+                if (type === 'hourly') {
+                    // Total number of entries including this one hits the limit
+                    // Lets pay out the lottery
+                    if (total === MAX_ENTRIES_HOURLY) {
+                        const entrant1 = lotto.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
 
-                    await sleep(3000);
+                        await sleep(3000);
 
-                    const entrant2 = lotto.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
+                        const entrant2 = lotto.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
 
-                    await sleep(3000);
-                    
-                    const entrant3 = lotto.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
+                        await sleep(3000);
+                        
+                        const entrant3 = lotto.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
 
-                    await sleep(3000);
+                        await sleep(3000);
 
-                    const entrant4 = lotto.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
+                        const entrant4 = lotto.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
 
-                    await sleep(3000);
+                        await sleep(3000);
 
-                    const entrant5 = lotto.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
-                } else {
+                        const entrant5 = lotto.entries[rng(this.previousBlockId, this.blockId, this.transactionId, total)];
+                    } else {
+
+                    }
+                } else if (type === 'daily') {
 
                 }
             }

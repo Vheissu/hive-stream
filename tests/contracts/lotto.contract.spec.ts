@@ -1,3 +1,4 @@
+import { sleep } from '@hivechain/dhive/lib/utils';
 import { Streamer } from '../../src/streamer';
 import { LottoContract } from '../../src/contracts/lotto.contract';
 
@@ -24,7 +25,7 @@ describe('Lotto Contract', () => {
         sut.stop();
     });
 
-    test('Gets balance', async () => {
+    test('The buy method should be called', async () => {
         (sut['client'] as any).database.getAccounts = jest.fn(() => Promise.resolve([
             {
                 balance: '2000.234 HIVE'
@@ -75,6 +76,39 @@ describe('Lotto Contract', () => {
 
         expect(lottoContract.buy).toBeCalledWith({type: 'hourly'}, {amount: '10.000 HIVE', sender: 'beggars'});
         expect(lottoContract.buy).toBeCalledWith({type: 'daily'}, {amount: '10.000 HIVE', sender: 'aggroed'});
+    });
+
+    test('User attempted to buy a ticket with an invalid currency', async () => {
+        sut.registerContract('lotto', lottoContract);
+
+        jest.spyOn(lottoContract, 'buy');
+        
+        const operation = createOperation('transfer', {
+            from: 'beggars',
+            amount: '10.000 HBD',
+            memo: JSON.stringify({
+                hiveContract: {
+                    id: 'test',
+                    name: 'lotto',
+                    action: 'buy',
+                    payload: {
+                        type: 'hourly'
+                    }
+                }
+            })
+
+        });
+        
+        jest.spyOn(lottoContract as any, 'getBalance').mockResolvedValue(2000);
+        jest.spyOn(lottoContract['_instance'], 'getTransaction').mockResolvedValue({} as any);
+        jest.spyOn(lottoContract['_instance'], 'verifyTransfer').mockResolvedValue(true);
+        jest.spyOn(lottoContract['_instance'], 'transferHiveTokens').mockResolvedValue({} as any);
+
+        sut.processOperation(operation, 42323417, '52676', '1542355627', '0d972c0e076a3a2b2117e313b3a20743cad246bc', '2020-03-22T10:19:24.228Z' as any);
+
+        await sleep(2000);
+
+        expect(sut.transferHiveTokens).toBeCalledWith('beggars', 'beggars', '10.000', 'HBD', '[Refund] You sent an invalid currency.');
     });
 });
 
