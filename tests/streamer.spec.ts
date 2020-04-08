@@ -145,8 +145,8 @@ describe('Streamer', () => {
 
         await sut.start();
 
-        sut.stop();
-
         expect(sut['lastBlockNumber']).toStrictEqual(509992);
+
+        sut.stop();
     });
 });
