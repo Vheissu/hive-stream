@@ -86,4 +86,43 @@ describe('Lotto Contract', () => {
         }
     });
 
+
+    test('Draw the hourly lottery', async () => {
+        try {
+            sut.registerContract('testlotto', contract);
+
+            contract['_instance'] = sut;
+            
+            contract['adapter']['db'] = db;
+
+            const lottery = db.collection('lottery');
+            const entries = [];
+
+            for (const entrant of fiftyValidEntrants) {
+                entries.push({
+                    account: entrant.from,
+                    date: new Date()
+                });
+            }
+
+            await lottery.insertOne({ startDate: new Date(), type: 'hourly', status: 'active', entries });
+    
+            jest.spyOn(contract, 'buy');
+            jest.spyOn(contract as any, 'getBalance').mockResolvedValue(2000);
+    
+            jest.spyOn(sut, 'getTransaction').mockResolvedValue({test: 123} as any);
+            jest.spyOn(sut, 'verifyTransfer').mockResolvedValue(true as any);
+            jest.spyOn(sut, 'transferHiveTokens').mockResolvedValue(true as any);
+    
+            const drawn = await contract.drawHourlyLottery();
+
+            console.log(drawn);
+
+            expect(drawn).toHaveLength(3);
+            expect(drawn.includes(undefined)).toBeFalsy();
+        } catch (e) {
+            throw e;
+        }
+    });
+
 });

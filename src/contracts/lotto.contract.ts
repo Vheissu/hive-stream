@@ -1,6 +1,7 @@
 import { sleep } from '@hivechain/dhive/lib/utils';
 import { SqliteAdapter } from './../adapters/sqlite.adapter';
 import { MongodbAdapter } from './../adapters/mongodb.adapter';
+import { Utils } from './../utils';
 import { Streamer } from '../streamer';
 import seedrandom from 'seedrandom';
 import BigNumber from 'bignumber.js';
@@ -163,6 +164,30 @@ export class LottoContract {
 
             // Amount each winner gets
             const amountPerWinner = new BigNumber(payoutTotal).dividedBy(5).toPrecision(3);
+
+            const winners = await this.getWinners(HOURLY_WINNERS_PICK, draw.entries);
+
+            return winners;
         }
+    }
+
+    async getWinners(count: number, entries: any[]) {
+        let winners = [];
+
+        let shuffledEntries = Utils.shuffle(entries);
+
+        for (const entry of entries) {
+            if (winners.length < count) {
+                const winner = entries[rng(this.previousBlockId, this.blockId, this.transactionId, Math.random(), entries.length - 1)];
+
+                winners.push(winner);
+
+                await sleep(300);
+            } else {
+                break;
+            }
+        }
+
+        return winners;
     }
 }
