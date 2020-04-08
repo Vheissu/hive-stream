@@ -88,7 +88,7 @@ describe('Streamer', () => {
 
         await sut['getBlock']();
 
-        expect(sut['lastBlockNumber']).toStrictEqual(8881);
+        expect(sut['lastBlockNumber']).toStrictEqual(8882);
 
         // Wait for 3 block cycles to be called
         await sleep(3000);

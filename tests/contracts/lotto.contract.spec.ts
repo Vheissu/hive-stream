@@ -1,13 +1,33 @@
 import { sleep } from '@hivechain/dhive/lib/utils';
 import { Streamer } from '../../src/streamer';
 import { LottoContract } from '../../src/contracts/lotto.contract';
+import { MongoClient } from 'mongodb';
+
+import fiftyEntrants from './entrants.json';
 
 describe('Lotto Contract', () => {
     let sut: Streamer;
     let lottoContract: LottoContract;
+    let connection;
+    let db;
 
-    beforeEach(() => {
+    beforeAll(async () => {
+        connection = await MongoClient.connect(process.env.MONGO_URL, {
+          useNewUrlParser: true,
+          useUnifiedTopology: true
+        });
+        db = await connection.db();
+      });
+    
+      afterAll(async () => {
+        await connection.close();
+      });
+
+    beforeEach(async () => {
+        await db.collection('lottery').deleteMany({});
+
         sut = new Streamer({
+            ACTIVE_KEY: '',
             JSON_ID: 'test',
             PAYLOAD_IDENTIFIER: 'hiveContract'
         });
@@ -27,11 +47,7 @@ describe('Lotto Contract', () => {
     });
 
     test('The buy method should be called', async () => {
-        (sut['client'] as any).database.getAccounts = jest.fn(() => Promise.resolve([
-            {
-                balance: '2000.234 HIVE'
-            }
-        ]));
+        (sut['client'] as any).database.getAccounts = jest.fn(() => Promise.resolve([{balance: '2000.234 HIVE'}]));
 
         sut.registerContract('lotto', lottoContract);
 
@@ -79,103 +95,129 @@ describe('Lotto Contract', () => {
         expect(lottoContract.buy).toBeCalledWith({type: 'daily'}, {amount: '10.000 HIVE', sender: 'aggroed'});
     });
 
-    test('User attempted to buy a ticket with an invalid currency, refund them', async () => {
+    // test('User attempted to buy a ticket with an invalid currency, refund them', async () => {
+    //     sut.registerContract('lotto', lottoContract);
+
+    //     jest.spyOn(lottoContract, 'buy');
+        
+    //     const operation = createOperation('transfer', {
+    //         from: 'beggars',
+    //         amount: '10.000 HBD',
+    //         memo: JSON.stringify({
+    //             hiveContract: {
+    //                 id: 'test',
+    //                 name: 'lotto',
+    //                 action: 'buy',
+    //                 payload: {
+    //                     type: 'hourly'
+    //                 }
+    //             }
+    //         })
+
+    //     });
+        
+    //     jest.spyOn(lottoContract as any, 'getBalance').mockResolvedValue(2000);
+    //     jest.spyOn(lottoContract['_instance'], 'getTransaction').mockResolvedValue({} as any);
+    //     jest.spyOn(lottoContract['_instance'], 'verifyTransfer').mockResolvedValue(true);
+    //     jest.spyOn(lottoContract['_instance'], 'transferHiveTokens').mockResolvedValue({} as any);
+
+    //     sut.processOperation(operation, 42323417, '52676', '1542355627', '0d972c0e076a3a2b2117e313b3a20743cad246bc', '2020-03-22T10:19:24.228Z' as any);
+
+    //     await sleep(550);
+
+    //     expect(sut.transferHiveTokens).toBeCalledWith('beggars', 'beggars', '10.000', 'HBD', '[Refund] You sent an invalid currency.');
+    // });
+
+    // test('User sent too much, refund them', async () => {
+    //     sut.registerContract('lotto', lottoContract);
+
+    //     jest.spyOn(lottoContract, 'buy');
+        
+    //     const operation = createOperation('transfer', {
+    //         from: 'beggars',
+    //         amount: '52.000 HIVE',
+    //         memo: JSON.stringify({
+    //             hiveContract: {
+    //                 id: 'test',
+    //                 name: 'lotto',
+    //                 action: 'buy',
+    //                 payload: {
+    //                     type: 'hourly'
+    //                 }
+    //             }
+    //         })
+
+    //     });
+        
+    //     jest.spyOn(lottoContract as any, 'getBalance').mockResolvedValue(2000);
+    //     jest.spyOn(lottoContract['_instance'], 'getTransaction').mockResolvedValue({} as any);
+    //     jest.spyOn(lottoContract['_instance'], 'verifyTransfer').mockResolvedValue(true);
+    //     jest.spyOn(lottoContract['_instance'], 'transferHiveTokens').mockResolvedValue({} as any);
+
+    //     sut.processOperation(operation, 42323417, '52676', '1542355627', '0d972c0e076a3a2b2117e313b3a20743cad246bc', '2020-03-22T10:19:24.228Z' as any);
+
+    //     await sleep(2000);
+
+    //     expect(sut.transferHiveTokens).toBeCalledWith('beggars', 'beggars', '52.000', 'HIVE', '[Refund] A ticket costs 10 HIVE. You sent 52.000 HIVE');
+    // });
+
+    // test('User sent invalid draw type, refund them', async () => {
+    //     sut.registerContract('lotto', lottoContract);
+
+    //     jest.spyOn(lottoContract, 'buy');
+        
+    //     const operation = createOperation('transfer', {
+    //         from: 'beggars',
+    //         amount: '10.000 HIVE',
+    //         memo: JSON.stringify({
+    //             hiveContract: {
+    //                 id: 'test',
+    //                 name: 'lotto',
+    //                 action: 'buy',
+    //                 payload: {
+    //                     type: 'fsff'
+    //                 }
+    //             }
+    //         })
+
+    //     });
+        
+    //     jest.spyOn(lottoContract as any, 'getBalance').mockResolvedValue(2000);
+    //     jest.spyOn(lottoContract['_instance'], 'getTransaction').mockResolvedValue({} as any);
+    //     jest.spyOn(lottoContract['_instance'], 'verifyTransfer').mockResolvedValue(true);
+    //     jest.spyOn(lottoContract['_instance'], 'transferHiveTokens').mockResolvedValue({} as any);
+
+    //     sut.processOperation(operation, 42323417, '52676', '1542355627', '0d972c0e076a3a2b2117e313b3a20743cad246bc', '2020-03-22T10:19:24.228Z' as any);
+
+    //     await sleep(800);
+
+    //     expect(sut.transferHiveTokens).toBeCalledWith('beggars', 'beggars', '10.000', 'HIVE', '[Refund] You specified an invalid draw type');
+    // });
+
+    test('Draw the hourly lottery draw', async () => {
         sut.registerContract('lotto', lottoContract);
 
-        jest.spyOn(lottoContract, 'buy');
-        
-        const operation = createOperation('transfer', {
-            from: 'beggars',
-            amount: '10.000 HBD',
-            memo: JSON.stringify({
-                hiveContract: {
-                    id: 'test',
-                    name: 'lotto',
-                    action: 'buy',
-                    payload: {
-                        type: 'hourly'
-                    }
-                }
-            })
+        lottoContract['adapter']['db'] = db;
 
-        });
-        
+        const collection = db.collection('lottery');
+
+        await collection.insertOne({ startDate: new Date(), type: 'hourly', entries: [] });
+
+        jest.spyOn(lottoContract, 'buy');
         jest.spyOn(lottoContract as any, 'getBalance').mockResolvedValue(2000);
         jest.spyOn(lottoContract['_instance'], 'getTransaction').mockResolvedValue({} as any);
         jest.spyOn(lottoContract['_instance'], 'verifyTransfer').mockResolvedValue(true);
         jest.spyOn(lottoContract['_instance'], 'transferHiveTokens').mockResolvedValue({} as any);
 
-        sut.processOperation(operation, 42323417, '52676', '1542355627', '0d972c0e076a3a2b2117e313b3a20743cad246bc', '2020-03-22T10:19:24.228Z' as any);
+        let blockNumber = 42323417;
 
-        await sleep(550);
+        for (const entrant of fiftyEntrants) {
+            lottoContract.buy({ type: entrant.memo.hiveContract.payload.type }, { sender: entrant.from, amount: entrant.amount });
+        }
 
-        expect(sut.transferHiveTokens).toBeCalledWith('beggars', 'beggars', '10.000', 'HBD', '[Refund] You sent an invalid currency.');
-    });
+        expect(lottoContract['_instance']['transferHiveTokens']).not.toBeCalled();
 
-    test('User sent too much, refund them', async () => {
-        sut.registerContract('lotto', lottoContract);
-
-        jest.spyOn(lottoContract, 'buy');
-        
-        const operation = createOperation('transfer', {
-            from: 'beggars',
-            amount: '52.000 HIVE',
-            memo: JSON.stringify({
-                hiveContract: {
-                    id: 'test',
-                    name: 'lotto',
-                    action: 'buy',
-                    payload: {
-                        type: 'hourly'
-                    }
-                }
-            })
-
-        });
-        
-        jest.spyOn(lottoContract as any, 'getBalance').mockResolvedValue(2000);
-        jest.spyOn(lottoContract['_instance'], 'getTransaction').mockResolvedValue({} as any);
-        jest.spyOn(lottoContract['_instance'], 'verifyTransfer').mockResolvedValue(true);
-        jest.spyOn(lottoContract['_instance'], 'transferHiveTokens').mockResolvedValue({} as any);
-
-        sut.processOperation(operation, 42323417, '52676', '1542355627', '0d972c0e076a3a2b2117e313b3a20743cad246bc', '2020-03-22T10:19:24.228Z' as any);
-
-        await sleep(1000);
-
-        expect(sut.transferHiveTokens).toBeCalledWith('beggars', 'beggars', '52.000', 'HIVE', '[Refund] A ticket costs 10 HIVE. You sent 52.000 HIVE');
-    });
-
-    test('User sent invalid draw type, refund them', async () => {
-        sut.registerContract('lotto', lottoContract);
-
-        jest.spyOn(lottoContract, 'buy');
-        
-        const operation = createOperation('transfer', {
-            from: 'beggars',
-            amount: '10.000 HIVE',
-            memo: JSON.stringify({
-                hiveContract: {
-                    id: 'test',
-                    name: 'lotto',
-                    action: 'buy',
-                    payload: {
-                        type: 'fsff'
-                    }
-                }
-            })
-
-        });
-        
-        jest.spyOn(lottoContract as any, 'getBalance').mockResolvedValue(2000);
-        jest.spyOn(lottoContract['_instance'], 'getTransaction').mockResolvedValue({} as any);
-        jest.spyOn(lottoContract['_instance'], 'verifyTransfer').mockResolvedValue(true);
-        jest.spyOn(lottoContract['_instance'], 'transferHiveTokens').mockResolvedValue({} as any);
-
-        sut.processOperation(operation, 42323417, '52676', '1542355627', '0d972c0e076a3a2b2117e313b3a20743cad246bc', '2020-03-22T10:19:24.228Z' as any);
-
-        await sleep(550);
-
-        expect(sut.transferHiveTokens).toBeCalledWith('beggars', 'beggars', '10.000', 'HIVE', '[Refund] You specified an invalid draw type');
+        expect(true).toBeTruthy();
     });
 });
 
