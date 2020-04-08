@@ -82,92 +82,96 @@ export class DiceContract {
      * @param param1 - sender and amount
      */
     private async roll(payload: { roll: number }, { sender, amount }) {
-        // Destructure the values from the payload
-        const { roll } = payload;
+        try {
+            // Destructure the values from the payload
+            const { roll } = payload;
 
-        // The amount is formatted like 100 HIVE
-        // The value is the first part, the currency symbol is the second
-        const amountTrim = amount.split(' ');
+            // The amount is formatted like 100 HIVE
+            // The value is the first part, the currency symbol is the second
+            const amountTrim = amount.split(' ');
 
-        // Parse the numeric value as a real value
-        const amountParsed = parseFloat(amountTrim[0]);
+            // Parse the numeric value as a real value
+            const amountParsed = parseFloat(amountTrim[0]);
 
-        // Format the amount to 3 decimal places
-        const amountFormatted = parseFloat(amountTrim[0]).toFixed(3);
+            // Format the amount to 3 decimal places
+            const amountFormatted = parseFloat(amountTrim[0]).toFixed(3);
 
-        // Trim any space from the currency symbol
-        const amountCurrency = amountTrim[1].trim();
+            // Trim any space from the currency symbol
+            const amountCurrency = amountTrim[1].trim();
 
-        console.log(`Roll: ${roll}
-                     Amount parsed: ${amountParsed}
-                     Amount formatted: ${amountFormatted}
-                     Currency: ${amountCurrency}`);
+            // console.log(`Roll: ${roll}
+            //             Amount parsed: ${amountParsed}
+            //             Amount formatted: ${amountFormatted}
+            //             Currency: ${amountCurrency}`);
 
-        // Get the transaction from the blockchain
-        const transaction = await this._instance.getTransaction(this.blockNumber, this.transactionId);
+            // Get the transaction from the blockchain
+            const transaction = await this._instance.getTransaction(this.blockNumber, this.transactionId);
 
-        // Call the verifyTransfer method to confirm the transfer happened
-        const verify = await this._instance.verifyTransfer(transaction, sender, 'beggars', amount);
+            // Call the verifyTransfer method to confirm the transfer happened
+            const verify = await this._instance.verifyTransfer(transaction, sender, 'beggars', amount);
 
-        // Get the balance of our contract account
-        const balance = await this.getBalance();
+            // Get the balance of our contract account
+            const balance = await this.getBalance();
 
-        // Transfer is valid
-        if (verify) {
-            // Server balance is less than the max bet, cancel and refund
-            if (balance < MAX_BET) {
-                // Send back what was sent, the server is broke
-                await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] The server could not fufill your bet.`);
+            // Transfer is valid
+            if (verify) {
+                // Server balance is less than the max bet, cancel and refund
+                if (balance < MAX_BET) {
+                    // Send back what was sent, the server is broke
+                    await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] The server could not fufill your bet.`);
 
-                return;
-            }
+                    return;
+                }
 
-            // Bet amount is valid
-            if (amountParsed >= MIN_BET && amountParsed <= MAX_BET) {
-                // Validate roll is valid
-                if ((roll >= 2 && roll <= 96) && VALID_CURRENCIES.includes(amountCurrency)) {
-                    // Roll a random value
-                    const random = rng(this.previousBlockId, this.blockId, this.transactionId);
+                // Bet amount is valid
+                if (amountParsed >= MIN_BET && amountParsed <= MAX_BET) {
+                    // Validate roll is valid
+                    if ((roll >= 2 && roll <= 96) && VALID_CURRENCIES.includes(amountCurrency)) {
+                        // Roll a random value
+                        const random = rng(this.previousBlockId, this.blockId, this.transactionId);
 
-                    // Calculate the multiplier percentage
-                    const multiplier = new BigNumber(1).minus(HOUSE_EDGE).multipliedBy(100).dividedBy(roll);
+                        // Calculate the multiplier percentage
+                        const multiplier = new BigNumber(1).minus(HOUSE_EDGE).multipliedBy(100).dividedBy(roll);
 
-                    // Calculate the number of tokens won
-                    const tokensWon = new BigNumber(amountParsed).multipliedBy(multiplier).toFixed(3, BigNumber.ROUND_DOWN);
+                        // Calculate the number of tokens won
+                        const tokensWon = new BigNumber(amountParsed).multipliedBy(multiplier).toFixed(3, BigNumber.ROUND_DOWN);
 
-                    // Memo that shows in users memo when they win
-                    const winningMemo = `You won ${tokensWon} ${TOKEN_SYMBOL}. Roll: ${random}, Your guess: ${roll}`;
+                        // Memo that shows in users memo when they win
+                        const winningMemo = `You won ${tokensWon} ${TOKEN_SYMBOL}. Roll: ${random}, Your guess: ${roll}`;
 
-                    // Memo that shows in users memo when they lose
-                    const losingMemo = `You lost ${amountParsed} ${TOKEN_SYMBOL}. Roll: ${random}, Your guess: ${roll}`;
+                        // Memo that shows in users memo when they lose
+                        const losingMemo = `You lost ${amountParsed} ${TOKEN_SYMBOL}. Roll: ${random}, Your guess: ${roll}`;
 
-                    // User won more than the server can afford, refund the bet amount
-                    if (parseFloat(tokensWon) > balance) {
-                        await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] The server could not fufill your bet.`);
+                        // User won more than the server can afford, refund the bet amount
+                        if (parseFloat(tokensWon) > balance) {
+                            await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] The server could not fufill your bet.`);
 
-                        return;
-                    }
+                            return;
+                        }
 
-                    // If random value is less than roll
-                    if (random < roll) {
-                        await this._instance.transferHiveTokens(ACCOUNT, sender, tokensWon, TOKEN_SYMBOL, winningMemo);
+                        // If random value is less than roll
+                        if (random < roll) {
+                            await this._instance.transferHiveTokens(ACCOUNT, sender, tokensWon, TOKEN_SYMBOL, winningMemo);
+                        } else {
+                            await this._instance.transferHiveTokens(ACCOUNT, sender, '0.001', TOKEN_SYMBOL, losingMemo);
+                        }
                     } else {
-                        await this._instance.transferHiveTokens(ACCOUNT, sender, '0.001', TOKEN_SYMBOL, losingMemo);
+                        // Invalid bet parameters, refund the user their bet
+                        await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] Invalid bet params.`);
                     }
                 } else {
-                    // Invalid bet parameters, refund the user their bet
-                    await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] Invalid bet params.`);
-                }
-            } else {
-                try {
-                    // We need to refund the user
-                    const transfer = await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] You sent an invalid bet amount.`);
+                    try {
+                        // We need to refund the user
+                        const transfer = await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] You sent an invalid bet amount.`);
 
-                    console.log(transfer);
-                } catch (e) {
-                    console.log(e);
+                        console.log(transfer);
+                    } catch (e) {
+                        console.log(e);
+                    }
                 }
             }
+        } catch (e) {
+            throw e;
         }
     }
 
