@@ -128,7 +128,7 @@ export class LottoContract {
                 const percentageFee = new BigNumber(balance).dividedBy(100).multipliedBy(PERCENTAGE);
 
                 // The amount minus the percentage to pay out to winners
-                const payout = new BigNumber(balance).minus(percentageFee).toPrecision(3);
+                const payout = new BigNumber(balance).minus(percentageFee).toFixed(3);
 
                 draw.entries.push({
                     account: sender,
@@ -153,19 +153,25 @@ export class LottoContract {
 
             const total = draw.entries.length;
 
-            // Get the balance
-            const balance = await this.getBalance();
+            // Number of entrants multiplied by the entry cost is the total for this draw
+            const winningsAmount = new BigNumber(total).multipliedBy(COST).toNumber();
 
             // Calculate how much the account gets to keep
-            const percentageFee = new BigNumber(balance).dividedBy(100).multipliedBy(PERCENTAGE);
+            const percentageFee = new BigNumber(winningsAmount).dividedBy(100).multipliedBy(PERCENTAGE);
 
             // The amount minus the percentage to pay out to winners
-            const payoutTotal = new BigNumber(balance).minus(percentageFee);
+            const payoutTotal = new BigNumber(winningsAmount).minus(percentageFee);
 
             // Amount each winner gets
-            const amountPerWinner = new BigNumber(payoutTotal).dividedBy(5).toPrecision(3);
+            const amountPerWinner = new BigNumber(payoutTotal).dividedBy(HOURLY_WINNERS_PICK).toFixed(3);
 
             const winners = await this.getWinners(HOURLY_WINNERS_PICK, draw.entries);
+
+            if (winners) {
+                for (const winner of winners) {
+                    await this._instance.transferHiveTokens(ACCOUNT, winner.account, amountPerWinner, TOKEN_SYMBOL, `Congratulations you won the hourly lottery. You won ${amountPerWinner} ${TOKEN_SYMBOL}`);
+                }
+            }
 
             return winners;
         }
@@ -178,7 +184,7 @@ export class LottoContract {
 
         for (const entry of entries) {
             if (winners.length < count) {
-                const winner = entries[rng(this.previousBlockId, this.blockId, this.transactionId, Math.random(), entries.length - 1)];
+                const winner = entries[rng(this.previousBlockId + `${seedrandom().double()}`, this.blockId+ `${seedrandom().double()}`, this.transactionId+ `${seedrandom().double()}`, seedrandom().double(), entries.length - 1)];
 
                 winners.push(winner);
 
