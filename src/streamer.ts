@@ -521,6 +521,17 @@ export class Streamer {
                     }
                 break;
 
+                case '10s':
+                    difference = blockDate.diff(date, 's');
+
+                    // 10 seconds or more has passed
+                    if (difference >= 10) {
+                        contract.contract[action.contractMethod](action.payload);
+                        
+                        action.reset();
+                    }
+                break;
+                
                 case '30s':
                     difference = blockDate.diff(date, 's');
 

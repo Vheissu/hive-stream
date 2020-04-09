@@ -12,7 +12,8 @@
         "build": "tsc --project tsconfig.build.json",
         "start": "npx ts-node src/test.ts",
         "watch": "tsc -w",
-        "test": "jest --verbose"
+        "test": "jest --verbose",
+        "clean-tests": "jest --clearCache"
     },
     "dependencies": {
         "@hivechain/dhive": "^0.13.3",
