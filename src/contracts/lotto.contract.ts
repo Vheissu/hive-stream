@@ -105,13 +105,10 @@ export class LottoContract {
 
         const amountTrim = amount.split(' ');
         const amountParsed = parseFloat(amountTrim[0]);
-        const amountFormatted = parseFloat(amountTrim[0]).toFixed(3);
         const amountCurrency = amountTrim[1].trim();
 
         const transaction = await this._instance.getTransaction(this.blockNumber, this.transactionId);
         const verify = await this._instance.verifyTransfer(transaction, sender, ACCOUNT, amount);
-
-        const balance = await this.getBalance();
 
         if (verify) {
             // User sent an invalid currency
@@ -136,19 +133,13 @@ export class LottoContract {
             const db: Db = this.adapter['db'];
 
             const collection = db.collection(COLLECTION_LOTTERY);
+
+            // Find an active lotto draw that is of status "active" and our type
             const lotto = await collection.find({ status: 'active', type: type }).limit(1).toArray();
 
             // We have a lotto
             if (lotto.length) {
                 const draw = lotto[0];
-
-                const balance = await this.getBalance();
-
-                // Calculate how much the account gets to keep
-                const percentageFee = new BigNumber(balance).dividedBy(100).multipliedBy(PERCENTAGE);
-
-                // The amount minus the percentage to pay out to winners
-                const payout = new BigNumber(balance).minus(percentageFee).toFixed(3);
 
                 draw.entries.push({
                     account: sender,
@@ -156,8 +147,17 @@ export class LottoContract {
                     date: new Date()
                 });
 
-                await collection.replaceOne({ _id: draw._id }, draw, { upsert: true });
+                return await collection.replaceOne({ _id: draw._id }, draw, { upsert: true });
             }
+
+            // We need to create a new lotto, no active draws for this type
+            const entries = [{
+                account: sender,
+                transactionId: this.transactionId,
+                date: new Date()
+            }];
+
+            return await collection.insertOne({ status: 'active', type: type, entries });
         }
     }
 
@@ -215,6 +215,11 @@ export class LottoContract {
             const draw = lotto[0];
 
             const total = draw.entries.length;
+
+            // Number of entrants is less than the minimum
+            if (total < MIN_ENTRIES_DAILY) {
+
+            }
 
             const balance = await this.getBalance();
 

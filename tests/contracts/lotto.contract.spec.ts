@@ -51,7 +51,7 @@ describe('Lotto Contract', () => {
         expect(findContract).not.toBeUndefined();
     });
 
-    test('User enters the lotto', async () => {
+    test('User enters the lotto, existing draw found', async () => {
         try {
             sut.registerContract('testlotto', contract);
 
@@ -61,6 +61,42 @@ describe('Lotto Contract', () => {
 
             const lottery = db.collection('lottery');
             await lottery.insertOne({ startDate: new Date(), type: 'hourly', status: 'active', entries: [] });
+    
+            jest.spyOn(contract, 'buy');
+            jest.spyOn(contract as any, 'getBalance').mockResolvedValue(2000);
+    
+            jest.spyOn(sut, 'getTransaction').mockResolvedValue({test: 123} as any);
+            jest.spyOn(sut, 'verifyTransfer').mockResolvedValue(true as any);
+            jest.spyOn(sut, 'transferHiveTokens').mockResolvedValue(true as any);
+    
+            const memo = JSON.stringify({
+                hivePayload: {
+                    id: 'hivestream',
+                    name: 'testlotto',
+                    action: 'buy',
+                    payload: {
+                        type: 'hourly'
+                    }
+                }
+            });
+    
+            sut.processOperation(['transfer', { from: 'testuser', amount: '10.000 HIVE', memo }], 778782, 'dfjfsdfsdfsd34hfkj88787', 'fkjsdkfj', 'fhkjsdhfkjsdf', '2019-06-23' as any);
+    
+            await sleep(100);
+    
+            expect(contract.buy).toBeCalled();
+        } catch (e) {
+            throw e;
+        }
+    });
+
+    test('User enters the lotto, no existing draw found', async () => {
+        try {
+            sut.registerContract('testlotto', contract);
+
+            contract['_instance'] = sut;
+            
+            contract['adapter']['db'] = db;
     
             jest.spyOn(contract, 'buy');
             jest.spyOn(contract as any, 'getBalance').mockResolvedValue(2000);
