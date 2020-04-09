@@ -113,16 +113,16 @@ export class LottoContract {
                 return;
             }
 
-            // User sent too much
-            if (amountParsed > COST) {
-                await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] A ticket costs ${COST} HIVE. You sent ${amount}`);
-                return;
-            }
-
             // User did not specify a valid entry type, refund them
             if (!VALID_DRAW_TYPES.includes(type)) {
                 await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] You specified an invalid draw type`);
                 return;
+            }
+
+            // User sent too much, refund the difference
+            if (amountParsed > COST) {
+                const difference = new BigNumber(amountParsed).minus(COST).toFixed(3);
+                await this._instance.transferHiveTokens(ACCOUNT, sender, difference, amountTrim[1], `[Refund] A ticket costs ${COST} HIVE. You sent ${amount}. You were refunded ${difference} HIVE.`);
             }
 
             // Get database reference from adapter
@@ -165,6 +165,8 @@ export class LottoContract {
             const draw = lotto[0];
 
             const total = draw.entries.length;
+
+            const balance = await this.getBalance();
 
             // Number of entrants multiplied by the entry cost is the total for this draw
             const winningsAmount = new BigNumber(total).multipliedBy(COST).toNumber();
