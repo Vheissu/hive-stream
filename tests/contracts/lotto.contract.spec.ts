@@ -161,6 +161,44 @@ describe('Lotto Contract', () => {
         }
     });
 
+    test('Draw the daily lottery', async () => {
+        try {
+            sut.registerContract('testlotto', contract);
+
+            contract['_instance'] = sut;
+            
+            contract['adapter']['db'] = db;
+
+            const lottery = db.collection('lottery');
+            const entries = [];
+
+            for (const entrant of fiftyValidEntrants) {
+                entries.push({
+                    account: entrant.from,
+                    date: new Date()
+                });
+            }
+
+            await lottery.insertOne({ startDate: new Date(), type: 'daily', status: 'active', entries });
+    
+            jest.spyOn(contract, 'buy');
+            jest.spyOn(contract as any, 'getBalance').mockResolvedValue(2000);
+    
+            jest.spyOn(sut, 'getTransaction').mockResolvedValue({test: 123} as any);
+            jest.spyOn(sut, 'verifyTransfer').mockResolvedValue(true as any);
+            jest.spyOn(sut, 'transferHiveTokens').mockResolvedValue(true as any);
+    
+            const drawn = await contract.drawDailyLottery();
+
+            expect(drawn).toHaveLength(10);
+            expect(drawn.includes(undefined)).toBeFalsy();
+            expect(sut.transferHiveTokens).toBeCalledTimes(10);
+            expect(sut.transferHiveTokens).toBeCalledWith('beggars', expect.any(String), '47.500', 'HIVE', 'Congratulations you won the daily lottery. You won 47.500 HIVE');
+        } catch (e) {
+            throw e;
+        }
+    });
+
     test('User attempts to enter lotto with invalid currency, refund them', async () => {
         try {
             sut.registerContract('testlotto', contract);
