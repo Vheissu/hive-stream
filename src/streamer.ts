@@ -83,6 +83,10 @@ export class Streamer {
         return this.adapter;
     }
 
+    /**
+     * Register a new action
+     * 
+     */
     public async registerAction(action: TimeAction) {
         const loadedActions: TimeAction[] = await this.adapter.loadActions() as TimeAction[];
 
@@ -98,6 +102,20 @@ export class Streamer {
 
         if (!exists) {
             this.actions.push(action);
+        }
+    }
+
+    /**
+     * Resets a specific action time value
+     * 
+     * @param id 
+     * 
+     */
+    public resetAction(id: string) {
+        const action = this.actions.find(i => i.id === id);
+
+        if (action) {
+            action.reset();
         }
     }
 
