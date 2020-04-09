@@ -27,6 +27,9 @@ const HOURLY_WINNERS_PICK = 3;
 // How many winners to pick for the daily draw
 const DAILY_WINNERS_PICK = 10;
 
+// Max tickets per user, prevents users from harvesting by overwhelmingly buying tickets
+const MAX_TICKETS_PER_USER = 3;
+
 // The percentage the site keeps (5%)
 const PERCENTAGE = 5;
 
@@ -91,6 +94,10 @@ export class LottoContract {
         }
 
         return null;
+    }
+
+    private async getPreviousUserTicketsForCurrentDrawType(type: string, account: string): Promise<number> {
+        return 0;
     }
 
     async buy(payload, { sender, amount }) {
