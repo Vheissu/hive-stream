@@ -31,6 +31,7 @@ const DAILY_WINNERS_PICK = 10;
 const PERCENTAGE = 5;
 
 const COLLECTION_LOTTERY = 'lottery';
+const COLLECTION_SETTINGS = 'settings';
 const COLLECTION_WINNERS = 'winners';
 
 function rng(previousBlockId, blockId, transactionId, entropy, maximum = 100) {
@@ -50,8 +51,20 @@ export class LottoContract {
     private previousBlockId;
     private transactionId;
 
-    private create() {
+    private async create() {
         this.adapter = this._instance.getAdapter();
+
+        const db: Db = this.adapter['db'];
+
+        const collection = db.collection(COLLECTION_SETTINGS);
+        const settings = await collection.findOne({});
+
+        if (!settings) {
+            collection.insertOne({
+                contractInitiated: new Date(),
+                enabled: true
+            });
+        }
     }
 
     private destroy() {
