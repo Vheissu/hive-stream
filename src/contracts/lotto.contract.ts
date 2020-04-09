@@ -180,6 +180,11 @@ export class LottoContract {
             // Amount each winner gets
             const amountPerWinner = new BigNumber(payoutTotal).dividedBy(HOURLY_WINNERS_PICK).toFixed(3);
 
+            // Winnings exceed balance
+            if (parseFloat(amountPerWinner) > balance) {
+                throw new Error('Balance is less than amount to pay out');
+            }
+
             const winners = await this.getWinners(HOURLY_WINNERS_PICK, draw.entries);
 
             if (winners) {
