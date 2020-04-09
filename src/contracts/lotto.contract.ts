@@ -197,6 +197,49 @@ export class LottoContract {
         }
     }
 
+    async drawDailyLottery() {
+        const db: Db = this.adapter['db'];
+
+        const collection = db.collection(COLLECTION_LOTTERY);
+        const lotto = await collection.find({ status: 'active', type: 'daily' }).limit(1).toArray();
+
+        // We found an hourly draw
+        if (lotto.length) {
+            const draw = lotto[0];
+
+            const total = draw.entries.length;
+
+            const balance = await this.getBalance();
+
+            // Number of entrants multiplied by the entry cost is the total for this draw
+            const winningsAmount = new BigNumber(total).multipliedBy(COST).toNumber();
+
+            // Calculate how much the account gets to keep
+            const percentageFee = new BigNumber(winningsAmount).dividedBy(100).multipliedBy(PERCENTAGE);
+
+            // The amount minus the percentage to pay out to winners
+            const payoutTotal = new BigNumber(winningsAmount).minus(percentageFee);
+
+            // Amount each winner gets
+            const amountPerWinner = new BigNumber(payoutTotal).dividedBy(DAILY_WINNERS_PICK).toFixed(3);
+
+            // Winnings exceed balance
+            if (parseFloat(amountPerWinner) > balance) {
+                throw new Error('Balance is less than amount to pay out');
+            }
+
+            const winners = await this.getWinners(DAILY_WINNERS_PICK, draw.entries);
+
+            if (winners) {
+                for (const winner of winners) {
+                    await this._instance.transferHiveTokens(ACCOUNT, winner.account, amountPerWinner, TOKEN_SYMBOL, `Congratulations you won the daily lottery. You won ${amountPerWinner} ${TOKEN_SYMBOL}`);
+                }
+            }
+
+            return winners;
+        }
+    }
+
     async getWinners(count: number, entries: any[]) {
         let winners = [];
 
