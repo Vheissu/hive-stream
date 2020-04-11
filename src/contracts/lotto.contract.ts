@@ -97,7 +97,18 @@ export class LottoContract {
     }
 
     private async getPreviousUserTicketsForCurrentDrawType(type: string, account: string): Promise<number> {
-        return 0;
+        const db: Db = this.adapter['db'];
+
+        const collection = db.collection(COLLECTION_LOTTERY);
+        const lotto = await collection.find({ status: 'active', type: type }).limit(1).toArray();
+
+        if (!lotto[0] || !lotto[0].entries) {
+            return 0;
+        }
+
+        const userEntries = lotto[0].entries.filter(e => e.account === account);
+
+        return userEntries.length;
     }
 
     async buy(payload, { sender, amount }) {
@@ -120,6 +131,13 @@ export class LottoContract {
             // User did not specify a valid entry type, refund them
             if (!VALID_DRAW_TYPES.includes(type)) {
                 await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] You specified an invalid draw type`);
+                return;
+            }
+
+            // If the user has already entered the maximum allowed times, refund them
+            const previousEntriesCount = await this.getPreviousUserTicketsForCurrentDrawType(type, sender);
+            if (previousEntriesCount === MAX_TICKETS_PER_USER) {
+                await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] You have exceeded the allow number of entries`);
                 return;
             }
 

@@ -13,6 +13,34 @@
         }
     },
     {
+        "from": "beggars",
+        "amount": "10.000 HIVE",
+        "memo": {
+            "hiveContract": {
+                "id": "hivestream",
+                "name": "testlotto",
+                "action": "buy",
+                "payload": {
+                    "type": "hourly"
+                }
+            }
+        }
+    },
+    {
+        "from": "beggars",
+        "amount": "10.000 HIVE",
+        "memo": {
+            "hiveContract": {
+                "id": "hivestream",
+                "name": "testlotto",
+                "action": "buy",
+                "payload": {
+                    "type": "hourly"
+                }
+            }
+        }
+    },
+    {
         "from": "aggroed",
         "amount": "10.000 HIVE",
         "memo": {

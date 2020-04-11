@@ -90,13 +90,25 @@ describe('Lotto Contract', () => {
         }
     });
 
-    test('User enters the lotto, no existing draw found', async () => {
+    test('User enters the lotto, but they have hit the entry limit', async () => {
         try {
             sut.registerContract('testlotto', contract);
 
             contract['_instance'] = sut;
             
             contract['adapter']['db'] = db;
+
+            const lottery = db.collection('lottery');
+            const entries = [];
+
+            for (const entrant of fiftyValidEntrants) {
+                entries.push({
+                    account: entrant.from,
+                    date: new Date()
+                });
+            }
+
+            await lottery.insertOne({ startDate: new Date(), type: 'hourly', status: 'active', entries });
     
             jest.spyOn(contract, 'buy');
             jest.spyOn(contract as any, 'getBalance').mockResolvedValue(2000);
@@ -116,11 +128,11 @@ describe('Lotto Contract', () => {
                 }
             });
     
-            sut.processOperation(['transfer', { from: 'testuser', amount: '10.000 HIVE', memo }], 778782, 'dfjfsdfsdfsd34hfkj88787', 'fkjsdkfj', 'fhkjsdhfkjsdf', '2019-06-23' as any);
+            sut.processOperation(['transfer', { from: 'beggars', amount: '10.000 HIVE', memo }], 778782, 'dfjfsdfsdfsd34hfkj88787', 'fkjsdkfj', 'fhkjsdhfkjsdf', '2019-06-23' as any);
     
             await sleep(100);
     
-            expect(contract.buy).toBeCalled();
+            expect(sut.transferHiveTokens).toBeCalledWith('beggars', 'beggars', '10.000', 'HIVE', '[Refund] You have exceeded the allow number of entries');
         } catch (e) {
             throw e;
         }
@@ -158,7 +170,7 @@ describe('Lotto Contract', () => {
             expect(drawn).toHaveLength(3);
             expect(drawn.includes(undefined)).toBeFalsy();
             expect(sut.transferHiveTokens).toBeCalledTimes(3);
-            expect(sut.transferHiveTokens).toBeCalledWith('beggars', expect.any(String), '158.333', 'HIVE', 'Congratulations you won the hourly lottery. You won 158.333 HIVE');
+            expect(sut.transferHiveTokens).toBeCalledWith('beggars', expect.any(String), '164.667', 'HIVE', 'Congratulations you won the hourly lottery. You won 164.667 HIVE');
         } catch (e) {
             throw e;
         }
@@ -229,7 +241,7 @@ describe('Lotto Contract', () => {
             expect(drawn).toHaveLength(10);
             expect(drawn.includes(undefined)).toBeFalsy();
             expect(sut.transferHiveTokens).toBeCalledTimes(10);
-            expect(sut.transferHiveTokens).toBeCalledWith('beggars', expect.any(String), '47.500', 'HIVE', 'Congratulations you won the daily lottery. You won 47.500 HIVE');
+            expect(sut.transferHiveTokens).toBeCalledWith('beggars', expect.any(String), '49.400', 'HIVE', 'Congratulations you won the daily lottery. You won 49.400 HIVE');
         } catch (e) {
             throw e;
         }
