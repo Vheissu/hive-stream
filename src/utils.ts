@@ -43,16 +43,16 @@ export const Utils = {
     },
 
     randomString(length = 12) {
-        let memo = '';
+        let str = '';
     
         const characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
         const max = characters.length - 1;
     
         for (let i = 0; i < length; i++) {
-            memo += characters[Utils.randomRange(0, max)];
+            str += characters[Utils.randomRange(0, max)];
         }
     
-        return memo;
+        return str;
     },
 
     async convertHiveAmount(amount, fiatSymbol, hiveSymbol) {
@@ -284,6 +284,10 @@ export const Utils = {
         for (let index = 0; index < array.length; index++) {
           await callback(array[index], index, array);
         }
+    },
+
+    getTransferUrl(to: string, memo: string, amount: string, redirectUri: string) {
+        return `https://hivesigner.com/sign/transfer?to=${to}&memo=${memo}&amount=${amount}&redirect_uri=${redirectUri}`;
     }
 
 };
