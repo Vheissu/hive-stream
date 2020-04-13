@@ -17,5 +17,5 @@ customGlobal.fetch = require('jest-fetch-mock');
 customGlobal.fetchMock = customGlobal.fetch;;
 
 process.on('unhandledRejection', (error) => {
-    throw error; // Or whatever you like...
-  });
+  throw error; // Or whatever you like...
+});

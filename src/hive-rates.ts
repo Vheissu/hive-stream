@@ -15,7 +15,7 @@ export class HiveRates {
 
         let exchangesUpdated = false;
 
-        const exchanges = [new BittrexExchange];
+        const exchanges = [ new BittrexExchange() ];
 
         for (const exchange of exchanges) {
             const updated = await exchange.updateRates();

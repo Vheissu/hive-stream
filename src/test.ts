@@ -7,6 +7,9 @@ import { DiceContract } from './contracts/dice.contract';
 
 import { SqliteAdapter } from './adapters/sqlite.adapter';
 import { TimeAction } from './actions';
+import { Utils } from './utils';
+
+(global as any).fetch = require('node-fetch');
 
 const streamer = new Streamer({
     JSON_ID: 'testdice',
@@ -24,6 +27,10 @@ const testAction2 = new TimeAction('1m', 'test1m', 'hivedice', 'testauto');
 
 streamer.registerAction(testAction);
 streamer.registerAction(testAction2);
+
+Utils.convertHiveAmount(1, 'USD', 'HIVE').then(res => {
+    console.log(res);
+});
 
 // Start streaming
 streamer.start();
