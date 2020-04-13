@@ -9,7 +9,8 @@ import { Db } from 'mongodb';
 
 const CONTRACT_NAME = 'hivelotto';
 
-const ACCOUNT = 'beggars';
+const ACCOUNT = 'hivelotto';
+const FEE_ACCOUNT = 'beggars';
 const TOKEN_SYMBOL = 'HIVE';
 const VALID_CURRENCIES = ['HIVE'];
 const VALID_DRAW_TYPES = ['hourly', 'daily'];
@@ -191,6 +192,16 @@ export class LottoContract {
 
             const total = draw.entries.length;
 
+            // Number of entrants is less than the minimum
+            if (total < MIN_ENTRIES_HOURLY) {
+                for (const entrant of draw.entries) {
+                    await this._instance.transferHiveTokens(ACCOUNT, entrant.account, '10.000', 'HIVE', '[Refund] The hourly lotto draw did not have enough contestants.');
+                    await Utils.sleep(3000);
+                }
+
+                return;
+            }
+
             const balance = await this.getBalance();
 
             // Number of entrants multiplied by the entry cost is the total for this draw
@@ -204,6 +215,9 @@ export class LottoContract {
 
             // Amount each winner gets
             const amountPerWinner = new BigNumber(payoutTotal).dividedBy(HOURLY_WINNERS_PICK).toFixed(3);
+
+            // Send fee percentage to fee account
+            await this._instance.transferHiveTokens(ACCOUNT, FEE_ACCOUNT, percentageFee.toFixed(3), 'HIVE', 'percentage fee');
 
             // Winnings exceed balance
             if (parseFloat(amountPerWinner) > balance) {
@@ -236,7 +250,12 @@ export class LottoContract {
 
             // Number of entrants is less than the minimum
             if (total < MIN_ENTRIES_DAILY) {
+                for (const entrant of draw.entries) {
+                    await this._instance.transferHiveTokens(ACCOUNT, entrant.account, '10.000', 'HIVE', '[Refund] The hourly lotto draw did not have enough contestants.');
+                    await Utils.sleep(3000);
+                }
 
+                return;
             }
 
             const balance = await this.getBalance();
@@ -252,6 +271,9 @@ export class LottoContract {
 
             // Amount each winner gets
             const amountPerWinner = new BigNumber(payoutTotal).dividedBy(DAILY_WINNERS_PICK).toFixed(3);
+
+            // Send fee percentage to fee account
+            await this._instance.transferHiveTokens(ACCOUNT, FEE_ACCOUNT, percentageFee.toFixed(3), 'HIVE', 'percentage fee');
 
             // Winnings exceed balance
             if (parseFloat(amountPerWinner) > balance) {
@@ -273,7 +295,7 @@ export class LottoContract {
     async getWinners(count: number, entries: any[]) {
         let winners = [];
 
-        let shuffledEntries = Utils.shuffle(entries);
+        Utils.shuffle(entries);
 
         for (const entry of entries) {
             if (winners.length < count) {

@@ -176,6 +176,42 @@ describe('Lotto Contract', () => {
         }
     });
 
+    test('Draw the hourly lottery, but not enough entrants, so we refund', async () => {
+        try {
+            sut.registerContract('testlotto', contract);
+
+            contract['_instance'] = sut;
+            
+            contract['adapter']['db'] = db;
+
+            const lottery = db.collection('lottery');
+            const entries = [];
+            const reducedEntries = fiftyValidEntrants.slice(0, 2);
+
+            for (const entrant of reducedEntries) {
+                entries.push({
+                    account: entrant.from,
+                    date: new Date()
+                });
+            }
+
+            await lottery.insertOne({ startDate: new Date(), type: 'hourly', status: 'active', entries });
+    
+            jest.spyOn(contract, 'buy');
+            jest.spyOn(contract as any, 'getBalance').mockResolvedValue(2000);
+    
+            jest.spyOn(sut, 'getTransaction').mockResolvedValue({test: 123} as any);
+            jest.spyOn(sut, 'verifyTransfer').mockResolvedValue(true as any);
+            jest.spyOn(sut, 'transferHiveTokens').mockResolvedValue(true as any);
+    
+            const drawn = await contract.drawHourlyLottery();
+
+            expect(sut.transferHiveTokens).toBeCalledTimes(3);
+        } catch (e) {
+            throw e;
+        }
+    });
+
     test('Draw the hourly lottery, balance cannot afford to pay out winnings', async () => {
         try {
             sut.registerContract('testlotto', contract);
