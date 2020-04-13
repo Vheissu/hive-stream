@@ -167,7 +167,7 @@ describe('Lotto Contract', () => {
     
             const drawn = await contract.drawHourlyLottery();
 
-            expect(drawn).toHaveLength(3);
+            expect(drawn).toHaveLength(4);
             expect(drawn.includes(undefined)).toBeFalsy();
             expect(sut.transferHiveTokens).toBeCalledTimes(3);
             expect(sut.transferHiveTokens).toBeCalledWith('hivelotto', expect.any(String), '164.667', 'HIVE', 'Congratulations you won the hourly lottery. You won 164.667 HIVE');
@@ -187,7 +187,7 @@ describe('Lotto Contract', () => {
             const lottery = db.collection('lottery');
             const entries = [];
             const reducedEntries = fiftyValidEntrants.slice(0, 2);
-
+            
             for (const entrant of reducedEntries) {
                 entries.push({
                     account: entrant.from,
@@ -206,7 +206,7 @@ describe('Lotto Contract', () => {
     
             const drawn = await contract.drawHourlyLottery();
 
-            expect(sut.transferHiveTokens).toBeCalledTimes(3);
+            expect(sut.transferHiveTokens).toBeCalledTimes(2);
         } catch (e) {
             throw e;
         }
