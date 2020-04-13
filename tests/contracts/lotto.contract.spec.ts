@@ -167,7 +167,7 @@ describe('Lotto Contract', () => {
     
             const drawn = await contract.drawHourlyLottery();
 
-            expect(drawn).toHaveLength(4);
+            expect(drawn).toHaveLength(2);
             expect(drawn.includes(undefined)).toBeFalsy();
             expect(sut.transferHiveTokens).toBeCalledTimes(4);
             expect(sut.transferHiveTokens).toBeCalledWith('hivelotto', expect.any(String), '164.667', 'HIVE', 'Congratulations you won the hourly lottery. You won 164.667 HIVE');
@@ -275,7 +275,7 @@ describe('Lotto Contract', () => {
     
             const drawn = await contract.drawDailyLottery();
 
-            expect(drawn).toHaveLength(11);
+            expect(drawn).toHaveLength(10);
             expect(drawn.includes(undefined)).toBeFalsy();
             expect(sut.transferHiveTokens).toBeCalledTimes(10);
             expect(sut.transferHiveTokens).toBeCalledWith('hivelotto', expect.any(String), '49.400', 'HIVE', 'Congratulations you won the daily lottery. You won 49.400 HIVE');
