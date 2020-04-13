@@ -1,3 +1,4 @@
+import { HiveRates } from './hive-rates';
 import { Client, SignedTransaction, PrivateKey } from '@hivechain/dhive';
 import { Config, ConfigInterface } from './config';
 import seedrandom from 'seedrandom';
@@ -29,6 +30,44 @@ export const Utils = {
         }
       
         return array;
+    },
+
+    roundPrecision(value, precision) {
+        const NUMBER_SIGN = value >= 0 ? 1 : -1;
+
+        return parseFloat((Math.round((value * Math.pow(10, precision)) + (NUMBER_SIGN * 0.0001)) / Math.pow(10, precision)).toFixed(precision));
+    },
+
+    randomRange(min = 0, max = 2000) {
+        return (!isNaN(min) && !isNaN(max) ? Math.floor(Math.random() * (max - min + 1)) + min : NaN); 
+    },
+
+    randomString(length = 12) {
+        let memo = '';
+    
+        const characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        const max = characters.length - 1;
+    
+        for (let i = 0; i < length; i++) {
+            memo += characters[Utils.randomRange(0, max)];
+        }
+    
+        return memo;
+    },
+
+    async convertHiveAmount(amount, fiatSymbol, hiveSymbol) {
+        if (fiatSymbol === hiveSymbol) {
+            return amount;
+        }
+    
+        const rates = new HiveRates();
+    
+        await rates.fetchRates();
+    
+        const rate = rates.fiatToHiveRate(fiatSymbol, hiveSymbol);
+        const total = amount / rate;
+        
+        return rate > 0 ? Utils.roundPrecision(total, 3) : 0;
     },
 
     jsonParse(str: string) {
