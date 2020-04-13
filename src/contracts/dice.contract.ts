@@ -162,9 +162,7 @@ export class DiceContract {
                 } else {
                     try {
                         // We need to refund the user
-                        const transfer = await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] You sent an invalid bet amount.`);
-
-                        console.log(transfer);
+                        await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] You sent an invalid bet amount.`);
                     } catch (e) {
                         console.log(e);
                     }

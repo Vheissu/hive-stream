@@ -132,7 +132,7 @@ describe('Lotto Contract', () => {
     
             await sleep(100);
     
-            expect(sut.transferHiveTokens).toBeCalledWith('beggars', 'beggars', '10.000', 'HIVE', '[Refund] You have exceeded the allow number of entries');
+            expect(sut.transferHiveTokens).toBeCalledWith('hivelotto', 'beggars', '10.000', 'HIVE', '[Refund] You have exceeded the allow number of entries');
         } catch (e) {
             throw e;
         }
@@ -170,7 +170,7 @@ describe('Lotto Contract', () => {
             expect(drawn).toHaveLength(3);
             expect(drawn.includes(undefined)).toBeFalsy();
             expect(sut.transferHiveTokens).toBeCalledTimes(3);
-            expect(sut.transferHiveTokens).toBeCalledWith('beggars', expect.any(String), '164.667', 'HIVE', 'Congratulations you won the hourly lottery. You won 164.667 HIVE');
+            expect(sut.transferHiveTokens).toBeCalledWith('hivelotto', expect.any(String), '164.667', 'HIVE', 'Congratulations you won the hourly lottery. You won 164.667 HIVE');
         } catch (e) {
             throw e;
         }
@@ -277,7 +277,7 @@ describe('Lotto Contract', () => {
             expect(drawn).toHaveLength(10);
             expect(drawn.includes(undefined)).toBeFalsy();
             expect(sut.transferHiveTokens).toBeCalledTimes(10);
-            expect(sut.transferHiveTokens).toBeCalledWith('beggars', expect.any(String), '49.400', 'HIVE', 'Congratulations you won the daily lottery. You won 49.400 HIVE');
+            expect(sut.transferHiveTokens).toBeCalledWith('hivelotto', expect.any(String), '49.400', 'HIVE', 'Congratulations you won the daily lottery. You won 49.400 HIVE');
         } catch (e) {
             throw e;
         }
@@ -316,7 +316,7 @@ describe('Lotto Contract', () => {
     
             await sleep(100);
     
-            expect(sut.transferHiveTokens).toBeCalledWith('beggars', 'testuser', '10.000', 'HBD', '[Refund] You sent an invalid currency.');
+            expect(sut.transferHiveTokens).toBeCalledWith('hivelotto', 'testuser', '10.000', 'HBD', '[Refund] You sent an invalid currency.');
         } catch (e) {
             throw e;
         }
@@ -355,7 +355,7 @@ describe('Lotto Contract', () => {
     
             await sleep(100);
     
-            expect(sut.transferHiveTokens).toBeCalledWith('beggars', 'testuser', '10.000', 'HIVE', '[Refund] A ticket costs 10 HIVE. You sent 20.000 HIVE. You were refunded 10.000 HIVE.');
+            expect(sut.transferHiveTokens).toBeCalledWith('hivelotto', 'testuser', '10.000', 'HIVE', '[Refund] A ticket costs 10 HIVE. You sent 20.000 HIVE. You were refunded 10.000 HIVE.');
         } catch (e) {
             throw e;
         }
