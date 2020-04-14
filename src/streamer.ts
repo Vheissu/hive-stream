@@ -654,6 +654,10 @@ export class Streamer {
         );
     }
 
+    public transferHiveTokensMultiple(from: string, accounts: string[] = [], symbol: string, amount: string = '0', memo: string = '') {
+        return Utils.transferHiveTokensMultiple(this.client, this.config, from, accounts, symbol, memo, amount);
+    }
+
     public transferHiveEngineTokens(from: string, to: string, symbol: string, quantity: string, memo: string = '') {
         return Utils.transferHiveEngineTokens(this.client, this.config, from, to, symbol, quantity, memo);
     }
