@@ -33,6 +33,8 @@ describe('Lotto Contract', () => {
     });
 
     afterEach(async () => {
+        jest.restoreAllMocks();
+
         await sut.stop();
 
         await db.collection('lottery').deleteMany({});
@@ -40,7 +42,6 @@ describe('Lotto Contract', () => {
 
     afterAll(() => {
         connection.close();
-        jest.restoreAllMocks();
     });
 
     test('Registers the lotto contract', () => {
@@ -163,14 +164,14 @@ describe('Lotto Contract', () => {
     
             jest.spyOn(sut, 'getTransaction').mockResolvedValue({test: 123} as any);
             jest.spyOn(sut, 'verifyTransfer').mockResolvedValue(true as any);
-            jest.spyOn(sut, 'transferHiveTokens').mockResolvedValue(true as any);
+            jest.spyOn(sut, 'transferHiveTokensMultiple').mockResolvedValue(true as any);
     
             const drawn = await contract.drawHourlyLottery();
 
-            expect(drawn).toHaveLength(2);
+            expect(drawn).toHaveLength(3);
             expect(drawn.includes(undefined)).toBeFalsy();
-            expect(sut.transferHiveTokens).toBeCalledTimes(4);
-            expect(sut.transferHiveTokens).toBeCalledWith('hivelotto', expect.any(String), '164.667', 'HIVE', 'Congratulations you won the hourly lottery. You won 164.667 HIVE');
+            expect(sut.transferHiveTokensMultiple).toBeCalledTimes(1);
+            expect(sut.transferHiveEngineTokensMultiple).toBeCalledWith('hivelotto', expect.any(Array), '164.667', 'HIVE', 'Congratulations you won the hourly lottery. You won 164.667 HIVE');
         } catch (e) {
             throw e;
         }
@@ -202,11 +203,11 @@ describe('Lotto Contract', () => {
     
             jest.spyOn(sut, 'getTransaction').mockResolvedValue({test: 123} as any);
             jest.spyOn(sut, 'verifyTransfer').mockResolvedValue(true as any);
-            jest.spyOn(sut, 'transferHiveTokens').mockResolvedValue(true as any);
+            jest.spyOn(sut, 'transferHiveTokensMultiple').mockResolvedValue(true as any);
     
             const drawn = await contract.drawHourlyLottery();
 
-            expect(sut.transferHiveTokens).toBeCalledTimes(2);
+            expect(sut.transferHiveTokensMultiple).toBeCalledTimes(1);
         } catch (e) {
             throw e;
         }
@@ -237,7 +238,7 @@ describe('Lotto Contract', () => {
     
             jest.spyOn(sut, 'getTransaction').mockResolvedValue({test: 123} as any);
             jest.spyOn(sut, 'verifyTransfer').mockResolvedValue(true as any);
-            jest.spyOn(sut, 'transferHiveTokens').mockResolvedValue(true as any);
+            jest.spyOn(sut, 'transferHiveTokensMultiple').mockResolvedValue(true as any);
 
             expect(contract.drawHourlyLottery()).rejects.toEqual(new Error('Balance is less than amount to pay out'));
         } catch (e) {
@@ -277,7 +278,7 @@ describe('Lotto Contract', () => {
 
             expect(drawn).toHaveLength(10);
             expect(drawn.includes(undefined)).toBeFalsy();
-            expect(sut.transferHiveTokens).toBeCalledTimes(10);
+            expect(sut.transferHiveTokens).toBeCalledTimes(11);
             expect(sut.transferHiveTokens).toBeCalledWith('hivelotto', expect.any(String), '49.400', 'HIVE', 'Congratulations you won the daily lottery. You won 49.400 HIVE');
         } catch (e) {
             throw e;
