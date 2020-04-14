@@ -24,7 +24,7 @@ describe('Lotto Contract', () => {
     });
 
     beforeEach(async () => {
-        sut = new Streamer();
+        sut = new Streamer({ ACTIVE_KEY: '' });
         contract = new LottoContract();
 
         sut['adapter']['db'] = db;

@@ -146,6 +146,7 @@ export class LottoContract {
             if (amountParsed > COST) {
                 const difference = new BigNumber(amountParsed).minus(COST).toFixed(3);
                 await this._instance.transferHiveTokens(ACCOUNT, sender, difference, amountTrim[1], `[Refund] A ticket costs ${COST} HIVE. You sent ${amount}. You were refunded ${difference} HIVE.`);
+                return;
             }
 
             // Get database reference from adapter
