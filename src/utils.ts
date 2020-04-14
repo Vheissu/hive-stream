@@ -107,6 +107,25 @@ export const Utils = {
         return client.broadcast.transfer({from, to, amount: `${parseFloat(amount).toFixed(3)} ${symbol}`, memo}, key);
     },
 
+    async transferHiveTokensMultiple(client: Client, config: ConfigInterface, from: string, accounts: string[], symbol: string, amount: string = '0', memo: string) {
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+        let completed = 0;
+
+        for (const user of accounts) {
+            const to: string = user.replace('@', '');
+
+            await client.broadcast.transfer({from, to, amount: `${parseFloat(amount).toFixed(3)} ${symbol}`, memo}, key);
+
+            completed++;
+
+            await this.sleep(3000);
+        }
+
+        if (completed === accounts.length) {
+            return true;
+        }
+    },
+
     transferHiveEngineTokens(client: Client, config: ConfigInterface, from: string, to: string, quantity: string, symbol: string, memo: string = '') {
         const key = PrivateKey.fromString(config.ACTIVE_KEY);
 
@@ -169,7 +188,6 @@ export const Utils = {
             await client.broadcast.json({required_auths: requiredAuths, required_posting_auths: requiredPostingAuths, id: config.HIVE_ENGINE_ID, json: JSON.stringify(payload)}, key);
 
             completed++;
-
 
             if (completed !== (payloads.length) && completed !== 0) {
                 await this.sleep(3000);
