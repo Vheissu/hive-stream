@@ -8,6 +8,7 @@ import { DiceContract } from './contracts/dice.contract';
 import { SqliteAdapter } from './adapters/sqlite.adapter';
 import { TimeAction } from './actions';
 import { Utils } from './utils';
+import { LottoContract } from './contracts/lotto.contract';
 
 (global as any).fetch = require('node-fetch');
 
@@ -21,6 +22,7 @@ streamer.registerAdapter(new MongodbAdapter('mongodb://127.0.0.1:27017', 'hivest
 
 // Register contract
 streamer.registerContract('hivedice', new DiceContract());
+streamer.registerContract('hivelotto', new LottoContract());
 
 const testAction = new TimeAction('hourly', 'testhourly', 'hivedice', 'testauto');
 const testAction2 = new TimeAction('1m', 'test1m', 'hivedice', 'testauto');
