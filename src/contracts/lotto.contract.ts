@@ -281,7 +281,7 @@ export class LottoContract {
             await this._instance.transferHiveTokens(ACCOUNT, FEE_ACCOUNT, percentageFee.toFixed(3), 'HIVE', 'percentage fee');
 
             // Winnings exceed balance
-            if (parseFloat(amountPerWinner) > balance) {
+            if (payoutTotal.toNumber() > balance) {
                 throw new Error('Balance is less than amount to pay out');
             }
 

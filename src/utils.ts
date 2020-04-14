@@ -107,7 +107,7 @@ export const Utils = {
         return client.broadcast.transfer({from, to, amount: `${parseFloat(amount).toFixed(3)} ${symbol}`, memo}, key);
     },
 
-    async transferHiveTokensMultiple(client: Client, config: ConfigInterface, from: string, accounts: string[], symbol: string, amount: string = '0', memo: string) {
+    async transferHiveTokensMultiple(client: Client, config: ConfigInterface, from: string, accounts: string[], amount: string = '0', symbol: string, memo: string) {
         const key = PrivateKey.fromString(config.ACTIVE_KEY);
         let completed = 0;
 
