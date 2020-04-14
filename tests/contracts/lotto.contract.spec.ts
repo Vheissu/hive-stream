@@ -284,7 +284,7 @@ describe('Lotto Contract', () => {
 
             expect(drawn).toHaveLength(10);
             expect(drawn.includes(undefined)).toBeFalsy();
-            expect(sut.transferHiveTokensMultiple).toBeCalledWith('beggars', expect.any(Array), '49.400', 'HIVE', 'Congratulations you won the daily lottery. You won 49.400 HIVE');
+            expect(sut.transferHiveTokensMultiple).toBeCalledWith('beggars', expect.any(Array), '98.800', 'HIVE', 'Congratulations you won the daily lottery. You won 98.800 HIVE');
         } catch (e) {
             throw e;
         }
