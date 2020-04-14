@@ -9,7 +9,7 @@ import { Db } from 'mongodb';
 
 const CONTRACT_NAME = 'hivelotto';
 
-const ACCOUNT = 'hivelotto';
+const ACCOUNT = 'beggars';
 const FEE_ACCOUNT = 'beggars';
 const TOKEN_SYMBOL = 'HIVE';
 const VALID_CURRENCIES = ['HIVE'];
@@ -219,7 +219,9 @@ export class LottoContract {
             const amountPerWinner = new BigNumber(payoutTotal).dividedBy(HOURLY_WINNERS_PICK).toFixed(3);
 
             // Send fee percentage to fee account
-            await this._instance.transferHiveTokens(ACCOUNT, FEE_ACCOUNT, percentageFee.toFixed(3), 'HIVE', 'percentage fee');
+            if (ACCOUNT !== FEE_ACCOUNT) {
+                await this._instance.transferHiveTokens(ACCOUNT, FEE_ACCOUNT, percentageFee.toFixed(3), 'HIVE', 'percentage fee');
+            }
 
             // Winnings exceed balance
             if (payoutTotal.toNumber() > balance) {
@@ -278,7 +280,9 @@ export class LottoContract {
             const amountPerWinner = new BigNumber(payoutTotal).dividedBy(DAILY_WINNERS_PICK).toFixed(3);
 
             // Send fee percentage to fee account
-            await this._instance.transferHiveTokens(ACCOUNT, FEE_ACCOUNT, percentageFee.toFixed(3), 'HIVE', 'percentage fee');
+            if (ACCOUNT !== FEE_ACCOUNT) {
+                await this._instance.transferHiveTokens(ACCOUNT, FEE_ACCOUNT, percentageFee.toFixed(3), 'HIVE', 'percentage fee');
+            }
 
             // Winnings exceed balance
             if (payoutTotal.toNumber() > balance) {
