@@ -288,9 +288,12 @@ export class LottoContract {
             const winners = await this.getWinners(DAILY_WINNERS_PICK, draw.entries);
 
             if (winners) {
-                for (const winner of winners) {
-                    await this._instance.transferHiveTokens(ACCOUNT, winner.account, amountPerWinner, TOKEN_SYMBOL, `Congratulations you won the daily lottery. You won ${amountPerWinner} ${TOKEN_SYMBOL}`);
-                }
+                const winnerStrings = winners.reduce((arr, winner) => {
+                    arr.push(winner.account);
+                    return arr;
+                }, []);
+
+                await this._instance.transferHiveTokensMultiple(ACCOUNT, winnerStrings, amountPerWinner, TOKEN_SYMBOL, `Congratulations you won the daily lottery. You won ${amountPerWinner} ${TOKEN_SYMBOL}`);
             }
 
             return winners;
