@@ -194,10 +194,12 @@ export class LottoContract {
 
             // Number of entrants is less than the minimum
             if (total < MIN_ENTRIES_HOURLY) {
-                for (const entrant of draw.entries) {
-                    await this._instance.transferHiveTokens(ACCOUNT, entrant.account, '10.000', 'HIVE', '[Refund] The hourly lotto draw did not have enough contestants.');
-                    await Utils.sleep(3000);
-                }
+                const entrants = draw.entries.reduce((arr, entrant) => {
+                    arr.push(entrant.account);
+                    return arr;
+                }, []);
+
+                await this._instance.transferHiveTokensMultiple(ACCOUNT, entrants, '10.000', 'HIVE', '[Refund] The hourly lotto draw did not have enough contestants.')
 
                 return;
             }
@@ -220,16 +222,19 @@ export class LottoContract {
             await this._instance.transferHiveTokens(ACCOUNT, FEE_ACCOUNT, percentageFee.toFixed(3), 'HIVE', 'percentage fee');
 
             // Winnings exceed balance
-            if (parseFloat(amountPerWinner) > balance) {
+            if (payoutTotal.toNumber() > balance) {
                 throw new Error('Balance is less than amount to pay out');
             }
 
             const winners = await this.getWinners(HOURLY_WINNERS_PICK, draw.entries);
 
             if (winners) {
-                for (const winner of winners) {
-                    await this._instance.transferHiveTokens(ACCOUNT, winner.account, amountPerWinner, TOKEN_SYMBOL, `Congratulations you won the hourly lottery. You won ${amountPerWinner} ${TOKEN_SYMBOL}`);
-                }
+                const winnerStrings = winners.reduce((arr, winner) => {
+                    arr.push(winner.account);
+                    return arr;
+                }, []);
+
+                await this._instance.transferHiveTokensMultiple(ACCOUNT, winnerStrings, amountPerWinner, TOKEN_SYMBOL, `Congratulations you won the hourly lottery. You won ${amountPerWinner} ${TOKEN_SYMBOL}`);
             }
 
             return winners;
