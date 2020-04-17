@@ -30,10 +30,6 @@ const testAction2 = new TimeAction('1m', 'test1m', 'hivedice', 'testauto');
 streamer.registerAction(testAction);
 streamer.registerAction(testAction2);
 
-Utils.convertHiveAmount(1, 'USD', 'HIVE').then(res => {
-    console.log(res);
-});
-
 // Start streaming
 streamer.start();
 

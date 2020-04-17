@@ -632,6 +632,17 @@ export class Streamer {
                         action.reset();
                     }
                 break;
+
+                case 'week':
+                    difference = blockDate.diff(date, 'w');
+
+                    // One week has passed
+                    if (difference >= 1) {
+                        contract.contract[action.contractMethod](action.payload);
+                        
+                        action.reset();
+                    }
+                break;
             }
         }
     }
