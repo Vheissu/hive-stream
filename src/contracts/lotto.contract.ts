@@ -237,7 +237,19 @@ export class LottoContract {
                     return arr;
                 }, []);
 
-                await this._instance.transferHiveTokensMultiple(ACCOUNT, winnerStrings, amountPerWinner, TOKEN_SYMBOL, `Congratulations you won the hourly lottery. You won ${amountPerWinner} ${TOKEN_SYMBOL}`);
+                await this._instance.transferHiveTokensMultiple(ACCOUNT, winnerStrings, amountPerWinner, TOKEN_SYMBOL, `Congratulations you won the hourly lottery. You won ${amountPerWinner} ${TOKEN_SYMBOL}. Winners: ${winnerStrings.join(', ')}`);
+                
+                const losers = draw.entries
+                    .filter(e => {
+                        return !winnerStrings.includes(e.account)
+                    })
+                    .reduce((unique, value) => {
+                        return unique.includes(value.account) ? unique : [ ...unique, value.account ];
+                    }, []);
+
+                if (losers) {
+                    await this._instance.transferHiveTokensMultiple(ACCOUNT, losers, '0.001', TOKEN_SYMBOL, `Sorry, you didn't win the hourly draw. Winners: ${winnerStrings.join(', ')}`);
+                }
             }
 
             return winners;
