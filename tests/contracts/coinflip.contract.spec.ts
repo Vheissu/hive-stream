@@ -46,7 +46,8 @@ describe('Coinflip Contract', () => {
                 name: 'coinflip',
                 action: 'flip',
                 payload: {
-                    guess: 'heads'
+                    guess: 'heads',
+                    seed: 'hj879879g7686876'
                 }
             }
         });
@@ -60,6 +61,41 @@ describe('Coinflip Contract', () => {
         expect(contract['flip']).toBeCalled();
         expect(contract['_instance'].getTransaction).toBeCalledWith(778782, 'fhkjsdhfkjsdf');
         expect(contract['_instance'].transferHiveTokens).toBeCalledWith('beggars', 'testuser', '18.000', 'HIVE', '[Winner] You won. Previous block id: fkjs7878dkfj BlockID: dfjfsdfsdfs4hfkj88787 Trx ID: fhkjsdhfkjsdf Server Seed: j93jgsjghjdhgjfhgkfdhgkj34872394723');
+    });
+
+    test('User loses a flip', async () => {
+        sut.registerContract('coinflip', contract);
+
+        contract['_instance'] = sut;
+
+        jest.spyOn(contract as any, 'flip');
+        jest.spyOn(contract as any, 'getBalance').mockResolvedValue(2000);
+
+        jest.spyOn(sut, 'getTransaction').mockResolvedValue({test: 123} as any);
+        jest.spyOn(sut, 'verifyTransfer').mockResolvedValue(true as any);
+        jest.spyOn(sut, 'transferHiveTokens').mockResolvedValue(true as any);
+
+        const memo = JSON.stringify({
+            hivePayload: {
+                id: 'hivestream',
+                name: 'coinflip',
+                action: 'flip',
+                payload: {
+                    guess: 'heads',
+                    seed: 'tulips'
+                }
+            }
+        });
+
+        jest.spyOn(uuid, 'v4').mockReturnValue('j93jgsjghjdhgjfhgkfdhgkj34872394723');
+
+        sut.processOperation(['transfer', { from: 'testuser', amount: '9.000 HIVE', memo }], 778782, 'dfjfsdfsdfs4hfkj88787', 'fkjs7878dkfj', 'fhkjsdhfkjsdf', '2019-06-23' as any);
+
+        await sleep(100);
+
+        expect(contract['flip']).toBeCalled();
+        expect(contract['_instance'].getTransaction).toBeCalledWith(778782, 'fhkjsdhfkjsdf');
+        expect(contract['_instance'].transferHiveTokens).toBeCalledWith('beggars', 'testuser', '0.001', 'HIVE', '[Lost] You lost. Previous block id: fkjs7878dkfj BlockID: dfjfsdfsdfs4hfkj88787 Trx ID: fhkjsdhfkjsdf Server Seed: j93jgsjghjdhgjfhgkfdhgkj34872394723');
     });
 
     test('User sent an unsupported currency, refund them', async () => {
