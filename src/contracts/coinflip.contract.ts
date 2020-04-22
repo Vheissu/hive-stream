@@ -12,7 +12,6 @@ const MAX_AMOUNT = 25;
 function rng(previousBlockId, blockId, transactionId, serverSeed, clientSeed = ''): 'heads' | 'tails' {
     const random = seedrandom(`${previousBlockId}${blockId}${transactionId}${clientSeed}`).double();
     const randomRoll = Math.floor(random * 2) + 1;
-    console.log(randomRoll);
 
     return randomRoll === 1 ? 'heads' : 'tails';
 }
