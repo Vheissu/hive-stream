@@ -1,15 +1,15 @@
 import uuid from 'uuid';
-import { HeadsTailsContract } from './../../src/contracts/heads-tails.contract';
+import { CoinflipContract } from '../../src/contracts/coinflip.contract';
 import { sleep } from '@hivechain/dhive/lib/utils';
 import { Streamer } from '../../src/streamer';
 
-describe('Heads or Tails Contract', () => {
+describe('Coinflip Contract', () => {
     let sut: Streamer;
-    let contract: HeadsTailsContract;
+    let contract: CoinflipContract;
 
     beforeEach(() => {
         sut = new Streamer();
-        contract = new HeadsTailsContract();
+        contract = new CoinflipContract();
     });
 
     afterEach(() => {

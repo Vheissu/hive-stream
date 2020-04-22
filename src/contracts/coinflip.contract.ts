@@ -2,7 +2,7 @@ import { Streamer } from '../streamer';
 import seedrandom from 'seedrandom';
 import { v4 as uuidv4 } from 'uuid';
 
-const CONTRACT_NAME = 'headstails';
+const CONTRACT_NAME = 'coinflip';
 
 const ACCOUNT = 'beggars';
 const TOKEN_SYMBOL = 'HIVE';
@@ -17,7 +17,7 @@ function rng(previousBlockId, blockId, transactionId, serverSeed, clientSeed = '
     return randomRoll === 1 ? 'heads' : 'tails';
 }
 
-export class HeadsTailsContract {
+export class CoinflipContract {
     // tslint:disable-next-line: variable-name
     private _instance: Streamer;
     private adapter;
