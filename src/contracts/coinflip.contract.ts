@@ -69,11 +69,11 @@ export class CoinflipContract {
             const generatedGuess = rng(this.previousBlockId, this.blockId, this.transactionId, serverSeed, seed ?? '');
 
             if (generatedGuess === guess) {
-                await this._instance.transferHiveTokens(ACCOUNT, sender, (amountParsed * 2).toFixed(3), amountTrim[1], `[Winner] You won. Previous block id: ${this.previousBlockId} BlockID: ${this.blockId} Trx ID: ${this.transactionId} Server Seed: ${serverSeed}`);
+                await this._instance.transferHiveTokens(ACCOUNT, sender, (amountParsed * 2).toFixed(3), amountTrim[1], `[Winner] | Guess: ${guess} | Server Roll: ${generatedGuess} | Previous block id: ${this.previousBlockId} | BlockID: ${this.blockId} | Trx ID: ${this.transactionId} | Server Seed: ${serverSeed}`);
                 return;
             }
 
-            await this._instance.transferHiveTokens(ACCOUNT, sender, '0.001', amountTrim[1], `[Lost] You lost. Previous block id: ${this.previousBlockId} BlockID: ${this.blockId} Trx ID: ${this.transactionId} Server Seed: ${serverSeed}`);
+            await this._instance.transferHiveTokens(ACCOUNT, sender, '0.001', amountTrim[1], `[Lost] | Guess: ${guess} | Server Roll: ${generatedGuess} | Previous block id: ${this.previousBlockId} | BlockID: ${this.blockId} | Trx ID: ${this.transactionId} | Server Seed: ${serverSeed}`);
         }
     }
 }
