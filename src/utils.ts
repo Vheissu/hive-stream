@@ -101,10 +101,6 @@ export const Utils = {
         return (operation.from === from && operation.to === to && operation.amount === amount);
     },
 
-    async confirmHivestreamTransaction(id: string) {
-        
-    },
-
     transferHiveTokens(client: Client, config: Partial<ConfigInterface>, from: string, to: string, amount: string, symbol: string, memo: string = '') {
         const key = PrivateKey.fromString(config.ACTIVE_KEY);
         
@@ -128,6 +124,42 @@ export const Utils = {
         if (completed === accounts.length) {
             return true;
         }
+    },
+
+    async getAccountTransfers(client: Client, account: string, from: number = -1, max: number = 100) {
+        const history = await client.call('condenser_api', 'get_account_history', [account, from, max]);
+        const transfers = history.filter(tx => tx[1].op[0] === 'transfer');
+
+        const actualTransfers = transfers.reduce((arr, tx) => {
+            const transaction = tx[1].op[1];
+            const date = new Date(`${tx[1].timestamp}Z`);
+    
+            transaction.date = date;
+    
+            arr.push(transaction);
+    
+            return arr;
+        }, []);
+
+        return actualTransfers;
+    },
+
+    async getApiJson(client: Client, from: number = -1, limit: number = 500) {
+        const history = await client.call('condenser_api', 'get_account_history', ['hiveapi', from, limit]);
+        const customJson = history.filter(tx => tx[1].op[0] === 'custom_json');
+
+        const actualJson = customJson.reduce((arr, tx) => {
+            const transaction = tx[1].op[1];
+            const date = new Date(`${tx[1].timestamp}Z`);
+    
+            transaction.date = date;
+    
+            arr.push(transaction);
+    
+            return arr;
+        }, []);
+
+        return actualJson;
     },
 
     transferHiveEngineTokens(client: Client, config: ConfigInterface, from: string, to: string, quantity: string, symbol: string, memo: string = '') {

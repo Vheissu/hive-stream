@@ -661,8 +661,11 @@ export class Streamer {
             'hiveapi',
             '0.001',
             'HIVE',
-            data
-        );
+            data);
+        }
+            
+    public getAccountTransfers(account: string, from = -1, limit = 100) {
+        return Utils.getAccountTransfers(this.client, account, from, limit);
     }
 
     public transferHiveTokens(from: string, to: string, amount: string, symbol: string, memo: string = '') {
