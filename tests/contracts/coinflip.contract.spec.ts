@@ -34,7 +34,6 @@ describe('Coinflip Contract', () => {
         contract['_instance'] = sut;
 
         jest.spyOn(contract as any, 'flip');
-        jest.spyOn(contract as any, 'getBalance').mockResolvedValue(2000);
 
         jest.spyOn(sut, 'getTransaction').mockResolvedValue({test: 123} as any);
         jest.spyOn(sut, 'verifyTransfer').mockResolvedValue(true as any);
@@ -69,7 +68,6 @@ describe('Coinflip Contract', () => {
         contract['_instance'] = sut;
 
         jest.spyOn(contract as any, 'flip');
-        jest.spyOn(contract as any, 'getBalance').mockResolvedValue(2000);
 
         jest.spyOn(sut, 'getTransaction').mockResolvedValue({test: 123} as any);
         jest.spyOn(sut, 'verifyTransfer').mockResolvedValue(true as any);
@@ -104,7 +102,6 @@ describe('Coinflip Contract', () => {
         contract['_instance'] = sut;
 
         jest.spyOn(contract as any, 'flip');
-        jest.spyOn(contract as any, 'getBalance').mockResolvedValue(2000);
 
         jest.spyOn(sut, 'getTransaction').mockResolvedValue({test: 123} as any);
         jest.spyOn(sut, 'verifyTransfer').mockResolvedValue(true as any);

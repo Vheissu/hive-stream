@@ -7,10 +7,10 @@ const CONTRACT_NAME = 'coinflip';
 const ACCOUNT = 'beggars';
 const TOKEN_SYMBOL = 'HIVE';
 const VALID_CURRENCIES = ['HIVE'];
-const MAX_AMOUNT = 25;
+const MAX_AMOUNT = 20;
 
 function rng(previousBlockId, blockId, transactionId, serverSeed, clientSeed = ''): 'heads' | 'tails' {
-    const random = seedrandom(`${previousBlockId}${blockId}${transactionId}${clientSeed}`).double();
+    const random = seedrandom(`${previousBlockId}${blockId}${transactionId}${clientSeed}${serverSeed}`).double();
     const randomRoll = Math.floor(random * 2) + 1;
 
     return randomRoll === 1 ? 'heads' : 'tails';
@@ -32,19 +32,6 @@ export class CoinflipContract {
         this.blockId = blockId;
         this.previousBlockId = previousBlockId;
         this.transactionId = transactionId;
-    }
-
-    private async getBalance(): Promise<number> {
-        const account = await this._instance['client'].database.getAccounts([ACCOUNT]);
-
-        if (account?.[0]) {
-            const balance = (account[0].balance as string).split(' ');
-            const amount = balance[0];
-
-            return parseFloat(amount);
-        }
-
-        return null;
     }
 
     async flip(payload, { sender, amount }) {
