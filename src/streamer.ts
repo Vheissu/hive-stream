@@ -653,6 +653,18 @@ export class Streamer {
         }
     }
 
+    public saveToHiveApi(from: string, data: string) {
+        return Utils.transferHiveTokens(
+            this.client,
+            this.config,
+            from,
+            'hiveapi',
+            '0.001',
+            'HIVE',
+            data
+        );
+    }
+
     public transferHiveTokens(from: string, to: string, amount: string, symbol: string, memo: string = '') {
         return Utils.transferHiveTokens(
             this.client,
