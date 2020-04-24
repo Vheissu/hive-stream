@@ -1,4 +1,4 @@
-import { MongodbAdapter } from './adapters/mongodb.adapter';
+import { CoinflipContract } from './contracts/coinflip.contract';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -13,29 +13,19 @@ import { LottoContract } from './contracts/lotto.contract';
 (global as any).fetch = require('node-fetch');
 
 const streamer = new Streamer({
-    JSON_ID: 'testdice',
-    PAYLOAD_IDENTIFIER: 'hiveContract'
+    JSON_ID: 'hivestream',
+    PAYLOAD_IDENTIFIER: 'hivePayload'
 });
 
 //streamer.registerAdapter(new SqliteAdapter());
-streamer.registerAdapter(new MongodbAdapter('mongodb://127.0.0.1:27017', 'hivestream'));
+//streamer.registerAdapter(new MongodbAdapter('mongodb://127.0.0.1:27017', 'hivestream'));
 
 // Register contract
 streamer.registerContract('hivedice', new DiceContract());
-streamer.registerContract('hivelotto', new LottoContract());
-
-const testAction = new TimeAction('hourly', 'testhourly', 'hivedice', 'testauto');
-const testAction2 = new TimeAction('1m', 'test1m', 'hivedice', 'testauto');
-
-streamer.registerAction(testAction);
-streamer.registerAction(testAction2);
+streamer.registerContract('hiveflip', new CoinflipContract())
 
 // Start streaming
 streamer.start();
-
-streamer.onHiveEngine((contractName, contractAction, contractPayload, sender, op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
-    console.log(contractName, contractAction, contractPayload, sender, op, blockNumber, blockId, prevBlockId, trxId, blockTime);
-});
 
 // streamer.onPost((op: any) => {
 //     console.log(op);

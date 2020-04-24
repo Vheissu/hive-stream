@@ -101,6 +101,10 @@ export const Utils = {
         return (operation.from === from && operation.to === to && operation.amount === amount);
     },
 
+    async confirmHivestreamTransaction(id: string) {
+        
+    },
+
     transferHiveTokens(client: Client, config: Partial<ConfigInterface>, from: string, to: string, amount: string, symbol: string, memo: string = '') {
         const key = PrivateKey.fromString(config.ACTIVE_KEY);
         
