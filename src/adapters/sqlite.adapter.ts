@@ -25,11 +25,13 @@ export class SqliteAdapter extends AdapterBase {
                 const params = `CREATE TABLE IF NOT EXISTS params ( id INTEGER PRIMARY KEY, lastBlockNumber NUMERIC, actions TEXT )`;
                 const transfers = `CREATE TABLE IF NOT EXISTS transfers ( id TEXT NOT NULL UNIQUE, blockId TEXT, blockNumber INTEGER, sender TEXT, amount TEXT, contractName TEXT, contractAction TEXT, contractPayload TEXT)`;
                 const customJson = `CREATE TABLE IF NOT EXISTS customJson ( id TEXT NOT NULL UNIQUE, blockId TEXT, blockNumber INTEGER, sender TEXT, isSignedWithActiveKey INTEGER, contractName TEXT, contractAction TEXT, contractPayload TEXT)`;
+                const events = `CREATE TABLE IF NOT EXISTS events ( id INTEGER PRIMARY KEY, date TEXT, contract TEXT, action TEXT, payload TEXT, data TEXT )`;
   
                 this.db
                     .run(params)
                     .run(transfers)
-                    .run(customJson, () => {
+                    .run(customJson)
+                    .run(events, () => {
                     resolve(true);
                 });
             });
@@ -115,6 +117,21 @@ export class SqliteAdapter extends AdapterBase {
         });
     }
 
+    protected async addEvent(date: string, contract: string, action: string, payload: ContractPayload, data: unknown): Promise<boolean> {
+        return new Promise((resolve, reject) => {
+            const sql = `INSERT INTO events (date, contract, action, payload, data) 
+            VALUES ('${date}', '${contract}', ${action}, '${JSON.stringify(payload)}', '${JSON.stringify(data)}')`;
+
+            this.db.run(sql, [], (err, result) => {
+                if (!err) {
+                    resolve(true);
+                } else {
+                    reject(err);
+                }
+            });
+        });
+    }
+
     public async getTransfers() {
         return new Promise((resolve, reject) => {
             this.db.all('SELECT id, blockId, blockNumber, sender, amount, contractName, contractAction, contractPayload FROM transfers', (err, rows) => {
@@ -122,6 +139,28 @@ export class SqliteAdapter extends AdapterBase {
                     if (rows.length) {
                         resolve(rows.reduce((arr, row) => {
                             row.contractPayload = JSON.parse(row.contractPayload) ?? {};
+                            arr.push(row);
+                            return arr;
+                        }, []));
+                    } else {
+                        resolve(null);
+                    }
+                } else {
+                    reject(err);
+                }
+            });
+        });
+    }
+
+    public async getEvents() {
+        return new Promise((resolve, reject) => {
+            this.db.all('SELECT id, date, contract, action, payload, data FROM events', (err, rows) => {
+                if (!err) {
+                    if (rows.length) {
+                        resolve(rows.reduce((arr, row) => {
+                            row.payload = JSON.parse(row.payload) ?? {};
+                            row.data = JSON.parse(row.data) ?? {};
+
                             arr.push(row);
                             return arr;
                         }, []));

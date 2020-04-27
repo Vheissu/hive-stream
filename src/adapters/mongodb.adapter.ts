@@ -132,7 +132,7 @@ export class MongodbAdapter extends AdapterBase {
             await this.getDbInstance();
         }
         
-        const collection = this.db.collection('transactions');
+        const collection = this.db.collection('customJson');
 
         const data = {
             id: this.transactionId,
