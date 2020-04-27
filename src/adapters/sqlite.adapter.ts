@@ -120,7 +120,7 @@ export class SqliteAdapter extends AdapterBase {
     protected async addEvent(date: string, contract: string, action: string, payload: ContractPayload, data: unknown): Promise<boolean> {
         return new Promise((resolve, reject) => {
             const sql = `INSERT INTO events (date, contract, action, payload, data) 
-            VALUES ('${date}', '${contract}', ${action}, '${JSON.stringify(payload)}', '${JSON.stringify(data)}')`;
+            VALUES ('${date}', '${contract}', '${action}', '${JSON.stringify(payload)}', '${JSON.stringify(data)}')`;
 
             this.db.run(sql, [], (err, result) => {
                 if (!err) {
