@@ -1,6 +1,6 @@
+import { SqliteAdapter } from './adapters/sqlite.adapter';
 import { sleep } from '@hivechain/dhive/lib/utils';
 import { TimeAction } from './actions';
-import { FileAdapter } from './adapters/file.adapter';
 import { Client } from '@hivechain/dhive';
 import { Utils } from './utils';
 import { Config, ConfigInterface } from './config';
@@ -68,7 +68,7 @@ export class Streamer {
 
         this.client = new Client(this.config.API_NODES);
 
-        this.registerAdapter(new FileAdapter());
+        this.registerAdapter(new SqliteAdapter());
     }
 
     public registerAdapter(adapter: any) {
