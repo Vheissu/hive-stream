@@ -26,6 +26,10 @@ export class CoinflipContract {
     private previousBlockId;
     private transactionId;
 
+    private create() {
+        this.adapter = this._instance.getAdapter();
+    }
+
     private updateBlockInfo(blockNumber, blockId, previousBlockId, transactionId) {
         // Lifecycle method which sets block info 
         this.blockNumber = blockNumber;
@@ -69,47 +73,35 @@ export class CoinflipContract {
             const generatedGuess = rng(this.previousBlockId, this.blockId, this.transactionId, serverSeed, seed ?? '');
 
             if (generatedGuess === guess) {
-                // Store this action in our hiveapi db
-                await this._instance.saveToHiveApi(ACCOUNT, JSON.stringify({
-                    name: CONTRACT_NAME,
-                    action: 'flip',
-                    payload,
-                    server: {
-                        action: 'transfer',
-                        data: {
-                            date: new Date(),
-                            guess,
-                            serverSeed,
-                            previousBlockId: this.previousBlockId,
-                            blockId: this.blockId,
-                            transactionId: this.transactionId,
-                            userWon: 'true'
-                        }
+                await this.adapter.addEvent(new Date(), CONTRACT_NAME, 'flip', payload, {
+                    action: 'transfer',
+                    data: {
+                        date: new Date(),
+                        guess,
+                        serverSeed,
+                        previousBlockId: this.previousBlockId,
+                        blockId: this.blockId,
+                        transactionId: this.transactionId,
+                        userWon: 'true'
                     }
-                }));
+                });
 
                 await this._instance.transferHiveTokens(ACCOUNT, sender, (amountParsed * 2).toFixed(3), amountTrim[1], `[Winner] | Guess: ${guess} | Server Roll: ${generatedGuess} | Previous block id: ${this.previousBlockId} | BlockID: ${this.blockId} | Trx ID: ${this.transactionId} | Server Seed: ${serverSeed}`);
                 return;
             }
 
-                // Store this action in our hiveapi db
-                await this._instance.saveToHiveApi(ACCOUNT, JSON.stringify({
-                    name: CONTRACT_NAME,
-                    action: 'flip',
-                    payload,
-                    server: {
-                        action: 'transfer',
-                        data: {
-                            date: new Date(),
-                            guess,
-                            serverSeed,
-                            previousBlockId: this.previousBlockId,
-                            blockId: this.blockId,
-                            transactionId: this.transactionId,
-                            userWon: 'false'
-                        }
-                    }
-                }));
+            await this.adapter.addEvent(new Date(), CONTRACT_NAME, 'flip', payload, {
+                action: 'transfer',
+                data: {
+                    guess,
+                    serverSeed,
+                    previousBlockId: this.previousBlockId,
+                    blockId: this.blockId,
+                    transactionId: this.transactionId,
+                    userWon: 'false'
+                }
+            });
+
             await this._instance.transferHiveTokens(ACCOUNT, sender, '0.001', amountTrim[1], `[Lost] | Guess: ${guess} | Server Roll: ${generatedGuess} | Previous block id: ${this.previousBlockId} | BlockID: ${this.blockId} | Trx ID: ${this.transactionId} | Server Seed: ${serverSeed}`);
         }
     }
