@@ -15,6 +15,10 @@ export class SqliteAdapter extends AdapterBase {
     private prevBlockId;
     private transactionId: string;
 
+    public getDb(): Database {
+        return this.db;
+    }
+
     protected async create(): Promise<boolean> {
         return new Promise((resolve) => {
             this.db.serialize(() => {
