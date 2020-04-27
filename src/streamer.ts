@@ -1,3 +1,4 @@
+import { Api } from './api';
 import { SqliteAdapter } from './adapters/sqlite.adapter';
 import { sleep } from '@hivechain/dhive/lib/utils';
 import { TimeAction } from './actions';
@@ -69,6 +70,8 @@ export class Streamer {
         this.client = new Client(this.config.API_NODES);
 
         this.registerAdapter(new SqliteAdapter());
+
+        new Api(this);
     }
 
     public registerAdapter(adapter: any) {
