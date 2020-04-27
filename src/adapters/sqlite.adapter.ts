@@ -112,6 +112,86 @@ export class SqliteAdapter extends AdapterBase {
         });
     }
 
+    public async getTransfers() {
+        return new Promise((resolve, reject) => {
+            this.db.all('SELECT id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload FROM transfers', (err, rows) => {
+                if (!err) {
+                    if (rows.length) {
+                        resolve(rows.reduce((arr, row) => {
+                            row.contractPayload = JSON.parse(row.contractPayload) ?? {};
+                            arr.push(row);
+                            return arr;
+                        }, []));
+                    } else {
+                        resolve(null);
+                    }
+                } else {
+                    reject(err);
+                }
+            });
+        });
+    }
+
+    public async getTransfersByContract(contract: string) {
+        return new Promise((resolve, reject) => {
+            this.db.all(`SELECT id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload FROM transfers WHERE contractName = ${contract}`, (err, rows) => {
+                if (!err) {
+                    if (rows.length) {
+                        resolve(rows.reduce((arr, row) => {
+                            row.contractPayload = JSON.parse(row.contractPayload) ?? {};
+                            arr.push(row);
+                            return arr;
+                        }, []));
+                    } else {
+                        resolve(null);
+                    }
+                } else {
+                    reject(err);
+                }
+            });
+        });
+    }
+
+    public async getTransfersByAccount(account: string) {
+        return new Promise((resolve, reject) => {
+            this.db.all(`SELECT id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload FROM transfers WHERE sender = ${account}`, (err, rows) => {
+                if (!err) {
+                    if (rows.length) {
+                        resolve(rows.reduce((arr, row) => {
+                            row.contractPayload = JSON.parse(row.contractPayload) ?? {};
+                            arr.push(row);
+                            return arr;
+                        }, []));
+                    } else {
+                        resolve(null);
+                    }
+                } else {
+                    reject(err);
+                }
+            });
+        });
+    }
+
+    public async getTransfersByBlockid(blockId: any) {
+        return new Promise((resolve, reject) => {
+            this.db.all(`SELECT id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload FROM transfers WHERE blockId = ${blockId}`, (err, rows) => {
+                if (!err) {
+                    if (rows.length) {
+                        resolve(rows.reduce((arr, row) => {
+                            row.contractPayload = JSON.parse(row.contractPayload) ?? {};
+                            arr.push(row);
+                            return arr;
+                        }, []));
+                    } else {
+                        resolve(null);
+                    }
+                } else {
+                    reject(err);
+                }
+            });
+        });
+    }
+
     protected async destroy(): Promise<boolean> {
         return new Promise((resolve, reject) => {
             this.db.close((err) => {
