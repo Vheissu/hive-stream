@@ -1,8 +1,8 @@
 import { Api } from './api';
 import { SqliteAdapter } from './adapters/sqlite.adapter';
-import { sleep } from '@hivechain/dhive/lib/utils';
+import { sleep } from '@hiveio/dhive/lib/utils';
 import { TimeAction } from './actions';
-import { Client } from '@hivechain/dhive';
+import { Client } from '@hiveio/dhive';
 import { Utils } from './utils';
 import { Config, ConfigInterface } from './config';
 

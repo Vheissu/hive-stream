@@ -1,4 +1,4 @@
-import { sleep } from '@hivechain/dhive/lib/utils';
+import { sleep } from '@hiveio/dhive/lib/utils';
 import { SqliteAdapter } from './../adapters/sqlite.adapter';
 import { MongodbAdapter } from './../adapters/mongodb.adapter';
 import { Utils } from './../utils';
