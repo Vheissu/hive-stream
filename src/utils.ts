@@ -1,5 +1,5 @@
 import { HiveRates } from './hive-rates';
-import { Client, SignedTransaction, PrivateKey } from '@hivechain/dhive';
+import { Client, SignedTransaction, PrivateKey } from '@hiveio/dhive';
 import { Config, ConfigInterface } from './config';
 import seedrandom from 'seedrandom';
 

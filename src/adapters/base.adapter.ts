@@ -1,6 +1,6 @@
 import { TimeAction } from './../actions';
 import { TransactionType, ContractPayload } from './../types/hive-stream';
-import { SignedBlock } from '@hivechain/dhive';
+import { SignedBlock } from '@hiveio/dhive';
 export class AdapterBase {
     constructor() {
         this['client'] = null;
