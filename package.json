@@ -16,31 +16,30 @@
         "clean-tests": "jest --clearCache"
     },
     "dependencies": {
-        "@hivechain/dhive": "^0.13.3",
-        "bignumber.js": "^9.0.0",
+        "@hiveio/dhive": "^0.14.1",
+        "bignumber.js": "^9.0.1",
         "cors": "^2.8.5",
         "dotenv": "^8.2.0",
         "express": "^4.17.1",
-        "moment": "^2.24.0",
-        "mongodb": "^3.5.6",
-        "node-fetch": "^2.6.0",
+        "moment": "^2.29.0",
+        "mongodb": "^3.6.2",
+        "node-fetch": "^2.6.1",
         "seedrandom": "^3.0.5",
-        "sqlite3": "^4.1.1",
-        "sscjs": "^0.0.8"
+        "sqlite3": "^5.0.0",
+        "sscjs": "0.0.8"
     },
     "devDependencies": {
-        "@types/bytebuffer": "^5.0.40",
+        "@types/bytebuffer": "^5.0.41",
         "@types/dotenv": "^8.2.0",
-        "@types/jest": "^25.2.1",
-        "@types/mongodb": "^3.5.14",
-        "@types/node": "^13.13.4",
+        "@types/jest": "^25.2.3",
+        "@types/mongodb": "^3.5.27",
+        "@types/node": "^13.13.21",
         "@types/node-cron": "^2.0.3",
         "@types/seedrandom": "^2.4.28",
-        "@types/sqlite3": "^3.1.6",
-        "jest": "^25.4.0",
+        "jest": "^25.5.4",
         "jest-fetch-mock": "^3.0.3",
-        "ts-jest": "^25.4.0",
-        "ts-node": "^8.9.1",
-        "typescript": "^3.8.3"
+        "ts-jest": "^25.5.1",
+        "ts-node": "^8.10.2",
+        "typescript": "^3.9.7"
     }
 }
