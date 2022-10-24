@@ -19,5 +19,5 @@
             ]
         }
     },
-    "exclude": ["node_modules", ".vscode", "dist", "test"]
+    "exclude": ["node_modules", ".vscode", "dist", "tests"]
 }
