@@ -10,11 +10,9 @@ import { GlobalWithFetchMock } from 'jest-fetch-mock';
 //     debug: console.debug,
 // };
 
-jasmine.DEFAULT_TIMEOUT_INTERVAL = 600000;
-
-const customGlobal: GlobalWithFetchMock = global as GlobalWithFetchMock;
+const customGlobal: GlobalWithFetchMock = global as unknown as GlobalWithFetchMock;
 customGlobal.fetch = require('jest-fetch-mock');
-customGlobal.fetchMock = customGlobal.fetch;;
+customGlobal.fetchMock = customGlobal.fetch;
 
 process.on('unhandledRejection', (error) => {
   throw error; // Or whatever you like...
