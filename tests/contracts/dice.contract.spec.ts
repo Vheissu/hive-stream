@@ -1,4 +1,4 @@
-import { sleep } from '@hivechain/dhive/lib/utils';
+import { sleep } from '@hiveio/dhive/lib/utils';
 import { DiceContract } from './../../src/contracts/dice.contract';
 import { Streamer } from '../../src/streamer';
 

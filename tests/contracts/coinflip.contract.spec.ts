@@ -1,6 +1,6 @@
-import uuid from 'uuid';
+import * as uuid from 'uuid';
 import { CoinflipContract } from '../../src/contracts/coinflip.contract';
-import { sleep } from '@hivechain/dhive/lib/utils';
+import { sleep } from '@hiveio/dhive/lib/utils';
 import { Streamer } from '../../src/streamer';
 
 describe('Coinflip Contract', () => {

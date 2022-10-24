@@ -1,5 +1,5 @@
 import { MongoClient, Db } from 'mongodb';
-import { sleep } from '@hivechain/dhive/lib/utils';
+import { sleep } from '@hiveio/dhive/lib/utils';
 
 import { TimeAction } from './../../src/actions';
 import { LottoContract } from './../../src/contracts/lotto.contract';
