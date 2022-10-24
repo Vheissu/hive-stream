@@ -23,9 +23,9 @@ ss.onCustomJson((op, { sender, isSignedWithActiveKey }, blockNumber, blockId, pr
 
 ## Configuration
 
-The `Streamer` object can accept an object of configuration values which are all optional. However, some operations like transfering Hive Engine tokens or other operations on the blockchain that are not READ ONLY, will require the active key and/or posting keys supplied as well as a username.
+The `Streamer` object can accept an object of configuration values which are all optional. However, some operations like transferring Hive Engine tokens or other operations on the blockchain that are not READ ONLY, will require the active key and/or posting keys supplied as well as a username.
 
-The `BLOCK_CHECK_INTERVAL` value is how often to check for new blocks or in cases of error or falling behind, to poll for new blocks. It is advisable you keep this as the default 1000ms value which is one second. This allows you to account for situations where blocks fall behind the main block.
+The `BLOCK_CHECK_INTERVAL` value is how often to check for new blocks or in cases of error or falling behind, to poll for new blocks. You should keep this as the default 1000ms value which is one second. This allows you to account for situations where blocks fall behind the main block.
 
 The `BLOCKS_BEHIND_WARNING` value is a numeric value of the number of blocks your API will fall behind from the master before warning to the console.
 
