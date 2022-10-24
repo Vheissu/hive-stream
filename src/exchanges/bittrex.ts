@@ -7,8 +7,8 @@ export class BittrexExchange extends Exchange {
 
     public async fetchRates() {
         const USD_BTC = new BigNumber(await this.fetchRate('USD', 'BTC'));
-        const BTC_HIVE = new BigNumber(await this.fetchRate('BTC', 'HIVE'));
-        const BTC_HBD = new BigNumber(await this.fetchRate('BTC', 'HBD'));
+        const BTC_HIVE = new BigNumber(await this.fetchRate('HIVE', 'BTC'));
+        const BTC_HBD = new BigNumber(await this.fetchRate('HBD', 'BTC'));
 
         if (isNaN(USD_BTC.toNumber()) || isNaN(BTC_HIVE.toNumber()) || isNaN(BTC_HBD.toNumber())) {
             return false;
@@ -24,7 +24,7 @@ export class BittrexExchange extends Exchange {
     }
 
     private async fetchRate(from: string, to: string) {
-        const endpoint = `https://api.bittrex.com/api/v1.1/public/getticker?market=${from}-${to}`;
+        const endpoint = `https://api.bittrex.com/v3/markets/${from}-${to}/ticker`;
         const request = await fetch(endpoint);
         const response = await request.json();
 
