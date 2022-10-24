@@ -16,7 +16,7 @@ describe('Lotto Contract', () => {
     beforeAll(async () => {
         try {
             const url = `mongodb://127.0.0.1/lotto-test`
-            connection = await MongoClient.connect(url, { useNewUrlParser: true, useUnifiedTopology: true });
+            connection = await MongoClient.connect(url);
             db = await connection.db();
         } catch (e) {
             throw e;
