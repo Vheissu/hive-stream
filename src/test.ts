@@ -10,8 +10,6 @@ import { TimeAction } from './actions';
 import { Utils } from './utils';
 import { LottoContract } from './contracts/lotto.contract';
 
-(global as any).fetch = require('node-fetch');
-
 const streamer = new Streamer({
     JSON_ID: 'hivestream',
     PAYLOAD_IDENTIFIER: 'hivePayload'
