@@ -1,4 +1,5 @@
-import { MongoClient, Db } from 'mongodb';
+import { MongoClient } from 'mongodb';
+import { MongoMemoryServer } from 'mongodb-memory-server';
 import { sleep } from '@hiveio/dhive/lib/utils';
 
 import { TimeAction } from './../../src/actions';
@@ -10,17 +11,14 @@ import fiftyValidEntrants from './entrants.json';
 describe('Lotto Contract', () => {
     let sut: Streamer;
     let contract: LottoContract;
-    let connection: MongoClient;
-    let db: Db;
+    let mongoServer: MongoMemoryServer;
+    let db;
 
     beforeAll(async () => {
-        try {
-            const url = `mongodb://127.0.0.1/lotto-test`
-            connection = await MongoClient.connect(url);
-            db = await connection.db();
-        } catch (e) {
-            throw e;
-        }
+        mongoServer = await MongoMemoryServer.create();
+        process.env.MONGODB_URL = mongoServer.getUri();
+
+        db = await MongoClient.connect(process.env.MONGODB_URL);
     });
 
     beforeEach(async () => {
@@ -40,8 +38,9 @@ describe('Lotto Contract', () => {
         await db.collection('lottery').deleteMany({});
     });
 
-    afterAll(() => {
-        connection.close();
+    afterAll(async () => {
+        await db.close();
+        await mongoServer.stop();
     });
 
     test('Registers the lotto contract', () => {
