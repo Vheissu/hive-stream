@@ -29,12 +29,12 @@ export const Config: ConfigInterface = {
 
     USERNAME: '',
 
-    LAST_BLOCK_NUMBER: 0,
+    LAST_BLOCK_NUMBER: 42203941,
 
     BLOCK_CHECK_INTERVAL: 1000,
     BLOCKS_BEHIND_WARNING: 25,
 
     API_NODES: ['https://anyx.io', 'https://api.hive.blog'],
 
-    DEBUG_MODE: false,
+    DEBUG_MODE: true,
 };

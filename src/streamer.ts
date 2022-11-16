@@ -197,7 +197,7 @@ export class Streamer {
             console.log(`Restoring state from file`);
         }
 
-        if (state?.lastBlockNumber) {
+        if (!this.config.LAST_BLOCK_NUMBER && state?.lastBlockNumber) {
             if (state.lastBlockNumber) {
                 this.lastBlockNumber = state.lastBlockNumber;
             }
@@ -268,13 +268,18 @@ export class Streamer {
 
             const BLOCKS_BEHIND = parseInt(this.config.BLOCKS_BEHIND_WARNING as any, 10);
 
+            if (!this.disableAllProcessing) {
+                await this.loadBlock(this.lastBlockNumber + 1);
+            }
+
             // We are more than 25 blocks behind, uh oh, we gotta catch up
             if (props.head_block_number >= (this.lastBlockNumber + BLOCKS_BEHIND) && this.config.DEBUG_MODE) {
                 console.log(`We are more than ${BLOCKS_BEHIND} blocks behind ${props.head_block_number}, ${(this.lastBlockNumber + BLOCKS_BEHIND)}`);
-            }
 
-            if (!this.disableAllProcessing) {
-                await this.loadBlock(this.lastBlockNumber + 1);
+                if (!this.disableAllProcessing) {
+                    this.getBlock();
+                    return;
+                }
             }
 
             // Storing timeout allows us to clear it, as this just calls itself
