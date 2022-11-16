@@ -176,7 +176,7 @@ export class SqliteAdapter extends AdapterBase {
 
     public async getTransfersByContract(contract: string) {
         return new Promise((resolve, reject) => {
-            this.db.all(`SELECT id, blockId, blockNumber, sender, amount, contractName, contractAction, contractPayload FROM transfers WHERE contractName = ${contract}`, (err, rows) => {
+            this.db.all(`SELECT id, blockId, blockNumber, sender, amount, contractName, contractAction, contractPayload FROM transfers WHERE contractName = '${contract}'`, (err, rows) => {
                 if (!err) {
                     if (rows.length) {
                         resolve(rows.reduce((arr, row) => {
@@ -196,7 +196,7 @@ export class SqliteAdapter extends AdapterBase {
 
     public async getTransfersByAccount(account: string) {
         return new Promise((resolve, reject) => {
-            this.db.all(`SELECT id, blockId, blockNumber, sender, amount, contractName, contractAction, contractPayload FROM transfers WHERE sender = ${account}`, (err, rows) => {
+            this.db.all(`SELECT id, blockId, blockNumber, sender, amount, contractName, contractAction, contractPayload FROM transfers WHERE sender = '${account}'`, (err, rows) => {
                 if (!err) {
                     if (rows.length) {
                         resolve(rows.reduce((arr, row) => {
@@ -256,7 +256,7 @@ export class SqliteAdapter extends AdapterBase {
 
     public async getJsonByContract(contract: string) {
         return new Promise((resolve, reject) => {
-            this.db.all(`SELECT id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload FROM customJson WHERE contractName = ${contract}`, (err, rows) => {
+            this.db.all(`SELECT id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload FROM customJson WHERE contractName = '${contract}'`, (err, rows) => {
                 if (!err) {
                     if (rows.length) {
                         resolve(rows.reduce((arr, row) => {
@@ -276,7 +276,7 @@ export class SqliteAdapter extends AdapterBase {
 
     public async getJsonByAccount(account: string) {
         return new Promise((resolve, reject) => {
-            this.db.all(`SELECT id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload FROM customJson WHERE sender = ${account}`, (err, rows) => {
+            this.db.all(`SELECT id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload FROM customJson WHERE sender = '${account}'`, (err, rows) => {
                 if (!err) {
                     if (rows.length) {
                         resolve(rows.reduce((arr, row) => {
