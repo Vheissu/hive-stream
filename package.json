@@ -1,6 +1,6 @@
 {
     "name": "hive-stream",
-    "version": "2.0.4",
+    "version": "2.0.5",
     "description": "A layer for streaming actions on the Hive blockchain and reacting to them.",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
