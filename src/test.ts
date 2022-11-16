@@ -10,14 +10,14 @@ import { TimeAction } from './actions';
 import { Utils } from './utils';
 import { LottoContract } from './contracts/lotto.contract';
 
-(global as any).fetch = require('node-fetch');
+import fetch from 'node-fetch';
 
 const streamer = new Streamer({
     JSON_ID: 'hivestream',
     PAYLOAD_IDENTIFIER: 'hivePayload'
 });
 
-//streamer.registerAdapter(new SqliteAdapter());
+streamer.registerAdapter(new SqliteAdapter());
 //streamer.registerAdapter(new MongodbAdapter('mongodb://127.0.0.1:27017', 'hivestream'));
 
 // Register contract

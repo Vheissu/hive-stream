@@ -28,7 +28,7 @@ export class MongodbAdapter extends AdapterBase {
         this.mongo.options = options;
     }
 
-    protected async getDbInstance() {
+    public async getDbInstance() {
         try {
             this.client = await MongoClient.connect(this.mongo.uri, this.mongo.options);
             this.db = this.client.db(this.mongo.database);
@@ -39,7 +39,7 @@ export class MongodbAdapter extends AdapterBase {
         }
     }
 
-    protected async create(): Promise<boolean> {
+    public async create(): Promise<boolean> {
         try {
             this.client = await MongoClient.connect(this.mongo.uri, this.mongo.options);
             this.db = this.client.db(this.mongo.database);
@@ -50,7 +50,7 @@ export class MongodbAdapter extends AdapterBase {
         }
     }
 
-    protected async loadActions(): Promise<TimeAction[]> {
+    public async loadActions(): Promise<TimeAction[]> {
         if (!this.db) {
             await this.getDbInstance();
         }
@@ -64,7 +64,7 @@ export class MongodbAdapter extends AdapterBase {
         return [];
     }
 
-    protected async loadState(): Promise<any> {
+    public async loadState(): Promise<any> {
         try {
             if (!this.db) {
                 await this.getDbInstance();
@@ -81,7 +81,7 @@ export class MongodbAdapter extends AdapterBase {
         }
     }
 
-    protected async saveState(data: any): Promise<boolean> {
+    public async saveState(data: any): Promise<boolean> {
         try {
             if (!this.db) {
                 await this.getDbInstance();
@@ -97,14 +97,14 @@ export class MongodbAdapter extends AdapterBase {
         }
     }
 
-    protected async processOperation(op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) {
+    public async processOperation(op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) {
         this.blockNumber = blockNumber;
         this.blockId = blockId;
         this.prevBlockId = prevBlockId;
         this.transactionId = trxId;
     }
 
-    protected async processTransfer(operation, payload: ContractPayload, metadata: { sender: string, amount: string }): Promise<boolean> {
+    public async processTransfer(operation, payload: ContractPayload, metadata: { sender: string, amount: string }): Promise<boolean> {
         if (!this.db) {
             await this.getDbInstance();
         }
@@ -127,7 +127,7 @@ export class MongodbAdapter extends AdapterBase {
         return true;
     }
 
-    protected async processCustomJson(operation, payload: ContractPayload, metadata: { sender: string, isSignedWithActiveKey: boolean }): Promise<boolean> {
+    public async processCustomJson(operation, payload: ContractPayload, metadata: { sender: string, isSignedWithActiveKey: boolean }): Promise<boolean> {
         if (!this.db) {
             await this.getDbInstance();
         }
@@ -150,9 +150,49 @@ export class MongodbAdapter extends AdapterBase {
         return true;
     }
 
-    protected async destroy(): Promise<boolean> {
+    public async destroy(): Promise<boolean> {
         await this.client.close();
 
         return true;
+    }
+    
+    public async find(table: string, queryObject: any): Promise<any> {
+        if (!this.db) {
+            await this.getDbInstance();
+        }
+
+        const collection = this.db.collection(table);
+
+        return await collection.find(queryObject).toArray();
+    }
+
+    public async findOne(table: string, queryObject: any): Promise<any> {
+        if (!this.db) {
+            await this.getDbInstance();
+        }
+
+        const collection = this.db.collection(table);
+
+        return await collection.find(queryObject).limit(1).toArray();
+    }
+
+    public async insert(table: string, data: any) {
+        if (!this.db) {
+            await this.getDbInstance();
+        }
+
+        const collection = this.db.collection(table);
+
+        return await collection.insertOne(data);
+    }
+
+    public async replace(table: string, queryObject: any, data: any) {
+        if (!this.db) {
+            await this.getDbInstance();
+        }
+
+        const collection = this.db.collection(table);
+
+        return await collection.replaceOne(queryObject, data, { upsert: true });
     }
 }

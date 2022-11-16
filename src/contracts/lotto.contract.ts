@@ -1,11 +1,9 @@
+import { AdapterBase } from './../adapters/base.adapter';
 import { sleep } from '@hiveio/dhive/lib/utils';
-import { SqliteAdapter } from './../adapters/sqlite.adapter';
-import { MongodbAdapter } from './../adapters/mongodb.adapter';
 import { Utils } from './../utils';
 import { Streamer } from '../streamer';
 import seedrandom from 'seedrandom';
 import BigNumber from 'bignumber.js';
-import { Db } from 'mongodb';
 
 const CONTRACT_NAME = 'hivelotto';
 
@@ -48,35 +46,32 @@ function rng(previousBlockId, blockId, transactionId, entropy, maximum = 100) {
 export class LottoContract {
     // tslint:disable-next-line: variable-name
     private _instance: Streamer;
-    private adapter: MongodbAdapter | SqliteAdapter;
+    private adapter: AdapterBase;
 
     private blockNumber;
     private blockId;
     private previousBlockId;
     private transactionId;
 
-    private async create() {
+    public async create() {
         this.adapter = this._instance.getAdapter();
 
-        const db: Db = this.adapter['db'];
-
-        const collection = db.collection(COLLECTION_SETTINGS);
-        const settings = await collection.findOne({});
+        const settings = await this.adapter.findOne(COLLECTION_SETTINGS, {});
 
         if (!settings) {
-            collection.insertOne({
+            this.adapter.insert(COLLECTION_SETTINGS, {
                 contractInitiated: new Date(),
                 enabled: true
             });
         }
     }
 
-    private destroy() {
+    public destroy() {
         // Runs every time unregister is run for this contract
         // Close database connections, write to a database with state, etc
     }
 
-    private updateBlockInfo(blockNumber, blockId, previousBlockId, transactionId) {
+    public updateBlockInfo(blockNumber, blockId, previousBlockId, transactionId) {
         // Lifecycle method which sets block info 
         this.blockNumber = blockNumber;
         this.blockId = blockId;
@@ -84,7 +79,7 @@ export class LottoContract {
         this.transactionId = transactionId;
     }
 
-    private async getBalance(): Promise<number> {
+    public async getBalance(): Promise<number> {
         const account = await this._instance['client'].database.getAccounts([ACCOUNT]);
 
         if (account?.[0]) {
@@ -97,11 +92,8 @@ export class LottoContract {
         return null;
     }
 
-    private async getPreviousUserTicketsForCurrentDrawType(type: string, account: string): Promise<number> {
-        const db: Db = this.adapter['db'];
-
-        const collection = db.collection(COLLECTION_LOTTERY);
-        const lotto = await collection.find({ status: 'active', type: type }).limit(1).toArray();
+    public async getPreviousUserTicketsForCurrentDrawType(type: string, account: string): Promise<number> {
+        const lotto = await this.adapter.find(COLLECTION_LOTTERY, { status: 'active', type: type });
 
         if (!lotto[0] || !lotto[0].entries) {
             return 0;
@@ -138,7 +130,7 @@ export class LottoContract {
             // If the user has already entered the maximum allowed times, refund them
             const previousEntriesCount = await this.getPreviousUserTicketsForCurrentDrawType(type, sender);
             if (previousEntriesCount === MAX_TICKETS_PER_USER) {
-                await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] You have exceeded the allow number of entries`);
+                await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] You have exceeded the allowed number of entries`);
                 return;
             }
 
@@ -149,13 +141,8 @@ export class LottoContract {
                 return;
             }
 
-            // Get database reference from adapter
-            const db: Db = this.adapter['db'];
-
-            const collection = db.collection(COLLECTION_LOTTERY);
-
             // Find an active lotto draw that is of status "active" and our type
-            const lotto = await collection.find({ status: 'active', type: type }).limit(1).toArray();
+            const lotto = await this.adapter.find(COLLECTION_LOTTERY, { status: 'active', type: type });
 
             // We have a lotto
             if (lotto.length) {
@@ -167,7 +154,7 @@ export class LottoContract {
                     date: new Date()
                 });
 
-                return await collection.replaceOne({ _id: draw._id }, draw, { upsert: true });
+                return await this.adapter.replace(COLLECTION_LOTTERY, { _id: draw._id }, draw);
             }
 
             // We need to create a new lotto, no active draws for this type
@@ -177,22 +164,19 @@ export class LottoContract {
                 date: new Date()
             }];
 
-            return await collection.insertOne({ status: 'active', type: type, entries });
+            return await this.adapter.insert(COLLECTION_LOTTERY, { status: 'active', type: type, entries });
         }
     }
 
     async drawHourlyLottery() {
-        const db: Db = this.adapter['db'];
-
-        const collection = db.collection(COLLECTION_LOTTERY);
-        const lotto = await collection.find({ status: 'active', type: 'hourly' }).limit(1).toArray();
+        const lotto = await this.adapter.find(COLLECTION_LOTTERY, { status: 'active', type: 'hourly' });
 
         // We found an hourly draw
         if (lotto.length) {
             const draw = lotto[0];
 
             const total = draw.entries.length;
-
+            
             // Number of entrants is less than the minimum
             if (total < MIN_ENTRIES_HOURLY) {
                 const entrants = draw.entries.reduce((arr, entrant) => {
@@ -257,10 +241,7 @@ export class LottoContract {
     }
 
     async drawDailyLottery() {
-        const db: Db = this.adapter['db'];
-
-        const collection = db.collection(COLLECTION_LOTTERY);
-        const lotto = await collection.find({ status: 'active', type: 'daily' }).limit(1).toArray();
+        const lotto = await this.adapter.find(COLLECTION_LOTTERY, { status: 'active', type: 'daily' });
 
         // We found an hourly draw
         if (lotto.length) {

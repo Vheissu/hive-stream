@@ -7,39 +7,55 @@ export class AdapterBase {
         this['db'] = null;
     }
 
-    protected async create(): Promise<boolean> {
+    public async create(): Promise<boolean> {
         return true;
     }
 
-    protected async destroy(): Promise<boolean> {
+    public async destroy(): Promise<boolean> {
         return true;
     }
 
-    protected async loadActions(): Promise<TimeAction[]> {
+    public async loadActions(): Promise<TimeAction[]> {
         return [];
     }
 
-    protected async loadState(): Promise<any> {
+    public async loadState(): Promise<any> {
         throw new Error('Load state method not implemented in adapter');
     }
 
-    protected async saveState(data: any): Promise<boolean | any> {
+    public async saveState(data: any): Promise<boolean | any> {
         throw new Error('Save state method not implemented in adapter');
     }
 
-    protected async processBlock(block: SignedBlock): Promise<any> {
+    public async processBlock(block: SignedBlock): Promise<any> {
         return true;
     }
 
-    protected async processOperation(op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date): Promise<any> {
+    public async processOperation(op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date): Promise<any> {
         return true;
     }
 
-    protected async processTransfer(operation, payload: ContractPayload, metadata: { sender: string, amount: string }): Promise<boolean> {
+    public async processTransfer(operation, payload: ContractPayload, metadata: { sender: string, amount: string }): Promise<boolean> {
         return true;
     }
 
-    protected async processCustomJson(operation, payload: ContractPayload, metadata: { sender: string, isSignedWithActiveKey: boolean }): Promise<boolean> {
+    public async processCustomJson(operation, payload: ContractPayload, metadata: { sender: string, isSignedWithActiveKey: boolean }): Promise<boolean> {
+        return true;
+    }
+
+    public async find(table: string, queryObject: any): Promise<any> {
+        return true;
+    }
+
+    public async findOne(table: string, queryObject: any): Promise<any> {
+        return true;
+    }
+
+    public async insert(table: string, data: any): Promise<any> {
+        return true;
+    }
+
+    public async replace(table: string, queryObject: any, data: any): Promise<any> {
         return true;
     }
 }

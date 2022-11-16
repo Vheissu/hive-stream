@@ -7,7 +7,7 @@ import { Database } from 'sqlite3';
 import path from 'path';
 
 export class SqliteAdapter extends AdapterBase {
-    private db = new Database(path.resolve(__dirname, 'hive-stream.db'));
+    public db = new Database(path.resolve(__dirname, 'hive-stream.db'));
 
     private blockNumber: number;
     private lastBlockNumber: number;
@@ -19,7 +19,7 @@ export class SqliteAdapter extends AdapterBase {
         return this.db;
     }
 
-    protected async create(): Promise<boolean> {
+    public async create(): Promise<boolean> {
         return new Promise((resolve) => {
             this.db.serialize(() => {
                 const params = `CREATE TABLE IF NOT EXISTS params ( id INTEGER PRIMARY KEY, lastBlockNumber NUMERIC, actions TEXT )`;
@@ -38,7 +38,7 @@ export class SqliteAdapter extends AdapterBase {
         })
     }
 
-    protected async loadActions(): Promise<TimeAction[]> {
+    public async loadActions(): Promise<TimeAction[]> {
         const state = await this.loadState();
 
         if (state) {
@@ -48,7 +48,7 @@ export class SqliteAdapter extends AdapterBase {
         return [];
     }
 
-    protected async loadState(): Promise<any> {
+    public async loadState(): Promise<any> {
         return new Promise((resolve, reject) => {
             this.db.all('SELECT actions, lastBlockNumber FROM params LIMIT 1', (err, rows) => {
                 if (!err) {
@@ -66,7 +66,7 @@ export class SqliteAdapter extends AdapterBase {
         });
     }
 
-    protected async saveState(data: any): Promise<boolean> {
+    public async saveState(data: any): Promise<boolean> {
         return new Promise((resolve, reject) => {
             const sql = `REPLACE INTO params (id, actions, lastBlockNumber) VALUES(1, '${JSON.stringify(data.actions)}', '${data.lastBlockNumber}')`;
 
@@ -80,14 +80,14 @@ export class SqliteAdapter extends AdapterBase {
         });
     }
 
-    protected async processOperation(op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) {
+    public async processOperation(op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) {
         this.blockNumber = blockNumber;
         this.blockId = blockId;
         this.prevBlockId = prevBlockId;
         this.transactionId = trxId;
     }
 
-    protected async processTransfer(operation, payload: ContractPayload, metadata: { sender: string, amount: string }): Promise<boolean> {
+    public async processTransfer(operation, payload: ContractPayload, metadata: { sender: string, amount: string }): Promise<boolean> {
         return new Promise((resolve, reject) => {
             const sql = `INSERT INTO transfers (id, blockId, blockNumber, sender, amount, contractName, contractAction, contractPayload) 
             VALUES ('${this.transactionId}', '${this.blockId}', ${this.blockNumber}, '${metadata.sender}', '${metadata.amount}', '${payload.name}', '${payload.action}', '${JSON.stringify(payload.payload)}')`;
@@ -102,7 +102,7 @@ export class SqliteAdapter extends AdapterBase {
         });
     }
 
-    protected async processCustomJson(operation, payload: ContractPayload, metadata: { sender: string, isSignedWithActiveKey: boolean }): Promise<boolean> {
+    public async processCustomJson(operation, payload: ContractPayload, metadata: { sender: string, isSignedWithActiveKey: boolean }): Promise<boolean> {
         return new Promise((resolve, reject) => {
             const sql = `INSERT INTO customJson (id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload) 
             VALUES ('${this.transactionId}', '${this.blockId}', ${this.blockNumber},'${metadata.sender}', ${metadata.isSignedWithActiveKey}, '${payload.name}', '${payload.action}', '${JSON.stringify(payload.payload)}')`;
@@ -117,7 +117,7 @@ export class SqliteAdapter extends AdapterBase {
         });
     }
 
-    protected async addEvent(date: string, contract: string, action: string, payload: ContractPayload, data: unknown): Promise<boolean> {
+    public async addEvent(date: string, contract: string, action: string, payload: ContractPayload, data: unknown): Promise<boolean> {
         return new Promise((resolve, reject) => {
             const sql = `INSERT INTO events (date, contract, action, payload, data) 
             VALUES ('${date}', '${contract}', '${action}', '${JSON.stringify(payload)}', '${JSON.stringify(data)}')`;
@@ -314,11 +314,82 @@ export class SqliteAdapter extends AdapterBase {
         });
     }
 
-    protected async destroy(): Promise<boolean> {
+    public async destroy(): Promise<boolean> {
         return new Promise((resolve, reject) => {
             this.db.close((err) => {
                 if (!err) {
                     resolve(true);
+                } else {
+                    reject(err);
+                }
+            });
+        });
+    }
+
+    public async find(table, query) {
+        return new Promise((resolve, reject) => {
+            query = Object.keys(query).reduce((arr, key) => {
+                arr.push(`${key} = ${query[key]}`);
+                return arr;
+            }, []).join(' AND ');
+
+            this.db.all(`SELECT * FROM ${table} WHERE ${query}`, (err, rows) => {
+                if (!err) {
+                    if (rows.length) {
+                        resolve(rows);
+                    } else {
+                        resolve(null);
+                    }
+                } else {
+                    reject(err);
+                }
+            });
+        });
+    }
+
+    public async findOne(table, query) {
+        return new Promise((resolve, reject) => {
+            query = Object.keys(query).reduce((arr, key) => {
+                arr.push(`${key} = ${query[key]}`);
+                return arr;
+            }, []).join(' AND ');
+
+            this.db.get(`SELECT * FROM ${table} WHERE ${query}`, (err, row) => {
+                if (!err) {
+                    if (row) {
+                        resolve(row);
+                    } else {
+                        resolve(null);
+                    }
+                } else {
+                    reject(err);
+                }
+            });
+        });
+    }
+
+    public async insert(table, data) {
+        return new Promise((resolve, reject) => {
+            this.db.run(`INSERT INTO ${table} VALUES (${data})`, (err) => {
+                if (!err) {
+                    resolve(true);
+                } else {
+                    reject(err);
+                }
+            });
+        });
+    }
+
+    public async replace(table: string, queryObject: any, data: any): Promise<any> {
+        return new Promise((resolve, reject) => {
+            queryObject = Object.keys(queryObject).reduce((arr, key) => {
+                arr.push(`${key} = ${queryObject[key]}`);
+                return arr;
+            }, []).join(' AND ');
+
+            this.db.run(`REPLACE INTO ${table} ${queryObject} VALUES (${data})`, (err) => {
+                if (!err) {
+                    resolve(data);
                 } else {
                     reject(err);
                 }

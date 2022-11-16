@@ -1,3 +1,4 @@
+import { AdapterBase } from './adapters/base.adapter';
 import { Api } from './api';
 import { SqliteAdapter } from './adapters/sqlite.adapter';
 import { sleep } from '@hiveio/dhive/lib/utils';
@@ -71,7 +72,9 @@ export class Streamer {
 
         this.registerAdapter(new SqliteAdapter());
 
-        new Api(this);
+        if (process?.env?.NODE_ENV !== 'test') {
+            new Api(this);
+        }
     }
 
     public registerAdapter(adapter: any) {
@@ -82,7 +85,7 @@ export class Streamer {
         }
     }
 
-    public getAdapter() {
+    public getAdapter(): AdapterBase {
         return this.adapter;
     }
 
