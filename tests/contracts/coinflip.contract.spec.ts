@@ -10,6 +10,9 @@ describe('Coinflip Contract', () => {
     beforeEach(() => {
         sut = new Streamer();
         contract = new CoinflipContract();
+
+        // @ts-ignore
+        sut.api = jest.fn();
     });
 
     afterEach(() => {

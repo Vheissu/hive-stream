@@ -9,6 +9,9 @@ describe('Dice Contract', () => {
     beforeEach(() => {
         sut = new Streamer();
         contract = new DiceContract();
+
+        // @ts-ignore
+        sut.api = jest.fn();
     });
 
     afterEach(() => {

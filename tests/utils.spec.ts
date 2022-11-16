@@ -2,10 +2,6 @@ import { Utils } from './../src/utils';
 
 describe('Utils', () => {
 
-    beforeEach(() => {
-        fetchMock.resetMocks();
-    });
-
     describe('Round Precision', () => {
         test('Properly rounds precision of number to 3 places', () => {
             const value = 99.299223;
@@ -82,10 +78,9 @@ describe('Utils', () => {
     
             const value = await Utils.convertHiveAmount(amount, fiatSymbol, hiveSymbol);
             
-            expect(fetch).toBeCalledWith(`https://api.bittrex.com/api/v1.1/public/getticker?market=USD-BTC`);
-            expect(fetch).toBeCalledWith(`https://api.bittrex.com/api/v1.1/public/getticker?market=BTC-HIVE`);
-            expect(fetch).toBeCalledWith(`https://api.bittrex.com/api/v1.1/public/getticker?market=BTC-HBD`);
-            expect(fetch).toBeCalledWith(`https://api.exchangeratesapi.io/latest?base=USD`);
+            expect(fetch).toBeCalledWith(`https://api.bittrex.com/v3/markets/USD-BTC/ticker`);
+            expect(fetch).toBeCalledWith(`https://api.bittrex.com/v3/markets/HIVE-BTC/ticker`);
+            expect(fetch).toBeCalledWith(`https://api.bittrex.com/v3/markets/HBD-BTC/ticker`);
 
             expect(value).toStrictEqual(113.088);
         });
