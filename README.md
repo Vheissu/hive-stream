@@ -161,7 +161,7 @@ This will match a registered contract called `hivedice` and inside of the contra
 
 ## Time-based Actions
 
-It's like a cron job for your contracts. Time-based actions allow you to execute contract functions over a wide variety of different time periods. Want to call a function every 3 seconds block time or want to call a function once per day? Time-based actions are an easy way to run time code.
+It's like a cron job for your contracts. Time-based actions allow you to execute contract functions over a wide variety of different periods. Want to call a function every 3 seconds block time or want to call a function once per day? Time-based actions are an easy way to run time code.
 
 The following example will run a contract action every 30 seconds. All you do is register a new `TimeAction` instance.
 

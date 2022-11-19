@@ -22,7 +22,7 @@ streamer.registerAdapter(new SqliteAdapter());
 
 // Register contract
 streamer.registerContract('hivedice', new DiceContract());
-streamer.registerContract('hiveflip', new CoinflipContract())
+streamer.registerContract('hiveflip', new CoinflipContract());
 
 // Start streaming
 streamer.start();
