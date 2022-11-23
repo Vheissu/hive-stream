@@ -34,7 +34,7 @@ export const Config: ConfigInterface = {
     BLOCK_CHECK_INTERVAL: 1000,
     BLOCKS_BEHIND_WARNING: 25,
 
-    API_NODES: ['https://anyx.io', 'https://api.hive.blog'],
+    API_NODES: ['https://api.hive.blog', 'https://api.openhive.network', 'https://rpc.ausbit.dev'],
 
     DEBUG_MODE: true,
 };
