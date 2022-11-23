@@ -29,7 +29,7 @@ export const Config: ConfigInterface = {
 
     USERNAME: '',
 
-    LAST_BLOCK_NUMBER: 42203941,
+    LAST_BLOCK_NUMBER: 69915237,
 
     BLOCK_CHECK_INTERVAL: 1000,
     BLOCKS_BEHIND_WARNING: 25,
