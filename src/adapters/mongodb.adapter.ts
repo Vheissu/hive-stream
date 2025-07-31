@@ -214,4 +214,8 @@ export class MongodbAdapter extends AdapterBase {
 
         return await collection.replaceOne(queryObject, data, { upsert: true });
     }
+
+    public async query(sql: string, params?: any[]): Promise<any[]> {
+        throw new Error('Raw SQL queries are not supported in MongoDB adapter');
+    }
 }

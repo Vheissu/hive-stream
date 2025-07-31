@@ -2,104 +2,87 @@ import { TimeAction } from './../actions';
 import { ContractPayload, TransferMetadata, CustomJsonMetadata } from './../types/hive-stream';
 import { AdapterBase } from './base.adapter';
 
-import { Database } from 'sqlite3';
-
+import { Knex, knex } from 'knex';
 import path from 'path';
 
 export class SqliteAdapter extends AdapterBase {
-    public declare db: Database;
+    public declare db: Knex;
     private dbPath: string;
     
     constructor(dbPath?: string) {
         super();
         this.dbPath = dbPath || path.resolve(__dirname, 'hive-stream.db');
-        this.db = new Database(this.dbPath);
+        this.db = knex({
+            client: 'better-sqlite3',
+            connection: {
+                filename: this.dbPath
+            },
+            useNullAsDefault: true,
+            pool: {
+                afterCreate: (conn: any, cb: any) => {
+                    conn.pragma('journal_mode = WAL');
+                    cb();
+                }
+            }
+        });
     }
-    
-    // Performance optimization: prepared statements cache
-    private preparedStatements: Map<string, any> = new Map();
-    private batchOperations: Array<{sql: string, params: any[]}> = [];
-    private batchTimeout: NodeJS.Timeout | null = null;
-    private readonly batchSize = 100;
-    private readonly batchDelayMs = 1000;
 
     private blockNumber: number;
     private lastBlockNumber: number;
     private blockId: string;
-    private prevBlockId;
+    private prevBlockId: string;
     private transactionId: string;
 
-    public getDb(): Database {
+    public getDb(): Knex {
         return this.db;
     }
 
     public async create(): Promise<boolean> {
-        return new Promise((resolve) => {
-            this.db.serialize(() => {
-                const params = `CREATE TABLE IF NOT EXISTS params ( id INTEGER PRIMARY KEY, lastBlockNumber NUMERIC, actions TEXT )`;
-                const transfers = `CREATE TABLE IF NOT EXISTS transfers ( id TEXT NOT NULL UNIQUE, blockId TEXT, blockNumber INTEGER, sender TEXT, amount TEXT, contractName TEXT, contractAction TEXT, contractPayload TEXT)`;
-                const customJson = `CREATE TABLE IF NOT EXISTS customJson ( id TEXT NOT NULL UNIQUE, blockId TEXT, blockNumber INTEGER, sender TEXT, isSignedWithActiveKey INTEGER, contractName TEXT, contractAction TEXT, contractPayload TEXT)`;
-                const events = `CREATE TABLE IF NOT EXISTS events ( id INTEGER PRIMARY KEY, date TEXT, contract TEXT, action TEXT, payload TEXT, data TEXT )`;
-  
-                this.db
-                    .run(params)
-                    .run(transfers)
-                    .run(customJson)
-                    .run(events, () => {
-                        this.initializePreparedStatements();
-                        resolve(true);
-                    });
+        try {
+            await this.db.schema.createTableIfNotExists('params', table => {
+                table.integer('id').primary();
+                table.integer('lastBlockNumber');
+                table.text('actions');
             });
-        });
-    }
-    
-    private initializePreparedStatements(): void {
-        // Prepare frequently used statements for better performance
-        const transferSql = `INSERT INTO transfers (id, blockId, blockNumber, sender, amount, contractName, contractAction, contractPayload) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-        const customJsonSql = `INSERT INTO customJson (id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-        
-        this.preparedStatements.set('INSERT_TRANSFER', this.db.prepare(transferSql));
-        this.preparedStatements.set('INSERT_CUSTOM_JSON', this.db.prepare(customJsonSql));
-    }
-    
-    private async executeBatched(sqlKey: string, params: any[]): Promise<boolean> {
-        return new Promise((resolve) => {
-            this.batchOperations.push({ sql: sqlKey, params });
-            
-            if (this.batchOperations.length >= this.batchSize) {
-                this.flushBatch();
-            } else if (!this.batchTimeout) {
-                this.batchTimeout = setTimeout(() => this.flushBatch(), this.batchDelayMs);
-            }
-            
-            resolve(true);
-        });
-    }
-    
-    private flushBatch(): void {
-        if (this.batchOperations.length === 0) return;
-        
-        const operations = [...this.batchOperations];
-        this.batchOperations = [];
-        
-        if (this.batchTimeout) {
-            clearTimeout(this.batchTimeout);
-            this.batchTimeout = null;
+
+            await this.db.schema.createTableIfNotExists('transfers', table => {
+                table.text('id').primary();
+                table.text('blockId');
+                table.integer('blockNumber');
+                table.text('sender');
+                table.text('amount');
+                table.text('contractName');
+                table.text('contractAction');
+                table.text('contractPayload');
+            });
+
+            await this.db.schema.createTableIfNotExists('customJson', table => {
+                table.text('id').primary();
+                table.text('blockId');
+                table.integer('blockNumber');
+                table.text('sender');
+                table.integer('isSignedWithActiveKey');
+                table.text('contractName');
+                table.text('contractAction');
+                table.text('contractPayload');
+            });
+
+            await this.db.schema.createTableIfNotExists('events', table => {
+                table.increments('id').primary();
+                table.text('date');
+                table.text('contract');
+                table.text('action');
+                table.text('payload');
+                table.text('data');
+            });
+
+            return true;
+        } catch (error) {
+            console.error('[SqliteAdapter] Error creating tables:', error);
+            throw error;
         }
-        
-        this.db.serialize(() => {
-            this.db.run('BEGIN TRANSACTION');
-            
-            operations.forEach(({ sql, params }) => {
-                const stmt = this.preparedStatements.get(sql);
-                if (stmt) {
-                    stmt.run(params);
-                }
-            });
-            
-            this.db.run('COMMIT');
-        });
     }
+    
 
     public async loadActions(): Promise<TimeAction[]> {
         const state = await this.loadState();
@@ -124,37 +107,30 @@ export class SqliteAdapter extends AdapterBase {
     }
 
     public async loadState(): Promise<any> {
-        return new Promise((resolve, reject) => {
-            this.db.all('SELECT actions, lastBlockNumber FROM params LIMIT 1', (err, rows) => {
-                if (!err) {
-                    if (rows.length) {
-                        const row = rows[0];
-                        try {
-                            row.actions = row.actions ? JSON.parse(row.actions) : [];
-                        } catch (parseError) {
-                            console.warn('[SqliteAdapter] Failed to parse actions from database, using empty array:', parseError);
-                            row.actions = [];
-                        }
-                        resolve(row);
-                    } else {
-                        resolve(null);
-                    }
-                } else {
-                    reject(err);
+        try {
+            const row = await this.db('params')
+                .select('actions', 'lastBlockNumber')
+                .first();
+
+            if (row) {
+                try {
+                    row.actions = row.actions ? JSON.parse(row.actions) : [];
+                } catch (parseError) {
+                    console.warn('[SqliteAdapter] Failed to parse actions from database, using empty array:', parseError);
+                    row.actions = [];
                 }
-            });
-        });
+                return row;
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('[SqliteAdapter] Error loading state:', error);
+            throw error;
+        }
     }
 
     public async saveState(data: any): Promise<boolean> {
-        return new Promise((resolve, reject) => {
-            if (!this.db) {
-                resolve(false);
-                return;
-            }
-
-            const sql = `REPLACE INTO params (id, actions, lastBlockNumber) VALUES(1, ?, ?)`;
-            
+        try {
             let actionsJson: string;
             try {
                 actionsJson = JSON.stringify(data.actions || []);
@@ -163,17 +139,20 @@ export class SqliteAdapter extends AdapterBase {
                 actionsJson = '[]';
             }
 
-            this.db.run(sql, [actionsJson, data.lastBlockNumber], (err, result) => {
-                if (!err) {
-                    resolve(true);
-                } else {
-                    if (err?.code !== 'SQLITE_MISUSE') {
-                        console.error('[SqliteAdapter] Error saving state:', err);
-                    }
-                    reject(err);
-                }
-            });
-        });
+            await this.db('params')
+                .insert({
+                    id: 1,
+                    actions: actionsJson,
+                    lastBlockNumber: data.lastBlockNumber
+                })
+                .onConflict('id')
+                .merge();
+
+            return true;
+        } catch (error) {
+            console.error('[SqliteAdapter] Error saving state:', error);
+            throw error;
+        }
     }
 
     public async processOperation(op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) {
@@ -184,330 +163,300 @@ export class SqliteAdapter extends AdapterBase {
     }
 
     public async processTransfer(operation: any, payload: ContractPayload, metadata: TransferMetadata): Promise<boolean> {
-        const sql = 'INSERT_TRANSFER';
-        const params = [
-            this.transactionId, 
-            this.blockId, 
-            this.blockNumber, 
-            metadata.sender, 
-            metadata.amount, 
-            payload.name, 
-            payload.action, 
-            JSON.stringify(payload.payload)
-        ];
-        
-        return this.executeBatched(sql, params);
+        try {
+            await this.db('transfers').insert({
+                id: this.transactionId,
+                blockId: this.blockId,
+                blockNumber: this.blockNumber,
+                sender: metadata.sender,
+                amount: metadata.amount,
+                contractName: payload.name,
+                contractAction: payload.action,
+                contractPayload: JSON.stringify(payload.payload)
+            });
+            
+            return true;
+        } catch (error) {
+            console.error('[SqliteAdapter] Error processing transfer:', error);
+            throw error;
+        }
     }
 
     public async processCustomJson(operation: any, payload: ContractPayload, metadata: CustomJsonMetadata): Promise<boolean> {
-        const sql = 'INSERT_CUSTOM_JSON';
-        const params = [
-            this.transactionId, 
-            this.blockId, 
-            this.blockNumber, 
-            metadata.sender, 
-            metadata.isSignedWithActiveKey ? 1 : 0, 
-            payload.name, 
-            payload.action, 
-            JSON.stringify(payload.payload)
-        ];
-        
-        return this.executeBatched(sql, params);
+        try {
+            await this.db('customJson').insert({
+                id: this.transactionId,
+                blockId: this.blockId,
+                blockNumber: this.blockNumber,
+                sender: metadata.sender,
+                isSignedWithActiveKey: metadata.isSignedWithActiveKey ? 1 : 0,
+                contractName: payload.name,
+                contractAction: payload.action,
+                contractPayload: JSON.stringify(payload.payload)
+            });
+            
+            return true;
+        } catch (error) {
+            console.error('[SqliteAdapter] Error processing custom JSON:', error);
+            throw error;
+        }
     }
 
     public async addEvent(date: string, contract: string, action: string, payload: ContractPayload, data: unknown): Promise<boolean> {
-        return new Promise((resolve, reject) => {
-            const sql = `INSERT INTO events (date, contract, action, payload, data) 
-            VALUES (?, ?, ?, ?, ?)`;
-
-            this.db.run(sql, [
-                date, 
-                contract, 
-                action, 
-                JSON.stringify(payload), 
-                JSON.stringify(data)
-            ], (err, result) => {
-                if (!err) {
-                    resolve(true);
-                } else {
-                    reject(err);
-                }
+        try {
+            await this.db('events').insert({
+                date,
+                contract,
+                action,
+                payload: JSON.stringify(payload),
+                data: JSON.stringify(data)
             });
-        });
+            
+            return true;
+        } catch (error) {
+            console.error('[SqliteAdapter] Error adding event:', error);
+            throw error;
+        }
     }
 
     public async getTransfers() {
-        return new Promise((resolve, reject) => {
-            this.db.all('SELECT id, blockId, blockNumber, sender, amount, contractName, contractAction, contractPayload FROM transfers', (err, rows) => {
-                if (!err) {
-                    if (rows.length) {
-                        resolve(rows.reduce((arr, row) => {
-                            row.contractPayload = JSON.parse(row.contractPayload) ?? {};
-                            arr.push(row);
-                            return arr;
-                        }, []));
-                    } else {
-                        resolve(null);
-                    }
-                } else {
-                    reject(err);
-                }
-            });
-        });
+        try {
+            const rows = await this.db('transfers')
+                .select('id', 'blockId', 'blockNumber', 'sender', 'amount', 'contractName', 'contractAction', 'contractPayload');
+            
+            if (rows.length) {
+                return rows.map(row => ({
+                    ...row,
+                    contractPayload: JSON.parse(row.contractPayload) ?? {}
+                }));
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('[SqliteAdapter] Error getting transfers:', error);
+            throw error;
+        }
     }
 
     public async getEvents() {
-        return new Promise((resolve, reject) => {
-            this.db.all('SELECT id, date, contract, action, payload, data FROM events', (err, rows) => {
-                if (!err) {
-                    if (rows.length) {
-                        resolve(rows.reduce((arr, row) => {
-                            row.payload = JSON.parse(row.payload) ?? {};
-                            row.data = JSON.parse(row.data) ?? {};
-
-                            arr.push(row);
-                            return arr;
-                        }, []));
-                    } else {
-                        resolve(null);
-                    }
-                } else {
-                    reject(err);
-                }
-            });
-        });
+        try {
+            const rows = await this.db('events')
+                .select('id', 'date', 'contract', 'action', 'payload', 'data');
+            
+            if (rows.length) {
+                return rows.map(row => ({
+                    ...row,
+                    payload: JSON.parse(row.payload) ?? {},
+                    data: JSON.parse(row.data) ?? {}
+                }));
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('[SqliteAdapter] Error getting events:', error);
+            throw error;
+        }
     }
 
     public async getTransfersByContract(contract: string) {
-        return new Promise((resolve, reject) => {
-            this.db.all(`SELECT id, blockId, blockNumber, sender, amount, contractName, contractAction, contractPayload FROM transfers WHERE contractName = ?`, [contract], (err, rows) => {
-                if (!err) {
-                    if (rows.length) {
-                        resolve(rows.reduce((arr, row) => {
-                            row.contractPayload = JSON.parse(row.contractPayload) ?? {};
-                            arr.push(row);
-                            return arr;
-                        }, []));
-                    } else {
-                        resolve(null);
-                    }
-                } else {
-                    reject(err);
-                }
-            });
-        });
+        try {
+            const rows = await this.db('transfers')
+                .select('id', 'blockId', 'blockNumber', 'sender', 'amount', 'contractName', 'contractAction', 'contractPayload')
+                .where('contractName', contract);
+            
+            if (rows.length) {
+                return rows.map(row => ({
+                    ...row,
+                    contractPayload: JSON.parse(row.contractPayload) ?? {}
+                }));
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('[SqliteAdapter] Error getting transfers by contract:', error);
+            throw error;
+        }
     }
 
     public async getTransfersByAccount(account: string) {
-        return new Promise((resolve, reject) => {
-            this.db.all(`SELECT id, blockId, blockNumber, sender, amount, contractName, contractAction, contractPayload FROM transfers WHERE sender = ?`, [account], (err, rows) => {
-                if (!err) {
-                    if (rows.length) {
-                        resolve(rows.reduce((arr, row) => {
-                            row.contractPayload = JSON.parse(row.contractPayload) ?? {};
-                            arr.push(row);
-                            return arr;
-                        }, []));
-                    } else {
-                        resolve(null);
-                    }
-                } else {
-                    reject(err);
-                }
-            });
-        });
+        try {
+            const rows = await this.db('transfers')
+                .select('id', 'blockId', 'blockNumber', 'sender', 'amount', 'contractName', 'contractAction', 'contractPayload')
+                .where('sender', account);
+            
+            if (rows.length) {
+                return rows.map(row => ({
+                    ...row,
+                    contractPayload: JSON.parse(row.contractPayload) ?? {}
+                }));
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('[SqliteAdapter] Error getting transfers by account:', error);
+            throw error;
+        }
     }
 
     public async getTransfersByBlockid(blockId: any) {
-        return new Promise((resolve, reject) => {
-            this.db.all(`SELECT id, blockId, blockNumber, sender, amount, contractName, contractAction, contractPayload FROM transfers WHERE blockId = ?`, [blockId], (err, rows) => {
-                if (!err) {
-                    if (rows.length) {
-                        resolve(rows.reduce((arr, row) => {
-                            row.contractPayload = JSON.parse(row.contractPayload) ?? {};
-                            arr.push(row);
-                            return arr;
-                        }, []));
-                    } else {
-                        resolve(null);
-                    }
-                } else {
-                    reject(err);
-                }
-            });
-        });
+        try {
+            const rows = await this.db('transfers')
+                .select('id', 'blockId', 'blockNumber', 'sender', 'amount', 'contractName', 'contractAction', 'contractPayload')
+                .where('blockId', blockId);
+            
+            if (rows.length) {
+                return rows.map(row => ({
+                    ...row,
+                    contractPayload: JSON.parse(row.contractPayload) ?? {}
+                }));
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('[SqliteAdapter] Error getting transfers by blockId:', error);
+            throw error;
+        }
     }
 
     public async getJson() {
-        return new Promise((resolve, reject) => {
-            this.db.all('SELECT id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload FROM customJson', (err, rows) => {
-                if (!err) {
-                    if (rows.length) {
-                        resolve(rows.reduce((arr, row) => {
-                            row.contractPayload = JSON.parse(row.contractPayload) ?? {};
-                            arr.push(row);
-                            return arr;
-                        }, []));
-                    } else {
-                        resolve(null);
-                    }
-                } else {
-                    reject(err);
-                }
-            });
-        });
+        try {
+            const rows = await this.db('customJson')
+                .select('id', 'blockId', 'blockNumber', 'sender', 'isSignedWithActiveKey', 'contractName', 'contractAction', 'contractPayload');
+            
+            if (rows.length) {
+                return rows.map(row => ({
+                    ...row,
+                    contractPayload: JSON.parse(row.contractPayload) ?? {}
+                }));
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('[SqliteAdapter] Error getting JSON:', error);
+            throw error;
+        }
     }
 
     public async getJsonByContract(contract: string) {
-        return new Promise((resolve, reject) => {
-            this.db.all(`SELECT id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload FROM customJson WHERE contractName = ?`, [contract], (err, rows) => {
-                if (!err) {
-                    if (rows.length) {
-                        resolve(rows.reduce((arr, row) => {
-                            row.contractPayload = JSON.parse(row.contractPayload) ?? {};
-                            arr.push(row);
-                            return arr;
-                        }, []));
-                    } else {
-                        resolve(null);
-                    }
-                } else {
-                    reject(err);
-                }
-            });
-        });
+        try {
+            const rows = await this.db('customJson')
+                .select('id', 'blockId', 'blockNumber', 'sender', 'isSignedWithActiveKey', 'contractName', 'contractAction', 'contractPayload')
+                .where('contractName', contract);
+            
+            if (rows.length) {
+                return rows.map(row => ({
+                    ...row,
+                    contractPayload: JSON.parse(row.contractPayload) ?? {}
+                }));
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('[SqliteAdapter] Error getting JSON by contract:', error);
+            throw error;
+        }
     }
 
     public async getJsonByAccount(account: string) {
-        return new Promise((resolve, reject) => {
-            this.db.all(`SELECT id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload FROM customJson WHERE sender = ?`, [account], (err, rows) => {
-                if (!err) {
-                    if (rows.length) {
-                        resolve(rows.reduce((arr, row) => {
-                            row.contractPayload = JSON.parse(row.contractPayload) ?? {};
-                            arr.push(row);
-                            return arr;
-                        }, []));
-                    } else {
-                        resolve(null);
-                    }
-                } else {
-                    reject(err);
-                }
-            });
-        });
+        try {
+            const rows = await this.db('customJson')
+                .select('id', 'blockId', 'blockNumber', 'sender', 'isSignedWithActiveKey', 'contractName', 'contractAction', 'contractPayload')
+                .where('sender', account);
+            
+            if (rows.length) {
+                return rows.map(row => ({
+                    ...row,
+                    contractPayload: JSON.parse(row.contractPayload) ?? {}
+                }));
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('[SqliteAdapter] Error getting JSON by account:', error);
+            throw error;
+        }
     }
 
     public async getJsonByBlockid(blockId: any) {
-        return new Promise((resolve, reject) => {
-            this.db.all(`SELECT id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload FROM customJson WHERE blockId = ?`, [blockId], (err, rows) => {
-                if (!err) {
-                    if (rows.length) {
-                        resolve(rows.reduce((arr, row) => {
-                            row.contractPayload = JSON.parse(row.contractPayload) ?? {};
-                            arr.push(row);
-                            return arr;
-                        }, []));
-                    } else {
-                        resolve(null);
-                    }
-                } else {
-                    reject(err);
-                }
-            });
-        });
+        try {
+            const rows = await this.db('customJson')
+                .select('id', 'blockId', 'blockNumber', 'sender', 'isSignedWithActiveKey', 'contractName', 'contractAction', 'contractPayload')
+                .where('blockId', blockId);
+            
+            if (rows.length) {
+                return rows.map(row => ({
+                    ...row,
+                    contractPayload: JSON.parse(row.contractPayload) ?? {}
+                }));
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('[SqliteAdapter] Error getting JSON by blockId:', error);
+            throw error;
+        }
     }
 
     public async destroy(): Promise<boolean> {
-        return new Promise((resolve, reject) => {
-            // Finalize all prepared statements first
-            this.preparedStatements.forEach((stmt, key) => {
-                try {
-                    stmt.finalize();
-                } catch (error) {
-                    console.warn(`[SqliteAdapter] Error finalizing statement ${key}:`, error);
-                }
-            });
-            this.preparedStatements.clear();
-            
-            // Flush any remaining batch operations
-            this.flushBatch();
-            
-            this.db.close((err) => {
-                if (!err) {
-                    resolve(true);
-                } else {
-                    reject(err);
-                }
-            });
-        });
+        try {
+            await this.db.destroy();
+            return true;
+        } catch (error) {
+            console.error('[SqliteAdapter] Error destroying database connection:', error);
+            throw error;
+        }
     }
 
     public async find(table: string, query: Record<string, any>) {
-        return new Promise((resolve, reject) => {
-            const keys = Object.keys(query);
-            const queryStr = keys.map(key => `${key} = ?`).join(' AND ');
-            const values = keys.map(key => query[key]);
-
-            this.db.all(`SELECT * FROM ${table} WHERE ${queryStr}`, values, (err, rows) => {
-                if (!err) {
-                    if (rows.length) {
-                        resolve(rows);
-                    } else {
-                        resolve(null);
-                    }
-                } else {
-                    reject(err);
-                }
-            });
-        });
+        try {
+            const rows = await this.db(table).where(query);
+            return rows.length ? rows : null;
+        } catch (error) {
+            console.error(`[SqliteAdapter] Error finding in table ${table}:`, error);
+            throw error;
+        }
     }
 
     public async findOne(table: string, query: Record<string, any>) {
-        return new Promise((resolve, reject) => {
-            const keys = Object.keys(query);
-            const queryStr = keys.map(key => `${key} = ?`).join(' AND ');
-            const values = keys.map(key => query[key]);
-
-            this.db.get(`SELECT * FROM ${table} WHERE ${queryStr}`, values, (err, row) => {
-                if (!err) {
-                    if (row) {
-                        resolve(row);
-                    } else {
-                        resolve(null);
-                    }
-                } else {
-                    reject(err);
-                }
-            });
-        });
+        try {
+            const row = await this.db(table).where(query).first();
+            return row || null;
+        } catch (error) {
+            console.error(`[SqliteAdapter] Error finding one in table ${table}:`, error);
+            throw error;
+        }
     }
 
-    public async insert(table: string, data: string) {
-        return new Promise((resolve, reject) => {
-            this.db.run(`INSERT INTO ${table} VALUES (${data})`, (err) => {
-                if (!err) {
-                    resolve(true);
-                } else {
-                    reject(err);
-                }
-            });
-        });
+    public async insert(table: string, data: any) {
+        try {
+            await this.db(table).insert(data);
+            return true;
+        } catch (error) {
+            console.error(`[SqliteAdapter] Error inserting into table ${table}:`, error);
+            throw error;
+        }
     }
 
     public async replace(table: string, queryObject: Record<string, any>, data: any): Promise<any> {
-        return new Promise((resolve, reject) => {
-            const dataKeys = Object.keys(data);
-            const placeholders = dataKeys.map(() => '?').join(', ');
-            const values = dataKeys.map(key => data[key]);
+        try {
+            await this.db(table)
+                .insert(data)
+                .onConflict(Object.keys(queryObject))
+                .merge();
+            return data;
+        } catch (error) {
+            console.error(`[SqliteAdapter] Error replacing in table ${table}:`, error);
+            throw error;
+        }
+    }
 
-            this.db.run(`REPLACE INTO ${table} (${dataKeys.join(', ')}) VALUES (${placeholders})`, values, (err) => {
-                if (!err) {
-                    resolve(data);
-                } else {
-                    reject(err);
-                }
-            });
-        });
+    public async query(sql: string, params?: any[]): Promise<any[]> {
+        try {
+            const result = await this.db.raw(sql, params);
+            return result || [];
+        } catch (error) {
+            console.error('[SqliteAdapter] Error executing raw query:', error);
+            throw error;
+        }
     }
 }

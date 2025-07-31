@@ -61,4 +61,8 @@ export class AdapterBase {
     public async replace(table: string, queryObject: Record<string, any>, data: any): Promise<any> {
         return data;
     }
+
+    public async query(sql: string, params?: any[]): Promise<any[]> {
+        throw new Error('Query method not implemented in adapter');
+    }
 }
