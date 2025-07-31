@@ -48,7 +48,7 @@ export class Api {
             res.json(jsons);
         });
 
-        app.get('/json/contract/.:contractName', async (req, res) => {
+        app.get('/json/contract/:contractName', async (req, res) => {
             const jsons = await this.streamer.adapter.getJsonByContract(req.params.contractName);
 
             res.json(jsons);
