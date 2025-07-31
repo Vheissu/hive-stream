@@ -10,7 +10,7 @@ export class Exchange {
         const HOUR_AGO = Date.now() - this.oneHour;
 
         // Only fetch once per hour
-        if (this.lastFetch && this.lastFetch < HOUR_AGO) {
+        if (this.lastFetch && this.lastFetch > HOUR_AGO) {
             return false;
         }
 

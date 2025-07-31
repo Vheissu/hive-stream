@@ -71,18 +71,15 @@ describe('Utils', () => {
             const hiveSymbol = 'HIVE';
 
             (fetch as any)
-                .once(JSON.stringify({'success':true,'message':'','result':{'Bid':6905.98900000,'Ask':6925.65900000,'Last':6925.66500000}}))
-                .once(JSON.stringify({'success':true,'message':'','result':{'Bid':0.00003083,'Ask':0.00003169,'Last':0.00003192}}))
-                .once(JSON.stringify({'success':true,'message':'','result':{'Bid':0.00010800,'Ask':0.00010900,'Last':0.00010800}}))
-                .once(JSON.stringify({'rates':{'CAD':1.4383752203,'HKD':7.7558193453,'ISK':140.4989335064,'PHP':51.4003524066,'DKK':6.9281276083,'HUF':326.7458035797,'CZK':25.6283038116,'GBP':0.862190485,'RON':4.4960586108,'SEK':10.2675507744,'IDR':16574.9976815358,'INR':76.1620142817,'BRL':5.0683483261,'RUB':79.8293610313,'HRK':7.053695632,'JPY':110.4609106928,'THB':32.8646944264,'CHF':0.982101456,'EUR':0.9273856997,'MYR':4.4449596587,'BGN':1.8137809515,'TRY':6.5859222851,'CNY':7.0838356673,'NOK':11.3667810442,'NZD':1.7563757767,'ZAR':17.6333116943,'USD':1.0,'MXN':24.6805156264,'SGD':1.4601687842,'AUD':1.7236390615,'ILS':3.6698506909,'KRW':1256.7003616804,'PLN':4.2711675786},'base':'USD','date':'2020-03-23'}));
+                .once(JSON.stringify({'hive':{'usd':0.229951},'hive_dollar':{'usd':0.99805}})) // CoinGecko HIVE/HBD prices
+                .once(JSON.stringify({'date':'2025-07-31','usd':{'cad':1.38249328,'hkd':7.84969296,'isk':124.40606356,'php':58.05502018,'dkk':6.52928985,'huf':350.43324994,'czk':21.5182452,'gbp':0.75416895,'ron':4.43971718,'sek':9.77798397,'idr':16437.63140133,'inr':87.62805331,'brl':5.57697598,'rub':81.01377784,'hrk':6.59133796,'jpy':148.8919467,'thb':32.6921739,'chf':0.81307502,'eur':0.87482089,'myr':4.2526877,'bgn':1.71100093,'try':40.59221009,'cny':7.19127973,'nok':10.30319488,'nzd':1.69157541,'zar':17.98114271,'usd':1.0,'mxn':18.84341987,'sgd':1.29367688,'aud':1.5491513,'ils':3.38255864,'krw':1389.43611488,'pln':3.73980141}})); // Currency API fiat rates
     
             const value = await Utils.convertHiveAmount(amount, fiatSymbol, hiveSymbol);
             
-            expect(fetch).toBeCalledWith(`https://api.bittrex.com/v3/markets/USD-BTC/ticker`);
-            expect(fetch).toBeCalledWith(`https://api.bittrex.com/v3/markets/HIVE-BTC/ticker`);
-            expect(fetch).toBeCalledWith(`https://api.bittrex.com/v3/markets/HBD-BTC/ticker`);
+            expect(fetch).toBeCalledWith('https://api.coingecko.com/api/v3/simple/price?ids=hive,hive_dollar&vs_currencies=usd');
+            expect(fetch).toBeCalledWith('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json');
 
-            expect(value).toStrictEqual(113.088);
+            expect(value).toStrictEqual(Number((amount / 0.229951).toFixed(3))); // amount / HIVE price from CoinGecko (fiat to HIVE conversion)
         });
     });
 

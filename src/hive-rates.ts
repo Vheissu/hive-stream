@@ -1,8 +1,8 @@
-import { BittrexExchange } from './exchanges/bittrex';
+import { CoinGeckoExchange } from './exchanges/coingecko';
 
 export class HiveRates {
-    private fiatRates = [];
-    private hiveRates = [];
+    private fiatRates = {};
+    private hiveRates = {};
     private lastFetch;
     private oneHour = 1000 * 60 * 60;
 
@@ -15,7 +15,7 @@ export class HiveRates {
 
         let exchangesUpdated = false;
 
-        const exchanges = [ new BittrexExchange() ];
+        const exchanges = [ new CoinGeckoExchange() ];
 
         for (const exchange of exchanges) {
             const updated = await exchange.updateRates();
@@ -31,7 +31,7 @@ export class HiveRates {
                     hiveCount++;
                 }
 
-                if (usdHbdRate ** usdHbdRate > 0) {
+                if (usdHbdRate && usdHbdRate > 0) {
                     hbdAverage += usdHbdRate;
                     hbdCount++;
                 }
@@ -53,9 +53,10 @@ export class HiveRates {
         }
 
         for (const [symbol, value] of Object.entries(this.fiatRates)) {
-            this.hiveRates[`USD_${symbol}`] = value;
-            this.hiveRates[`${symbol}_HIVE`] = hiveAverage * value;
-            this.hiveRates[`${symbol}_HBD`] = hbdAverage * value;
+            const rate = Number(value);
+            this.hiveRates[`USD_${symbol}`] = rate;
+            this.hiveRates[`${symbol}_HIVE`] = hiveAverage * rate;
+            this.hiveRates[`${symbol}_HBD`] = hbdAverage * rate;
         }
 
         return true;
@@ -76,22 +77,69 @@ export class HiveRates {
     private async getFiatRates(base = 'USD') {
         const HOUR_AGO = Date.now() - this.oneHour;
 
-        if (this.lastFetch && this.lastFetch < HOUR_AGO) {
+        if (this.lastFetch && this.lastFetch > HOUR_AGO) {
             return false;
         }
 
-        const request = await fetch(`https://api.exchangeratesapi.io/latest?base=${base}`);
-        const response = await request.json();
+        try {
+            const baseKey = base.toLowerCase();
+            let response = null;
+            let exchangeRates = null;
 
-        const exchangeRates = response?.rates;
+            // Try primary endpoint first
+            try {
+                const primaryUrl = `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/${baseKey}.json`;
+                const request = await fetch(primaryUrl);
+                
+                if (request.ok) {
+                    response = await request.json();
+                    exchangeRates = response?.[baseKey];
+                }
+            } catch (primaryError) {
+                console.warn('Primary API endpoint failed:', primaryError.message);
+            }
 
-        if (!exchangeRates) {
+            // If primary fails, try the Cloudflare fallback
+            if (!exchangeRates) {
+                try {
+                    const fallbackUrl = `https://latest.currency-api.pages.dev/v1/currencies/${baseKey}.json`;
+                    const request = await fetch(fallbackUrl);
+                    
+                    if (request.ok) {
+                        response = await request.json();
+                        exchangeRates = response?.[baseKey];
+                    }
+                } catch (fallbackError) {
+                    console.warn('Fallback API endpoint failed:', fallbackError.message);
+                }
+            }
+
+            if (!exchangeRates || typeof exchangeRates !== 'object') {
+                console.error('No valid exchange rates found in API response');
+                return false;
+            }
+
+            // Convert the currency codes to uppercase to match the previous format
+            const upperCaseRates = {};
+            for (const [currency, rate] of Object.entries(exchangeRates)) {
+                if (typeof rate === 'number' && !isNaN(rate)) {
+                    upperCaseRates[currency.toUpperCase()] = rate;
+                }
+            }
+
+            if (Object.keys(upperCaseRates).length === 0) {
+                console.error('No valid currency rates found');
+                return false;
+            }
+
+            this.fiatRates = upperCaseRates;
+            this.lastFetch = Date.now();
+
+            console.log(`Successfully fetched ${Object.keys(upperCaseRates).length} currency rates with base ${base}`);
+            return true;
+        } catch (error) {
+            console.error('Error fetching fiat rates:', error);
             return false;
         }
-
-        this.fiatRates = exchangeRates;
-        this.lastFetch = Date.now();
-
-        return true;
     }
 }
