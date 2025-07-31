@@ -2,6 +2,7 @@ import { CoinflipContract } from '../../src/contracts/coinflip.contract';
 import { sleep } from '@hiveio/dhive/lib/utils';
 import { Streamer } from '../../src/streamer';
 import { createMockAdapter } from '../helpers/mock-adapter';
+import BigNumber from 'bignumber.js';
 
 // Mock uuid module at the top level
 jest.mock('uuid', () => ({
@@ -50,6 +51,7 @@ describe('Coinflip Contract', () => {
         contract['_instance'] = sut;
 
         jest.spyOn(contract as any, 'flip');
+        jest.spyOn(contract as any, 'getBalance').mockResolvedValue(new BigNumber(2000));
 
         jest.spyOn(sut, 'getTransaction').mockResolvedValue({test: 123} as any);
         jest.spyOn(sut, 'verifyTransfer').mockResolvedValue(true as any);
@@ -84,6 +86,7 @@ describe('Coinflip Contract', () => {
         contract['_instance'] = sut;
 
         jest.spyOn(contract as any, 'flip');
+        jest.spyOn(contract as any, 'getBalance').mockResolvedValue(new BigNumber(2000));
 
         jest.spyOn(sut, 'getTransaction').mockResolvedValue({test: 123} as any);
         jest.spyOn(sut, 'verifyTransfer').mockResolvedValue(true as any);
@@ -118,6 +121,7 @@ describe('Coinflip Contract', () => {
         contract['_instance'] = sut;
 
         jest.spyOn(contract as any, 'flip');
+        jest.spyOn(contract as any, 'getBalance').mockResolvedValue(new BigNumber(2000));
 
         jest.spyOn(sut, 'getTransaction').mockResolvedValue({test: 123} as any);
         jest.spyOn(sut, 'verifyTransfer').mockResolvedValue(true as any);
@@ -141,5 +145,78 @@ describe('Coinflip Contract', () => {
         expect(contract['flip']).toBeCalled();
         expect(sut.getTransaction).toBeCalledWith(778782, 'fhkjsdhfkjsdf');
         expect(sut.transferHiveTokens).toBeCalledWith('beggars', 'testuser', '10.000', 'HBD', '[Refund] You sent an invalid currency.');
+    });
+
+    test('Server cannot afford payout, refund user', async () => {
+        sut.registerContract('coinflip', contract);
+
+        contract['_instance'] = sut;
+
+        jest.spyOn(contract as any, 'flip');
+        jest.spyOn(contract as any, 'getBalance').mockResolvedValue(new BigNumber(10)); // Low balance
+
+        jest.spyOn(sut, 'getTransaction').mockResolvedValue({test: 123} as any);
+        jest.spyOn(sut, 'verifyTransfer').mockResolvedValue(true as any);
+        jest.spyOn(sut, 'transferHiveTokens').mockResolvedValue(true as any);
+
+        const memo = JSON.stringify({
+            hivePayload: {
+                id: 'hivestream',
+                name: 'coinflip',
+                action: 'flip',
+                payload: {
+                    guess: 'heads'
+                }
+            }
+        });
+
+        sut.processOperation(['transfer', { from: 'testuser', amount: '15.000 HIVE', memo }], 778782, 'dfjfsdfsdfs4hfkj88787', 'fkjsdkfj', 'fhkjsdhfkjsdf', '2019-06-23' as any);
+
+        await sleep(100);
+
+        expect(contract['flip']).toBeCalled();
+        expect(sut.getTransaction).toBeCalledWith(778782, 'fhkjsdhfkjsdf');
+        expect(sut.transferHiveTokens).toBeCalledWith('beggars', 'testuser', '15.000', 'HIVE', '[Refund] The server cannot afford this bet payout.');
+    });
+
+    test('Queue processes multiple concurrent bets', async () => {
+        sut.registerContract('coinflip', contract);
+
+        contract['_instance'] = sut;
+
+        jest.spyOn(contract as any, 'getBalance').mockResolvedValue(new BigNumber(2000));
+        jest.spyOn(sut, 'getTransaction').mockResolvedValue({test: 123} as any);
+        jest.spyOn(sut, 'verifyTransfer').mockResolvedValue(true as any);
+        jest.spyOn(sut, 'transferHiveTokens').mockResolvedValue(true as any);
+
+        const memo1 = JSON.stringify({
+            hivePayload: {
+                id: 'hivestream',
+                name: 'coinflip',
+                action: 'flip',
+                payload: { guess: 'heads', seed: 'seed1' }
+            }
+        });
+
+        const memo2 = JSON.stringify({
+            hivePayload: {
+                id: 'hivestream',
+                name: 'coinflip',
+                action: 'flip',
+                payload: { guess: 'heads', seed: 'seed2' }
+            }
+        });
+
+        (uuidv4 as jest.Mock).mockReturnValue('test-server-seed');
+
+        // Process multiple bets concurrently
+        const bet1Promise = sut.processOperation(['transfer', { from: 'user1', amount: '5.000 HIVE', memo: memo1 }], 778782, 'block1', 'prevblock1', 'trx1', '2019-06-23' as any);
+        const bet2Promise = sut.processOperation(['transfer', { from: 'user2', amount: '5.000 HIVE', memo: memo2 }], 778783, 'block2', 'prevblock2', 'trx2', '2019-06-23' as any);
+
+        await Promise.all([bet1Promise, bet2Promise]);
+        await sleep(200); // Allow queue processing to complete
+
+        // Both transfers should have been processed
+        expect(sut.transferHiveTokens).toHaveBeenCalledTimes(2);
     });
 });

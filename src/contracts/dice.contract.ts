@@ -47,8 +47,9 @@ export class DiceContract {
     private balanceCache: { balance: BigNumber, timestamp: number } | null = null;
     private readonly balanceCacheTimeout = 30000; // 30 seconds
     
-    // Mutex to prevent race conditions on balance operations
-    private balanceOperationLock = false;
+    // Queue system for processing bets to prevent race conditions
+    private betQueue: Array<() => Promise<void>> = [];
+    private processingQueue = false;
     private pendingPayouts = new BigNumber(0);
 
     public create() {
@@ -127,13 +128,44 @@ export class DiceContract {
      * @param param1 - sender and amount
      */
     private async roll(payload: { roll: number }, { sender, amount }) {
-        // Prevent race conditions with balance operations
-        if (this.balanceOperationLock) {
-            await this._instance.transferHiveTokens(ACCOUNT, sender, amount.split(' ')[0], amount.split(' ')[1], '[Refund] Server busy, try again.');
+        // Add bet to queue for processing
+        return new Promise<void>((resolve, reject) => {
+            this.betQueue.push(async () => {
+                try {
+                    await this.processRoll(payload, { sender, amount });
+                    resolve();
+                } catch (error) {
+                    reject(error);
+                }
+            });
+            
+            // Start processing queue if not already running
+            this.processQueue();
+        });
+    }
+    
+    private async processQueue() {
+        if (this.processingQueue || this.betQueue.length === 0) {
             return;
         }
         
-        this.balanceOperationLock = true;
+        this.processingQueue = true;
+        
+        while (this.betQueue.length > 0) {
+            const nextBet = this.betQueue.shift();
+            if (nextBet) {
+                try {
+                    await nextBet();
+                } catch (error) {
+                    console.error('[DiceContract] Queue processing error:', error);
+                }
+            }
+        }
+        
+        this.processingQueue = false;
+    }
+    
+    private async processRoll(payload: { roll: number }, { sender, amount }) {
         
         try {
             // Validate payload structure
@@ -281,8 +313,6 @@ export class DiceContract {
             }
             
             throw error;
-        } finally {
-            this.balanceOperationLock = false;
         }
     }
 
