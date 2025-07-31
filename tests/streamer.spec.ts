@@ -18,8 +18,21 @@ describe('Streamer', () => {
         test('Registers adapter and calls the create lifecycle method', () => {
             const adapter = {
                 create: jest.fn().mockResolvedValue(true),
-                destroy: jest.fn()
-            };
+                destroy: jest.fn(),
+                loadActions: jest.fn().mockResolvedValue([]),
+                loadState: jest.fn().mockResolvedValue(null),
+                saveState: jest.fn().mockResolvedValue(true),
+                processBlock: jest.fn(),
+                processOperation: jest.fn(),
+                processTransfer: jest.fn(),
+                processCustomJson: jest.fn(),
+                find: jest.fn(),
+                findOne: jest.fn(),
+                insert: jest.fn(),
+                replace: jest.fn(),
+                client: null,
+                db: null
+            } as any;
 
             sut.registerAdapter(adapter);
 
@@ -29,11 +42,29 @@ describe('Streamer', () => {
 
     describe('Actions', () => {
         test('Registers a new action', async () => {
+            const mockContract = {
+                testmethod: jest.fn()
+            };
+            
+            sut.registerContract('testcontract', mockContract);
+            
             const adapter = {
                 create: jest.fn().mockResolvedValue(true),
                 destroy: jest.fn(),
-                loadActions: jest.fn().mockResolvedValue([])
-            };
+                loadActions: jest.fn().mockResolvedValue([]),
+                loadState: jest.fn().mockResolvedValue(null),
+                saveState: jest.fn().mockResolvedValue(true),
+                processBlock: jest.fn(),
+                processOperation: jest.fn(),
+                processTransfer: jest.fn(),
+                processCustomJson: jest.fn(),
+                find: jest.fn(),
+                findOne: jest.fn(),
+                insert: jest.fn(),
+                replace: jest.fn(),
+                client: null,
+                db: null
+            } as any;
 
             sut.registerAdapter(adapter);
 
@@ -47,11 +78,29 @@ describe('Streamer', () => {
         });
 
         test('Does not allow duplicate actions of the same id', async () => {
+            const mockContract = {
+                testmethod: jest.fn()
+            };
+            
+            sut.registerContract('testcontract', mockContract);
+            
             const adapter = {
                 create: jest.fn().mockResolvedValue(true),
                 destroy: jest.fn(),
-                loadActions: jest.fn().mockResolvedValue([])
-            };
+                loadActions: jest.fn().mockResolvedValue([]),
+                loadState: jest.fn().mockResolvedValue(null),
+                saveState: jest.fn().mockResolvedValue(true),
+                processBlock: jest.fn(),
+                processOperation: jest.fn(),
+                processTransfer: jest.fn(),
+                processCustomJson: jest.fn(),
+                find: jest.fn(),
+                findOne: jest.fn(),
+                insert: jest.fn(),
+                replace: jest.fn(),
+                client: null,
+                db: null
+            } as any;
 
             sut.registerAdapter(adapter);
 
@@ -65,11 +114,38 @@ describe('Streamer', () => {
         });
 
         test('Registers actions loaded from adapter loadActions call', async () => {
+            const mockContract = {
+                testmethod: jest.fn()
+            };
+            
+            sut.registerContract('testcontract', mockContract);
+            
             const adapter = {
                 create: jest.fn().mockResolvedValue(true),
                 destroy: jest.fn(),
-                loadActions: jest.fn().mockResolvedValue([new TimeAction('1m', 'testoneminute', 'testcontract', 'testmethod')])
-            };
+                loadActions: jest.fn().mockResolvedValue([{
+                    timeValue: '1m',
+                    id: 'testoneminute',
+                    contractName: 'testcontract',
+                    contractMethod: 'testmethod',
+                    payload: {},
+                    date: new Date().toISOString(),
+                    enabled: true,
+                    executionCount: 0
+                }]),
+                loadState: jest.fn().mockResolvedValue(null),
+                saveState: jest.fn().mockResolvedValue(true),
+                processBlock: jest.fn(),
+                processOperation: jest.fn(),
+                processTransfer: jest.fn(),
+                processCustomJson: jest.fn(),
+                find: jest.fn(),
+                findOne: jest.fn(),
+                insert: jest.fn(),
+                replace: jest.fn(),
+                client: null,
+                db: null
+            } as any;
 
             sut.registerAdapter(adapter);
 
@@ -134,9 +210,26 @@ describe('Streamer', () => {
     });
 
     test('Start method should resume from previous block number', async () => {
+        // Override config to not have a preset LAST_BLOCK_NUMBER
+        sut.setConfig({ LAST_BLOCK_NUMBER: 0 });
+        
         const adapter = {
-            loadState: jest.fn().mockResolvedValue({ lastBlockNumber: 509992 })
-        };
+            create: jest.fn().mockResolvedValue(true),
+            destroy: jest.fn(),
+            loadActions: jest.fn().mockResolvedValue([]),
+            loadState: jest.fn().mockResolvedValue({ lastBlockNumber: 509992 }),
+            saveState: jest.fn().mockResolvedValue(true),
+            processBlock: jest.fn(),
+            processOperation: jest.fn(),
+            processTransfer: jest.fn(),
+            processCustomJson: jest.fn(),
+            find: jest.fn(),
+            findOne: jest.fn(),
+            insert: jest.fn(),
+            replace: jest.fn(),
+            client: null,
+            db: null
+        } as any;
 
         sut.registerAdapter(adapter);
 
