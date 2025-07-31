@@ -8,6 +8,13 @@ import path from 'path';
 
 export class SqliteAdapter extends AdapterBase {
     public db = new Database(path.resolve(__dirname, 'hive-stream.db'));
+    
+    // Performance optimization: prepared statements cache
+    private preparedStatements: Map<string, any> = new Map();
+    private batchOperations: Array<{sql: string, params: any[]}> = [];
+    private batchTimeout: NodeJS.Timeout | null = null;
+    private readonly batchSize = 100;
+    private readonly batchDelayMs = 1000;
 
     private blockNumber: number;
     private lastBlockNumber: number;
@@ -32,10 +39,59 @@ export class SqliteAdapter extends AdapterBase {
                     .run(transfers)
                     .run(customJson)
                     .run(events, () => {
-                    resolve(true);
-                });
+                        this.initializePreparedStatements();
+                        resolve(true);
+                    });
             });
-        })
+        });
+    }
+    
+    private initializePreparedStatements(): void {
+        // Prepare frequently used statements for better performance
+        const transferSql = `INSERT INTO transfers (id, blockId, blockNumber, sender, amount, contractName, contractAction, contractPayload) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+        const customJsonSql = `INSERT INTO customJson (id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+        
+        this.preparedStatements.set('INSERT_TRANSFER', this.db.prepare(transferSql));
+        this.preparedStatements.set('INSERT_CUSTOM_JSON', this.db.prepare(customJsonSql));
+    }
+    
+    private async executeBatched(sqlKey: string, params: any[]): Promise<boolean> {
+        return new Promise((resolve) => {
+            this.batchOperations.push({ sql: sqlKey, params });
+            
+            if (this.batchOperations.length >= this.batchSize) {
+                this.flushBatch();
+            } else if (!this.batchTimeout) {
+                this.batchTimeout = setTimeout(() => this.flushBatch(), this.batchDelayMs);
+            }
+            
+            resolve(true);
+        });
+    }
+    
+    private flushBatch(): void {
+        if (this.batchOperations.length === 0) return;
+        
+        const operations = [...this.batchOperations];
+        this.batchOperations = [];
+        
+        if (this.batchTimeout) {
+            clearTimeout(this.batchTimeout);
+            this.batchTimeout = null;
+        }
+        
+        this.db.serialize(() => {
+            this.db.run('BEGIN TRANSACTION');
+            
+            operations.forEach(({ sql, params }) => {
+                const stmt = this.preparedStatements.get(sql);
+                if (stmt) {
+                    stmt.run(params);
+                }
+            });
+            
+            this.db.run('COMMIT');
+        });
     }
 
     public async loadActions(): Promise<TimeAction[]> {
@@ -88,51 +144,35 @@ export class SqliteAdapter extends AdapterBase {
     }
 
     public async processTransfer(operation: any, payload: ContractPayload, metadata: TransferMetadata): Promise<boolean> {
-        return new Promise((resolve, reject) => {
-            const sql = `INSERT INTO transfers (id, blockId, blockNumber, sender, amount, contractName, contractAction, contractPayload) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-
-            this.db.run(sql, [
-                this.transactionId, 
-                this.blockId, 
-                this.blockNumber, 
-                metadata.sender, 
-                metadata.amount, 
-                payload.name, 
-                payload.action, 
-                JSON.stringify(payload.payload)
-            ], (err, result) => {
-                if (!err) {
-                    resolve(true);
-                } else {
-                    reject(err);
-                }
-            });
-        });
+        const sql = 'INSERT_TRANSFER';
+        const params = [
+            this.transactionId, 
+            this.blockId, 
+            this.blockNumber, 
+            metadata.sender, 
+            metadata.amount, 
+            payload.name, 
+            payload.action, 
+            JSON.stringify(payload.payload)
+        ];
+        
+        return this.executeBatched(sql, params);
     }
 
     public async processCustomJson(operation: any, payload: ContractPayload, metadata: CustomJsonMetadata): Promise<boolean> {
-        return new Promise((resolve, reject) => {
-            const sql = `INSERT INTO customJson (id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-
-            this.db.run(sql, [
-                this.transactionId, 
-                this.blockId, 
-                this.blockNumber, 
-                metadata.sender, 
-                metadata.isSignedWithActiveKey ? 1 : 0, 
-                payload.name, 
-                payload.action, 
-                JSON.stringify(payload.payload)
-            ], (err, result) => {
-                if (!err) {
-                    resolve(true);
-                } else {
-                    reject(err);
-                }
-            });
-        });
+        const sql = 'INSERT_CUSTOM_JSON';
+        const params = [
+            this.transactionId, 
+            this.blockId, 
+            this.blockNumber, 
+            metadata.sender, 
+            metadata.isSignedWithActiveKey ? 1 : 0, 
+            payload.name, 
+            payload.action, 
+            JSON.stringify(payload.payload)
+        ];
+        
+        return this.executeBatched(sql, params);
     }
 
     public async addEvent(date: string, contract: string, action: string, payload: ContractPayload, data: unknown): Promise<boolean> {

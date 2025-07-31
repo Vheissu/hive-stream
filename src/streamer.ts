@@ -61,6 +61,33 @@ export class Streamer {
     private adapter;
     private actions: TimeAction[] = [];
 
+    // Performance optimization properties
+    private lastStateSave = Date.now();
+    private stateSaveInterval = 5000; // Save state every 5 seconds instead of every block
+    private blockProcessingQueue: Array<() => Promise<void>> = [];
+    private isProcessingQueue = false;
+    
+    // Memory management
+    private readonly maxSubscriptions = 1000;
+    private subscriptionCleanupInterval: NodeJS.Timeout | null = null;
+    
+    // Action processing optimization
+    private actionFrequencyMap = new Map([
+        ['3s', 3], ['block', 3], ['10s', 10], ['30s', 30],
+        ['1m', 60], ['minute', 60], ['15m', 900], ['quarter', 900],
+        ['30m', 1800], ['halfhour', 1800], ['hourly', 3600], ['1h', 3600],
+        ['12h', 43200], ['halfday', 43200], ['24h', 86400], ['day', 86400],
+        ['week', 604800]
+    ]);
+    private contractCache = new Map<string, StreamerContract>();
+    
+    // Data caching for performance
+    private blockCache = new Map<number, any>();
+    private transactionCache = new Map<string, any>();
+    private accountCache = new Map<string, { data: any, timestamp: number }>();
+    private readonly cacheTimeout = 300000; // 5 minutes
+    private readonly maxCacheSize = 1000;
+
     private utils = Utils;
 
     constructor(userConfig: Partial<ConfigInterface> = {}) {
@@ -81,6 +108,11 @@ export class Streamer {
         if (process?.env?.NODE_ENV !== 'test') {
             new Api(this);
         }
+        
+        // Start subscription cleanup interval
+        this.subscriptionCleanupInterval = setInterval(() => {
+            this.cleanupSubscriptions();
+        }, 60000); // Cleanup every minute
     }
 
     public registerAdapter(adapter: AdapterBase) {
@@ -144,6 +176,9 @@ export class Streamer {
 
         // Push the contract reference to be called later on
         this.contracts.push(storedReference);
+        
+        // Cache the contract for faster lookups
+        this.contractCache.set(name, storedReference);
 
         return this;
     }
@@ -163,6 +198,9 @@ export class Streamer {
 
             // Remove the contract
             this.contracts.splice(contractIndex, 1);
+            
+            // Remove from cache
+            this.contractCache.delete(name);
         }
     }
 
@@ -232,6 +270,10 @@ export class Streamer {
         if (this.latestBlockTimer) {
             clearInterval(this.latestBlockTimer);
         }
+        
+        if (this.subscriptionCleanupInterval) {
+            clearInterval(this.subscriptionCleanupInterval);
+        }
 
         if (this?.adapter?.destroy) {
             this.adapter.destroy();
@@ -241,10 +283,15 @@ export class Streamer {
     }
 
     private async getLatestBlock() {
-        const props = await this.client.database.getDynamicGlobalProperties();
+        try {
+            const props = await this.client.database.getDynamicGlobalProperties();
 
-        if (props) {
-            this.latestBlockchainTime = new Date(`${props.time}Z`);
+            if (props) {
+                this.latestBlockchainTime = new Date(`${props.time}Z`);
+            }
+        } catch (error) {
+            console.error('[Streamer] Error getting latest block:', error);
+            // Continue with cached time if available
         }
     }
 
@@ -308,8 +355,24 @@ export class Streamer {
 
     // Takes the block from Hive and allows us to work with it
     private async loadBlock(blockNumber: number): Promise<void> {
-        // Load the block itself from the Hive API
-        const block = await this.client.database.getBlock(blockNumber);
+        // Check cache first
+        let block = this.blockCache.get(blockNumber);
+        
+        if (!block) {
+            // Load the block itself from the Hive API
+            block = await this.client.database.getBlock(blockNumber);
+            
+            // Cache the block for potential reuse
+            if (block) {
+                this.blockCache.set(blockNumber, block);
+                
+                // Cleanup old cache entries
+                if (this.blockCache.size > this.maxCacheSize) {
+                    const oldestKey = this.blockCache.keys().next().value;
+                    this.blockCache.delete(oldestKey);
+                }
+            }
+        }
 
         // The block doesn't exist, wait and try again
         if (!block) {
@@ -333,27 +396,57 @@ export class Streamer {
             this.adapter.processBlock(block);
         }
 
-        // Loop over all transactions in the block
-        for (const [i, transaction] of Object.entries(block.transactions as any[])) {
-            // Loop over operations in the block
-            for (const [opIndex, op] of Object.entries((transaction as any).operations)) {
-                // For every operation, process it
-                await this.processOperation(
+        // Process transactions with improved concurrency
+        const transactions = block.transactions as any[];
+        const transactionIds = block.transaction_ids;
+        
+        // Create operation processing promises for better concurrency
+        const operationPromises: Promise<void>[] = [];
+        
+        for (let i = 0; i < transactions.length; i++) {
+            const transaction = transactions[i];
+            const operations = transaction.operations;
+            
+            // Process operations in batch for better performance
+            for (let opIndex = 0; opIndex < operations.length; opIndex++) {
+                const op = operations[opIndex];
+                
+                // Create promise for each operation (but don't await yet)
+                const operationPromise = this.processOperation(
                     op as [string, any],
                     blockNumber,
                     block.block_id,
                     block.previous,
-                    block.transaction_ids[i],
+                    transactionIds[i],
                     blockTime
-                );
+                ).catch(error => {
+                    console.error('[Streamer] Operation processing error:', error, {
+                        blockNumber,
+                        transactionIndex: i,
+                        operationIndex: opIndex
+                    });
+                });
+                
+                operationPromises.push(operationPromise);
+                
+                // Process in batches to avoid overwhelming the system
+                if (operationPromises.length >= 50) {
+                    await Promise.all(operationPromises);
+                    operationPromises.length = 0; // Clear array
+                }
             }
+        }
+        
+        // Process any remaining operations
+        if (operationPromises.length > 0) {
+            await Promise.all(operationPromises);
         }
 
         this.lastBlockNumber = blockNumber;
-        this.saveStateToDisk();
+        this.saveStateThrottled();
     }
 
-    public processOperation(op: [string, any], blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date): void {
+    public async processOperation(op: [string, any], blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date): Promise<void> {
         if (this.adapter?.processOperation) {
             this.adapter.processOperation(op, blockNumber, blockId, prevBlockId, trxId, blockTime);
         }
@@ -535,145 +628,67 @@ export class Streamer {
     }
 
     private processActions() {
-        const blockDate = moment.utc(this.latestBlockchainTime);
+        if (!this.latestBlockchainTime || this.actions.length === 0) {
+            return;
+        }
+        
+        const currentTime = this.latestBlockchainTime.getTime();
+        
+        // Process actions in batch with optimized time calculations
+        for (let i = 0; i < this.actions.length; i++) {
+            const action = this.actions[i];
+            
+            // Get contract from cache or find and cache it
+            let contract = this.contractCache.get(action.contractName);
+            if (!contract) {
+                contract = this.contracts.find(c => c.name === action.contractName);
+                if (contract) {
+                    this.contractCache.set(action.contractName, contract);
+                }
+            }
 
-        for (const action of this.actions) {
-            const date = moment.utc(action.date);
-            const frequency = action.timeValue;
-
-            const contract = this.contracts.find(c => c.name === action.contractName);
-
-            // Contract doesn't exist or action doesn't exist, carry on
+            // Contract doesn't exist or action doesn't exist, skip
             if (!contract || !contract?.contract?.[action.contractMethod]) {
                 continue;
             }
 
-            let difference = 0;
+            // Get frequency in seconds from optimized map
+            const frequencySeconds = this.actionFrequencyMap.get(action.timeValue);
+            if (!frequencySeconds) {
+                continue;
+            }
 
-            switch (frequency) {
-                case '3s':
-                case 'block':
-                    difference = date.diff(blockDate, 's');
+            // Optimized time difference calculation using timestamps
+            const actionTime = action.date.getTime();
+            const differenceSeconds = (currentTime - actionTime) / 1000;
 
-                    // 3 seconds or more has passed
-                    if (difference >= 3) {
-                        contract.contract[action.contractMethod](action.payload);
-
-                        action.reset();
-                    }
-                break;
-
-                case '10s':
-                    difference = blockDate.diff(date, 's');
-
-                    // 10 seconds or more has passed
-                    if (difference >= 10) {
-                        contract.contract[action.contractMethod](action.payload);
-                        
-                        action.reset();
-                    }
-                break;
-                
-                case '30s':
-                    difference = blockDate.diff(date, 's');
-
-                    // 30 seconds or more has passed
-                    if (difference >= 30) {
-                        contract.contract[action.contractMethod](action.payload);
-                        
-                        action.reset();
-                    }
-                break;
-
-                case '1m':
-                case 'minute':
-                    difference = blockDate.diff(date, 'm');
-
-                    // One minute has passed
-                    if (difference >= 1) {
-                        contract.contract[action.contractMethod](action.payload);
-                        
-                        action.reset();
-                    }
-                break;
-
-                case '15m':
-                case 'quarter':
-                    difference = blockDate.diff(date, 'm');
-
-                    // 15 minutes has passed
-                    if (difference >= 15) {
-                        contract.contract[action.contractMethod](action.payload);
-                        
-                        action.reset();
-                    }
-                break;
-
-                case '30m':
-                case 'halfhour':
-                    difference = blockDate.diff(date, 'm');
-
-                    // 30 minutes has passed
-                    if (difference >= 30) {
-                        contract.contract[action.contractMethod](action.payload);
-                        
-                        action.reset();
-                    }
-                break;
-
-                case 'hourly':
-                case '1h':
-                    difference = blockDate.diff(date, 'h');
-
-                    // One our or more has passed
-                    if (difference >= 1) {
-                        contract.contract[action.contractMethod](action.payload);
-                        
-                        action.reset();
-                    }
-                break;
-
-                case '12h':
-                case 'halfday':
-                    difference = blockDate.diff(date, 'h');
-
-                    // Twelve hours or more has passed
-                    if (difference >= 12) {
-                        contract.contract[action.contractMethod](action.payload);
-                        
-                        action.reset();
-                    }
-                break;
-
-                case '24h':
-                case 'day':
-                    difference = blockDate.diff(date, 'd');
-
-                    // One day (24 hours) has passed
-                    if (difference >= 1) {
-                        contract.contract[action.contractMethod](action.payload);
-                        
-                        action.reset();
-                    }
-                break;
-
-                case 'week':
-                    difference = blockDate.diff(date, 'w');
-
-                    // One week has passed
-                    if (difference >= 1) {
-                        contract.contract[action.contractMethod](action.payload);
-                        
-                        action.reset();
-                    }
-                break;
+            // Check if enough time has passed
+            if (differenceSeconds >= frequencySeconds) {
+                try {
+                    contract.contract[action.contractMethod](action.payload);
+                    action.reset();
+                } catch (error) {
+                    console.error(`[Streamer] Action execution error for ${action.contractName}.${action.contractMethod}:`, error);
+                }
             }
         }
     }
 
     public async saveStateToDisk(): Promise<void> {
         if (this.adapter?.saveState) {
-            this.adapter.saveState({lastBlockNumber: this.lastBlockNumber, actions: this.actions});
+            await this.adapter.saveState({lastBlockNumber: this.lastBlockNumber, actions: this.actions});
+        }
+    }
+
+    // Throttled state saving for performance
+    private saveStateThrottled(): void {
+        const now = Date.now();
+        if (now - this.lastStateSave > this.stateSaveInterval) {
+            this.lastStateSave = now;
+            // Save state asynchronously without blocking block processing
+            this.saveStateToDisk().catch(error => {
+                console.error('[Streamer] State save error:', error);
+            });
         }
     }
 
@@ -783,5 +798,48 @@ export class Streamer {
 
     public onHiveEngine(callback: any): void {
         this.customJsonHiveEngineSubscriptions.push({ callback });
+    }
+    
+    // Memory management: cleanup subscriptions
+    private cleanupSubscriptions(): void {
+        // Limit subscription arrays to prevent memory leaks
+        if (this.customJsonSubscriptions.length > this.maxSubscriptions) {
+            this.customJsonSubscriptions = this.customJsonSubscriptions.slice(-this.maxSubscriptions);
+            console.warn(`[Streamer] Trimmed customJsonSubscriptions to ${this.maxSubscriptions} items`);
+        }
+        
+        if (this.customJsonIdSubscriptions.length > this.maxSubscriptions) {
+            this.customJsonIdSubscriptions = this.customJsonIdSubscriptions.slice(-this.maxSubscriptions);
+            console.warn(`[Streamer] Trimmed customJsonIdSubscriptions to ${this.maxSubscriptions} items`);
+        }
+        
+        if (this.customJsonHiveEngineSubscriptions.length > this.maxSubscriptions) {
+            this.customJsonHiveEngineSubscriptions = this.customJsonHiveEngineSubscriptions.slice(-this.maxSubscriptions);
+            console.warn(`[Streamer] Trimmed customJsonHiveEngineSubscriptions to ${this.maxSubscriptions} items`);
+        }
+        
+        if (this.commentSubscriptions.length > this.maxSubscriptions) {
+            this.commentSubscriptions = this.commentSubscriptions.slice(-this.maxSubscriptions);
+            console.warn(`[Streamer] Trimmed commentSubscriptions to ${this.maxSubscriptions} items`);
+        }
+        
+        if (this.postSubscriptions.length > this.maxSubscriptions) {
+            this.postSubscriptions = this.postSubscriptions.slice(-this.maxSubscriptions);
+            console.warn(`[Streamer] Trimmed postSubscriptions to ${this.maxSubscriptions} items`);
+        }
+        
+        if (this.transferSubscriptions.length > this.maxSubscriptions) {
+            this.transferSubscriptions = this.transferSubscriptions.slice(-this.maxSubscriptions);
+            console.warn(`[Streamer] Trimmed transferSubscriptions to ${this.maxSubscriptions} items`);
+        }
+    }
+    
+    // Add method to remove specific subscriptions
+    public removeTransferSubscription(account: string): void {
+        this.transferSubscriptions = this.transferSubscriptions.filter(sub => sub.account !== account);
+    }
+    
+    public removeCustomJsonIdSubscription(id: string): void {
+        this.customJsonIdSubscriptions = this.customJsonIdSubscriptions.filter(sub => sub.id !== id);
     }
 }

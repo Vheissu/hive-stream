@@ -30,6 +30,10 @@ export class DiceContract {
     private blockId;
     private previousBlockId;
     private transactionId;
+    
+    // Cache for account balance to reduce API calls
+    private balanceCache: { balance: number, timestamp: number } | null = null;
+    private readonly balanceCacheTimeout = 30000; // 30 seconds
 
     public create() {
         // Runs every time register is called on this contract
@@ -54,22 +58,43 @@ export class DiceContract {
     /**
      * Get Balance
      *
-     * Helper method for getting the contract account balance. In the case of our dice contract
-     * we want to make sure the account has enough money to pay out any bets
+     * Helper method for getting the contract account balance with caching
+     * We cache the balance to reduce API calls since it doesn't change frequently
      *
      * @returns number
      */
     private async getBalance(): Promise<number> {
-        const account = await this._instance['client'].database.getAccounts([ACCOUNT]);
+        const now = Date.now();
+        
+        // Return cached balance if still valid
+        if (this.balanceCache && (now - this.balanceCache.timestamp) < this.balanceCacheTimeout) {
+            return this.balanceCache.balance;
+        }
+        
+        try {
+            const account = await this._instance['client'].database.getAccounts([ACCOUNT]);
 
-        if (account?.[0]) {
-            const balance = (account[0].balance as string).split(' ');
-            const amount = balance[0];
-
-            return parseFloat(amount);
+            if (account?.[0]) {
+                const balance = (account[0].balance as string).split(' ');
+                const amount = parseFloat(balance[0]);
+                
+                // Cache the balance
+                this.balanceCache = {
+                    balance: amount,
+                    timestamp: now
+                };
+                
+                return amount;
+            }
+        } catch (error) {
+            console.error('[DiceContract] Error fetching balance:', error);
+            // Return cached balance if available, even if expired
+            if (this.balanceCache) {
+                return this.balanceCache.balance;
+            }
         }
 
-        return null;
+        return 0;
     }
 
     /**
