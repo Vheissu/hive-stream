@@ -42,7 +42,7 @@ describe('Lotto Contract', () => {
     });
 
     test('Registers the lotto contract', () => {
-        sut.registerContract('testlotto', contract);
+        sut.registerContract('testlotto', contract as any);
 
         const findContract = sut['contracts'].find(c => c.name === 'testlotto');
 
@@ -51,7 +51,7 @@ describe('Lotto Contract', () => {
 
     test('User enters the lotto, existing draw found', async () => {
         try {
-            sut.registerContract('testlotto', contract);
+            sut.registerContract('testlotto', contract as any);
 
             contract['_instance'] = sut;
 
@@ -90,7 +90,7 @@ describe('Lotto Contract', () => {
 
     test('User enters the lotto, but they have hit the entry limit', async () => {
         try {
-            sut.registerContract('testlotto', contract);
+            sut.registerContract('testlotto', contract as any);
 
             contract['_instance'] = sut;
 
@@ -139,7 +139,7 @@ describe('Lotto Contract', () => {
 
     test('Draw the hourly lottery', async () => {
         try {
-            sut.registerContract('testlotto', contract);
+            sut.registerContract('testlotto', contract as any);
 
             contract['_instance'] = sut;
             
@@ -179,7 +179,7 @@ describe('Lotto Contract', () => {
 
     test('Draw the hourly lottery, but not enough entrants, so we refund', async () => {
         try {
-            sut.registerContract('testlotto', contract);
+            sut.registerContract('testlotto', contract as any);
 
             contract['_instance'] = sut;
             
@@ -215,7 +215,7 @@ describe('Lotto Contract', () => {
 
     test('Draw the hourly lottery, balance cannot afford to pay out winnings', async () => {
         try {
-            sut.registerContract('testlotto', contract);
+            sut.registerContract('testlotto', contract as any);
 
             contract['_instance'] = sut;
             
@@ -248,7 +248,7 @@ describe('Lotto Contract', () => {
 
     test('Draw the daily lottery', async () => {
         try {
-            sut.registerContract('testlotto', contract);
+            sut.registerContract('testlotto', contract as any);
 
             contract['_instance'] = sut;
             
@@ -285,7 +285,7 @@ describe('Lotto Contract', () => {
 
     test('User attempts to enter lotto with invalid currency, refund them', async () => {
         try {
-            sut.registerContract('testlotto', contract);
+            sut.registerContract('testlotto', contract as any);
 
             contract['_instance'] = sut;
 
