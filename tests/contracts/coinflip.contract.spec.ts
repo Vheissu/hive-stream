@@ -1,26 +1,39 @@
-import * as uuid from 'uuid';
 import { CoinflipContract } from '../../src/contracts/coinflip.contract';
 import { sleep } from '@hiveio/dhive/lib/utils';
 import { Streamer } from '../../src/streamer';
+import { createMockAdapter } from '../helpers/mock-adapter';
+
+// Mock uuid module at the top level
+jest.mock('uuid', () => ({
+    v4: jest.fn()
+}));
+
+import { v4 as uuidv4 } from 'uuid';
 
 describe('Coinflip Contract', () => {
     let sut: Streamer;
     let contract: CoinflipContract;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         sut = new Streamer();
+        await sut.registerAdapter(createMockAdapter());
+        
         contract = new CoinflipContract();
 
         // @ts-ignore
         sut.api = jest.fn();
     });
 
+    afterEach(async () => {
+        await sut.stop();
+    });
+
     afterEach(() => {
-        sut.stop();
+        jest.restoreAllMocks();
     });
 
     afterAll(() => {
-        jest.restoreAllMocks();
+        jest.resetAllMocks();
     });
 
     test('Registers the contract', () => {
@@ -54,7 +67,7 @@ describe('Coinflip Contract', () => {
             }
         });
 
-        jest.spyOn(uuid, 'v4').mockReturnValue('j93jgsjghjdhgjfhgkfdhgkj34872394723');
+        (uuidv4 as jest.Mock).mockReturnValue('j93jgsjghjdhgjfhgkfdhgkj34872394723');
 
         sut.processOperation(['transfer', { from: 'testuser', amount: '9.000 HIVE', memo }], 778782, 'dfjfsdfsdfs4hfkj88787', 'fkjs7878dkfj', 'fhkjsdhfkjsdf', '2019-06-23' as any);
 
@@ -88,7 +101,7 @@ describe('Coinflip Contract', () => {
             }
         });
 
-        jest.spyOn(uuid, 'v4').mockReturnValue('j93jgsjghjdhgjfhgkfdhgkj34872394723');
+        (uuidv4 as jest.Mock).mockReturnValue('j93jgsjghjdhgjfhgkfdhgkj34872394723');
 
         sut.processOperation(['transfer', { from: 'testuser', amount: '9.000 HIVE', memo }], 778782, 'dfjfsdfsdfs4hfkj88787', 'fkjs7878dkfj', 'fhkjsdhfkjsdf', '2019-06-23' as any);
 

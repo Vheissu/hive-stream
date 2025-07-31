@@ -6,7 +6,7 @@ describe('Streamer Time-based Actions', () => {
     let mockAdapter: any;
     let mockContract: any;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         mockAdapter = {
             create: jest.fn().mockResolvedValue(true),
             destroy: jest.fn().mockResolvedValue(true),
@@ -35,7 +35,7 @@ describe('Streamer Time-based Actions', () => {
             DEBUG_MODE: false
         });
 
-        streamer.registerAdapter(mockAdapter);
+        await streamer.registerAdapter(mockAdapter);
         streamer.registerContract('testcontract', mockContract);
     });
 

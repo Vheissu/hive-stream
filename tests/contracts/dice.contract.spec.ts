@@ -1,21 +1,24 @@
 import { sleep } from '@hiveio/dhive/lib/utils';
 import { DiceContract } from './../../src/contracts/dice.contract';
 import { Streamer } from '../../src/streamer';
+import { createMockAdapter } from '../helpers/mock-adapter';
 
 describe('Dice Contract', () => {
     let sut: Streamer;
     let contract: DiceContract;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         sut = new Streamer();
+        await sut.registerAdapter(createMockAdapter());
+        
         contract = new DiceContract();
 
         // @ts-ignore
         sut.api = jest.fn();
     });
 
-    afterEach(() => {
-        sut.stop();
+    afterEach(async () => {
+        await sut.stop();
     });
 
     afterAll(() => {

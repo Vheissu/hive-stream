@@ -103,9 +103,8 @@ export class Streamer {
 
         this.client = new Client(this.config.API_NODES);
 
-        this.registerAdapter(new SqliteAdapter());
-
         if (process?.env?.NODE_ENV !== 'test') {
+            this._initializeAdapter(new SqliteAdapter());
             new Api(this);
         }
         
@@ -115,11 +114,27 @@ export class Streamer {
         }, 60000); // Cleanup every minute
     }
 
-    public registerAdapter(adapter: AdapterBase) {
+    private _initializeAdapter(adapter: AdapterBase) {
         this.adapter = adapter;
 
         if (this?.adapter?.create) {
             this.adapter.create();
+        }
+    }
+
+    public async registerAdapter(adapter: AdapterBase) {
+        if (this.adapter && this.adapter.destroy) {
+            try {
+                await this.adapter.destroy();
+            } catch (error) {
+                console.warn('[Streamer] Error destroying existing adapter:', error);
+            }
+        }
+        
+        this.adapter = adapter;
+
+        if (this?.adapter?.create) {
+            await this.adapter.create();
         }
     }
 
@@ -255,7 +270,9 @@ export class Streamer {
                 });
             }
         } catch (error) {
-            console.error('[Streamer] Failed to save actions to disk:', error);
+            if (error?.code !== 'SQLITE_MISUSE') {
+                console.error('[Streamer] Failed to save actions to disk:', error);
+            }
         }
     }
 

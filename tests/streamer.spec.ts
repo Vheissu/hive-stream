@@ -1,21 +1,24 @@
 import { TimeAction } from '../src/actions';
 import { Streamer } from '../src/streamer';
+import { createMockAdapter } from './helpers/mock-adapter';
 
 describe('Streamer', () => {
     let sut: Streamer;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         sut = new Streamer({
             JSON_ID: 'testing'
         });
+        
+        await sut.registerAdapter(createMockAdapter());
     });
 
-    afterEach(() => {
-        sut.stop();
+    afterEach(async () => {
+        await sut.stop();
     });
 
     describe('Adapters', () => {
-        test('Registers adapter and calls the create lifecycle method', () => {
+        test('Registers adapter and calls the create lifecycle method', async () => {
             const adapter = {
                 create: jest.fn().mockResolvedValue(true),
                 destroy: jest.fn(),
@@ -30,11 +33,12 @@ describe('Streamer', () => {
                 findOne: jest.fn(),
                 insert: jest.fn(),
                 replace: jest.fn(),
+                addEvent: jest.fn(),
                 client: null,
                 db: null
             } as any;
 
-            sut.registerAdapter(adapter);
+            await sut.registerAdapter(adapter);
 
             expect(adapter.create).toBeCalled();
         });
@@ -147,7 +151,7 @@ describe('Streamer', () => {
                 db: null
             } as any;
 
-            sut.registerAdapter(adapter);
+            await sut.registerAdapter(adapter);
 
             const action = new TimeAction('1h', 'testonehour', 'testcontract', 'testmethod');
 
@@ -231,7 +235,7 @@ describe('Streamer', () => {
             db: null
         } as any;
 
-        sut.registerAdapter(adapter);
+        await sut.registerAdapter(adapter);
 
         jest.spyOn(sut as any, 'getBlock').mockImplementation(() => true);
         jest.spyOn(sut as any, 'getLatestBlock').mockImplementation(() => true);

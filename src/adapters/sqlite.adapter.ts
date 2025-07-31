@@ -148,6 +148,11 @@ export class SqliteAdapter extends AdapterBase {
 
     public async saveState(data: any): Promise<boolean> {
         return new Promise((resolve, reject) => {
+            if (!this.db) {
+                resolve(false);
+                return;
+            }
+
             const sql = `REPLACE INTO params (id, actions, lastBlockNumber) VALUES(1, ?, ?)`;
             
             let actionsJson: string;
@@ -162,7 +167,9 @@ export class SqliteAdapter extends AdapterBase {
                 if (!err) {
                     resolve(true);
                 } else {
-                    console.error('[SqliteAdapter] Error saving state:', err);
+                    if (err?.code !== 'SQLITE_MISUSE') {
+                        console.error('[SqliteAdapter] Error saving state:', err);
+                    }
                     reject(err);
                 }
             });
