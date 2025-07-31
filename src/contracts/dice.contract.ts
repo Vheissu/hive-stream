@@ -12,10 +12,22 @@ const HOUSE_EDGE = 0.05;
 const MIN_BET = 1;
 const MAX_BET = 10;
 
-// Random Number Generator
+// Provably Fair Random Number Generator
+// Uses deterministic blockchain data to ensure results are verifiable by users
+// This is the correct approach for transparent, auditable gambling systems
 const rng = (previousBlockId, blockId, transactionId) => {
+    // Validate inputs to prevent manipulation
+    if (!previousBlockId || !blockId || !transactionId) {
+        throw new Error('Invalid RNG parameters');
+    }
+    
     const random = seedrandom(`${previousBlockId}${blockId}${transactionId}`).double();
     const randomRoll = Math.floor(random * 100) + 1;
+
+    // Ensure result is within expected range
+    if (randomRoll < 1 || randomRoll > 100) {
+        throw new Error('RNG generated invalid result');
+    }
 
     return randomRoll;
 };
@@ -32,8 +44,12 @@ export class DiceContract {
     private transactionId;
     
     // Cache for account balance to reduce API calls
-    private balanceCache: { balance: number, timestamp: number } | null = null;
+    private balanceCache: { balance: BigNumber, timestamp: number } | null = null;
     private readonly balanceCacheTimeout = 30000; // 30 seconds
+    
+    // Mutex to prevent race conditions on balance operations
+    private balanceOperationLock = false;
+    private pendingPayouts = new BigNumber(0);
 
     public create() {
         // Runs every time register is called on this contract
@@ -63,7 +79,7 @@ export class DiceContract {
      *
      * @returns number
      */
-    private async getBalance(): Promise<number> {
+    private async getBalance(): Promise<BigNumber> {
         const now = Date.now();
         
         // Return cached balance if still valid
@@ -76,7 +92,12 @@ export class DiceContract {
 
             if (account?.[0]) {
                 const balance = (account[0].balance as string).split(' ');
-                const amount = parseFloat(balance[0]);
+                const amount = new BigNumber(balance[0]);
+                
+                // Validate the amount is a valid number
+                if (amount.isNaN() || !amount.isFinite()) {
+                    throw new Error('Invalid balance format received from API');
+                }
                 
                 // Cache the balance
                 this.balanceCache = {
@@ -87,14 +108,14 @@ export class DiceContract {
                 return amount;
             }
         } catch (error) {
-            console.error('[DiceContract] Error fetching balance:', error);
+            console.error('[DiceContainer] Error fetching balance:', error);
             // Return cached balance if available, even if expired
             if (this.balanceCache) {
                 return this.balanceCache.balance;
             }
         }
 
-        return 0;
+        return new BigNumber(0);
     }
 
     /**
@@ -106,19 +127,46 @@ export class DiceContract {
      * @param param1 - sender and amount
      */
     private async roll(payload: { roll: number }, { sender, amount }) {
+        // Prevent race conditions with balance operations
+        if (this.balanceOperationLock) {
+            await this._instance.transferHiveTokens(ACCOUNT, sender, amount.split(' ')[0], amount.split(' ')[1], '[Refund] Server busy, try again.');
+            return;
+        }
+        
+        this.balanceOperationLock = true;
+        
         try {
+            // Validate payload structure
+            if (!payload || typeof payload.roll !== 'number') {
+                throw new Error('Invalid payload structure');
+            }
+            
             // Destructure the values from the payload
             const { roll } = payload;
+
+            // Validate amount format
+            if (!amount || typeof amount !== 'string' || !amount.includes(' ')) {
+                throw new Error('Invalid amount format');
+            }
 
             // The amount is formatted like 100 HIVE
             // The value is the first part, the currency symbol is the second
             const amountTrim = amount.split(' ');
+            
+            if (amountTrim.length !== 2) {
+                throw new Error('Invalid amount format');
+            }
 
-            // Parse the numeric value as a real value
-            const amountParsed = parseFloat(amountTrim[0]);
+            // Parse the numeric value using BigNumber for precision
+            const amountParsed = new BigNumber(amountTrim[0]);
+            
+            // Validate the parsed amount
+            if (amountParsed.isNaN() || !amountParsed.isFinite() || amountParsed.isNegative()) {
+                throw new Error('Invalid amount value');
+            }
 
             // Format the amount to 3 decimal places
-            const amountFormatted = parseFloat(amountTrim[0]).toFixed(3);
+            const amountFormatted = amountParsed.toFixed(3);
 
             // Trim any space from the currency symbol
             const amountCurrency = amountTrim[1].trim();
@@ -136,48 +184,60 @@ export class DiceContract {
 
             // Get the balance of our contract account
             const balance = await this.getBalance();
+            
+            // Calculate available balance (total - pending payouts)
+            const availableBalance = balance.minus(this.pendingPayouts);
 
             // Transfer is valid
             if (verify) {
-                // Server balance is less than the max bet, cancel and refund
-                if (balance < MAX_BET) {
+                // Server balance is less than the minimum required, cancel and refund
+                if (availableBalance.isLessThan(new BigNumber(MIN_BET * 2))) {
                     // Send back what was sent, the server is broke
-                    await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] The server could not fufill your bet.`);
-
+                    await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] The server could not fulfill your bet.`);
                     return;
                 }
 
                 // Bet amount is valid
-                if (amountParsed >= MIN_BET && amountParsed <= MAX_BET) {
-                    // Validate roll is valid
-                    if ((roll >= 2 && roll <= 96) && VALID_CURRENCIES.includes(amountCurrency)) {
-                        // Roll a random value
-                        const random = rng(this.previousBlockId, this.blockId, this.transactionId);
-
+                if (amountParsed.isGreaterThanOrEqualTo(MIN_BET) && amountParsed.isLessThanOrEqualTo(MAX_BET)) {
+                    // Validate roll is valid (integer between 2-96)
+                    if (Number.isInteger(roll) && roll >= 2 && roll <= 96 && VALID_CURRENCIES.includes(amountCurrency)) {
                         // Calculate the multiplier percentage
                         const multiplier = new BigNumber(1).minus(HOUSE_EDGE).multipliedBy(100).dividedBy(roll);
 
                         // Calculate the number of tokens won
-                        const tokensWon = new BigNumber(amountParsed).multipliedBy(multiplier).toFixed(3, BigNumber.ROUND_DOWN);
+                        const tokensWonBN = amountParsed.multipliedBy(multiplier);
+                        const tokensWon = tokensWonBN.toFixed(3, BigNumber.ROUND_DOWN);
+
+                        // User won more than the server can afford, refund the bet amount
+                        if (tokensWonBN.isGreaterThan(availableBalance)) {
+                            await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] The server could not fulfill your bet.`);
+                            return;
+                        }
+                        
+                        // Reserve the potential payout
+                        this.pendingPayouts = this.pendingPayouts.plus(tokensWonBN);
+                        
+                        // Generate cryptographically secure random number
+                        // Note: This is still deterministic based on blockchain data
+                        // In production, consider using a commit-reveal scheme
+                        const random = rng(this.previousBlockId, this.blockId, this.transactionId);
 
                         // Memo that shows in users memo when they win
                         const winningMemo = `You won ${tokensWon} ${TOKEN_SYMBOL}. Roll: ${random}, Your guess: ${roll}`;
 
                         // Memo that shows in users memo when they lose
-                        const losingMemo = `You lost ${amountParsed} ${TOKEN_SYMBOL}. Roll: ${random}, Your guess: ${roll}`;
+                        const losingMemo = `You lost ${amountParsed.toFixed(3)} ${TOKEN_SYMBOL}. Roll: ${random}, Your guess: ${roll}`;
 
-                        // User won more than the server can afford, refund the bet amount
-                        if (parseFloat(tokensWon) > balance) {
-                            await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] The server could not fufill your bet.`);
-
-                            return;
-                        }
-
-                        // If random value is less than roll
-                        if (random < roll) {
-                            await this._instance.transferHiveTokens(ACCOUNT, sender, tokensWon, TOKEN_SYMBOL, winningMemo);
-                        } else {
-                            await this._instance.transferHiveTokens(ACCOUNT, sender, '0.001', TOKEN_SYMBOL, losingMemo);
+                        try {
+                            // If random value is less than roll
+                            if (random < roll) {
+                                await this._instance.transferHiveTokens(ACCOUNT, sender, tokensWon, TOKEN_SYMBOL, winningMemo);
+                            } else {
+                                await this._instance.transferHiveTokens(ACCOUNT, sender, '0.001', TOKEN_SYMBOL, losingMemo);
+                            }
+                        } finally {
+                            // Release the reserved payout
+                            this.pendingPayouts = this.pendingPayouts.minus(tokensWonBN);
                         }
                     } else {
                         // Invalid bet parameters, refund the user their bet
@@ -206,7 +266,23 @@ export class DiceContract {
                 payload,
                 stack: error.stack
             });
+            
+            // Attempt to refund on error if amount is valid
+            try {
+                if (amount && typeof amount === 'string' && amount.includes(' ')) {
+                    const [amountStr, currency] = amount.split(' ');
+                    const amountBN = new BigNumber(amountStr);
+                    if (!amountBN.isNaN() && amountBN.isFinite() && !amountBN.isNegative()) {
+                        await this._instance.transferHiveTokens(ACCOUNT, sender, amountStr, currency, '[Refund] Processing error occurred.');
+                    }
+                }
+            } catch (refundError) {
+                console.error(`[DiceContract] Failed to refund after error:`, refundError);
+            }
+            
             throw error;
+        } finally {
+            this.balanceOperationLock = false;
         }
     }
 

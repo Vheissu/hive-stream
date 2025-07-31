@@ -2,6 +2,7 @@ import { sleep } from '@hiveio/dhive/lib/utils';
 import { DiceContract } from './../../src/contracts/dice.contract';
 import { Streamer } from '../../src/streamer';
 import { createMockAdapter } from '../helpers/mock-adapter';
+import BigNumber from 'bignumber.js';
 
 describe('Dice Contract', () => {
     let sut: Streamer;
@@ -39,7 +40,7 @@ describe('Dice Contract', () => {
         contract['_instance'] = sut;
 
         jest.spyOn(contract as any, 'roll');
-        jest.spyOn(contract as any, 'getBalance').mockResolvedValue(2000);
+        jest.spyOn(contract as any, 'getBalance').mockResolvedValue(new BigNumber(2000));
 
         jest.spyOn(sut, 'getTransaction').mockResolvedValue({test: 123} as any);
         jest.spyOn(sut, 'verifyTransfer').mockResolvedValue(true as any);
@@ -71,7 +72,7 @@ describe('Dice Contract', () => {
         contract['_instance'] = sut;
 
         jest.spyOn(contract as any, 'roll');
-        jest.spyOn(contract as any, 'getBalance').mockResolvedValue(2000);
+        jest.spyOn(contract as any, 'getBalance').mockResolvedValue(new BigNumber(2000));
 
         jest.spyOn(sut, 'getTransaction').mockResolvedValue({test: 123} as any);
         jest.spyOn(sut, 'verifyTransfer').mockResolvedValue(true as any);
@@ -94,7 +95,7 @@ describe('Dice Contract', () => {
 
         expect(contract['roll']).toBeCalled();
         expect(sut.getTransaction).toBeCalledWith(778782, 'fhkjsdhfkjsdf');
-        expect(sut.transferHiveTokens).toBeCalledWith('beggars', 'testuser', '0.001', 'HIVE', 'You lost 9 HIVE. Roll: 81, Your guess: 69');
+        expect(sut.transferHiveTokens).toBeCalledWith('beggars', 'testuser', '0.001', 'HIVE', 'You lost 9.000 HIVE. Roll: 81, Your guess: 69');
     });
 
     test('User sent an invalid amount, refund them', async () => {
@@ -103,7 +104,7 @@ describe('Dice Contract', () => {
         contract['_instance'] = sut;
 
         jest.spyOn(contract as any, 'roll');
-        jest.spyOn(contract as any, 'getBalance').mockResolvedValue(2000);
+        jest.spyOn(contract as any, 'getBalance').mockResolvedValue(new BigNumber(2000));
 
         jest.spyOn(sut, 'getTransaction').mockResolvedValue({test: 123} as any);
         jest.spyOn(sut, 'verifyTransfer').mockResolvedValue(true as any);
@@ -135,7 +136,7 @@ describe('Dice Contract', () => {
         contract['_instance'] = sut;
 
         jest.spyOn(contract as any, 'roll');
-        jest.spyOn(contract as any, 'getBalance').mockResolvedValue(2000);
+        jest.spyOn(contract as any, 'getBalance').mockResolvedValue(new BigNumber(2000));
 
         jest.spyOn(sut, 'getTransaction').mockResolvedValue({test: 123} as any);
         jest.spyOn(sut, 'verifyTransfer').mockResolvedValue(true as any);
