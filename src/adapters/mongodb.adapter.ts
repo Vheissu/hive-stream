@@ -218,4 +218,209 @@ export class MongodbAdapter extends AdapterBase {
     public async query(sql: string, params?: any[]): Promise<any[]> {
         throw new Error('Raw SQL queries are not supported in MongoDB adapter');
     }
+
+    public async addEvent(date: string, contract: string, action: string, payload: ContractPayload, data: unknown): Promise<boolean> {
+        try {
+            if (!this.db) {
+                await this.getDbInstance();
+            }
+
+            const collection = this.db.collection('events');
+            await collection.insertOne({
+                date,
+                contract,
+                action,
+                payload,
+                data
+            });
+            
+            return true;
+        } catch (error) {
+            console.error('[MongodbAdapter] Error adding event:', error);
+            throw error;
+        }
+    }
+
+    public async getEvents(): Promise<any[]> {
+        try {
+            if (!this.db) {
+                await this.getDbInstance();
+            }
+
+            const collection = this.db.collection('events');
+            const events = await collection.find({}).toArray();
+            
+            return events.length ? events : null;
+        } catch (error) {
+            console.error('[MongodbAdapter] Error getting events:', error);
+            throw error;
+        }
+    }
+
+    public async getEventsByContract(contract: string): Promise<any[]> {
+        try {
+            if (!this.db) {
+                await this.getDbInstance();
+            }
+
+            const collection = this.db.collection('events');
+            const events = await collection.find({ contract }).toArray();
+            
+            return events.length ? events : null;
+        } catch (error) {
+            console.error('[MongodbAdapter] Error getting events by contract:', error);
+            throw error;
+        }
+    }
+
+    public async getEventsByAccount(account: string): Promise<any[]> {
+        try {
+            if (!this.db) {
+                await this.getDbInstance();
+            }
+
+            const collection = this.db.collection('events');
+            const events = await collection.find({
+                $or: [
+                    { 'data.sender': account },
+                    { 'data.account': account },
+                    { 'payload.sender': account },
+                    { 'payload.account': account }
+                ]
+            }).toArray();
+            
+            return events.length ? events : null;
+        } catch (error) {
+            console.error('[MongodbAdapter] Error getting events by account:', error);
+            throw error;
+        }
+    }
+
+    public async getTransfers(): Promise<any[]> {
+        try {
+            if (!this.db) {
+                await this.getDbInstance();
+            }
+
+            const collection = this.db.collection('transfers');
+            const transfers = await collection.find({}).toArray();
+            
+            return transfers.length ? transfers : null;
+        } catch (error) {
+            console.error('[MongodbAdapter] Error getting transfers:', error);
+            throw error;
+        }
+    }
+
+    public async getTransfersByContract(contract: string): Promise<any[]> {
+        try {
+            if (!this.db) {
+                await this.getDbInstance();
+            }
+
+            const collection = this.db.collection('transfers');
+            const transfers = await collection.find({ contractName: contract }).toArray();
+            
+            return transfers.length ? transfers : null;
+        } catch (error) {
+            console.error('[MongodbAdapter] Error getting transfers by contract:', error);
+            throw error;
+        }
+    }
+
+    public async getTransfersByAccount(account: string): Promise<any[]> {
+        try {
+            if (!this.db) {
+                await this.getDbInstance();
+            }
+
+            const collection = this.db.collection('transfers');
+            const transfers = await collection.find({ sender: account }).toArray();
+            
+            return transfers.length ? transfers : null;
+        } catch (error) {
+            console.error('[MongodbAdapter] Error getting transfers by account:', error);
+            throw error;
+        }
+    }
+
+    public async getTransfersByBlockid(blockId: string): Promise<any[]> {
+        try {
+            if (!this.db) {
+                await this.getDbInstance();
+            }
+
+            const collection = this.db.collection('transfers');
+            const transfers = await collection.find({ blockId }).toArray();
+            
+            return transfers.length ? transfers : null;
+        } catch (error) {
+            console.error('[MongodbAdapter] Error getting transfers by block ID:', error);
+            throw error;
+        }
+    }
+
+    public async getJson(): Promise<any[]> {
+        try {
+            if (!this.db) {
+                await this.getDbInstance();
+            }
+
+            const collection = this.db.collection('customJson');
+            const jsons = await collection.find({}).toArray();
+            
+            return jsons.length ? jsons : null;
+        } catch (error) {
+            console.error('[MongodbAdapter] Error getting JSON:', error);
+            throw error;
+        }
+    }
+
+    public async getJsonByContract(contract: string): Promise<any[]> {
+        try {
+            if (!this.db) {
+                await this.getDbInstance();
+            }
+
+            const collection = this.db.collection('customJson');
+            const jsons = await collection.find({ contractName: contract }).toArray();
+            
+            return jsons.length ? jsons : null;
+        } catch (error) {
+            console.error('[MongodbAdapter] Error getting JSON by contract:', error);
+            throw error;
+        }
+    }
+
+    public async getJsonByAccount(account: string): Promise<any[]> {
+        try {
+            if (!this.db) {
+                await this.getDbInstance();
+            }
+
+            const collection = this.db.collection('customJson');
+            const jsons = await collection.find({ sender: account }).toArray();
+            
+            return jsons.length ? jsons : null;
+        } catch (error) {
+            console.error('[MongodbAdapter] Error getting JSON by account:', error);
+            throw error;
+        }
+    }
+
+    public async getJsonByBlockid(blockId: string): Promise<any[]> {
+        try {
+            if (!this.db) {
+                await this.getDbInstance();
+            }
+
+            const collection = this.db.collection('customJson');
+            const jsons = await collection.find({ blockId }).toArray();
+            
+            return jsons.length ? jsons : null;
+        } catch (error) {
+            console.error('[MongodbAdapter] Error getting JSON by block ID:', error);
+            throw error;
+        }
+    }
 }

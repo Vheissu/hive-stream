@@ -65,4 +65,16 @@ export class AdapterBase {
     public async query(sql: string, params?: any[]): Promise<any[]> {
         throw new Error('Query method not implemented in adapter');
     }
+
+    public async getEvents(): Promise<any[]> {
+        return [];
+    }
+
+    public async getEventsByContract(contract: string): Promise<any[]> {
+        return [];
+    }
+
+    public async getEventsByAccount(account: string): Promise<any[]> {
+        return [];
+    }
 }

@@ -258,6 +258,48 @@ export class SqliteAdapter extends AdapterBase {
         }
     }
 
+    public async getEventsByContract(contract: string) {
+        try {
+            const rows = await this.db('events')
+                .select('id', 'date', 'contract', 'action', 'payload', 'data')
+                .where('contract', contract);
+            
+            if (rows.length) {
+                return rows.map(row => ({
+                    ...row,
+                    payload: JSON.parse(row.payload) ?? {},
+                    data: JSON.parse(row.data) ?? {}
+                }));
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('[SqliteAdapter] Error getting events by contract:', error);
+            throw error;
+        }
+    }
+
+    public async getEventsByAccount(account: string) {
+        try {
+            const rows = await this.db('events')
+                .select('id', 'date', 'contract', 'action', 'payload', 'data')
+                .where('data', 'like', `%"${account}"%`);
+            
+            if (rows.length) {
+                return rows.map(row => ({
+                    ...row,
+                    payload: JSON.parse(row.payload) ?? {},
+                    data: JSON.parse(row.data) ?? {}
+                }));
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('[SqliteAdapter] Error getting events by account:', error);
+            throw error;
+        }
+    }
+
     public async getTransfersByContract(contract: string) {
         try {
             const rows = await this.db('transfers')

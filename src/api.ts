@@ -65,5 +65,55 @@ export class Api {
 
             res.json(jsons);
         });
+
+        app.get('/events', async (req, res) => {
+            const events = await this.streamer.adapter.getEvents();
+
+            res.json(events);
+        });
+
+        app.get('/events/contract/:contractName', async (req, res) => {
+            const events = await this.streamer.adapter.getEventsByContract(req.params.contractName);
+
+            res.json(events);
+        });
+
+        app.get('/events/account/:account', async (req, res) => {
+            const events = await this.streamer.adapter.getEventsByAccount(req.params.account);
+
+            res.json(events);
+        });
+
+        app.get('/health', async (req, res) => {
+            const health = {
+                status: 'ok',
+                timestamp: new Date().toISOString(),
+                uptime: process.uptime(),
+                version: process.env.npm_package_version || '1.0.0'
+            };
+
+            res.json(health);
+        });
+
+        app.get('/stats', async (req, res) => {
+            try {
+                const [transfers, customJson, events] = await Promise.all([
+                    this.streamer.adapter.getTransfers(),
+                    this.streamer.adapter.getJson(),
+                    this.streamer.adapter.getEvents()
+                ]);
+
+                const stats = {
+                    totalTransfers: transfers?.length || 0,
+                    totalCustomJson: customJson?.length || 0,
+                    totalEvents: events?.length || 0,
+                    lastUpdated: new Date().toISOString()
+                };
+
+                res.json(stats);
+            } catch (error) {
+                res.status(500).json({ error: 'Failed to retrieve statistics' });
+            }
+        });
     }
 }
