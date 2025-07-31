@@ -71,12 +71,22 @@ export const Utils = {
     },
 
     jsonParse(str: string) {
+        if (!str || typeof str !== 'string') {
+            return null;
+        }
+
         let obj = null;
 
         try {
             obj = JSON.parse(str);
-        } catch {
-            // We don't do anything
+        } catch (e) {
+            if (Config.DEBUG_MODE) {
+                const error = e instanceof Error ? e : new Error(String(e));
+                console.warn(`[Utils] JSON parse failed: ${error.message}`, {
+                    input: str.substring(0, 100) + (str.length > 100 ? '...' : ''),
+                    stack: error.stack
+                });
+            }
         }
 
         return obj;

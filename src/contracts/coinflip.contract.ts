@@ -17,8 +17,7 @@ function rng(previousBlockId, blockId, transactionId, serverSeed, clientSeed = '
 }
 
 export class CoinflipContract {
-    // tslint:disable-next-line: variable-name
-    private _instance: Streamer;
+    public _instance: Streamer;
     private adapter;
 
     private blockNumber;
@@ -26,11 +25,11 @@ export class CoinflipContract {
     private previousBlockId;
     private transactionId;
 
-    private create() {
+    public create() {
         this.adapter = this._instance.getAdapter();
     }
 
-    private updateBlockInfo(blockNumber, blockId, previousBlockId, transactionId) {
+    public updateBlockInfo(blockNumber, blockId, previousBlockId, transactionId) {
         // Lifecycle method which sets block info 
         this.blockNumber = blockNumber;
         this.blockId = blockId;

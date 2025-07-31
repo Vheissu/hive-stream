@@ -5,8 +5,8 @@ import { AdapterBase } from './base.adapter';
 import { MongoClient, Db } from 'mongodb';
 
 export class MongodbAdapter extends AdapterBase {
-    private client: MongoClient;
-    private db: Db;
+    protected client: MongoClient = null;
+    protected db: Db = null;
 
     private mongo = {
         uri: '',

@@ -1,5 +1,5 @@
 import { TimeAction } from './../actions';
-import { ContractPayload } from './../types/hive-stream';
+import { ContractPayload, TransferMetadata, CustomJsonMetadata } from './../types/hive-stream';
 import { AdapterBase } from './base.adapter';
 
 import { Database } from 'sqlite3';
@@ -68,9 +68,9 @@ export class SqliteAdapter extends AdapterBase {
 
     public async saveState(data: any): Promise<boolean> {
         return new Promise((resolve, reject) => {
-            const sql = `REPLACE INTO params (id, actions, lastBlockNumber) VALUES(1, '${JSON.stringify(data.actions)}', '${data.lastBlockNumber}')`;
+            const sql = `REPLACE INTO params (id, actions, lastBlockNumber) VALUES(1, ?, ?)`;
 
-            this.db.run(sql, [], (err, result) => {
+            this.db.run(sql, [JSON.stringify(data.actions), data.lastBlockNumber], (err, result) => {
                 if (!err) {
                     resolve(true);
                 } else {
@@ -87,12 +87,21 @@ export class SqliteAdapter extends AdapterBase {
         this.transactionId = trxId;
     }
 
-    public async processTransfer(operation, payload: ContractPayload, metadata: { sender: string, amount: string }): Promise<boolean> {
+    public async processTransfer(operation: any, payload: ContractPayload, metadata: TransferMetadata): Promise<boolean> {
         return new Promise((resolve, reject) => {
             const sql = `INSERT INTO transfers (id, blockId, blockNumber, sender, amount, contractName, contractAction, contractPayload) 
-            VALUES ('${this.transactionId}', '${this.blockId}', ${this.blockNumber}, '${metadata.sender}', '${metadata.amount}', '${payload.name}', '${payload.action}', '${JSON.stringify(payload.payload)}')`;
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
 
-            this.db.run(sql, [], (err, result) => {
+            this.db.run(sql, [
+                this.transactionId, 
+                this.blockId, 
+                this.blockNumber, 
+                metadata.sender, 
+                metadata.amount, 
+                payload.name, 
+                payload.action, 
+                JSON.stringify(payload.payload)
+            ], (err, result) => {
                 if (!err) {
                     resolve(true);
                 } else {
@@ -102,12 +111,21 @@ export class SqliteAdapter extends AdapterBase {
         });
     }
 
-    public async processCustomJson(operation, payload: ContractPayload, metadata: { sender: string, isSignedWithActiveKey: boolean }): Promise<boolean> {
+    public async processCustomJson(operation: any, payload: ContractPayload, metadata: CustomJsonMetadata): Promise<boolean> {
         return new Promise((resolve, reject) => {
             const sql = `INSERT INTO customJson (id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload) 
-            VALUES ('${this.transactionId}', '${this.blockId}', ${this.blockNumber},'${metadata.sender}', ${metadata.isSignedWithActiveKey}, '${payload.name}', '${payload.action}', '${JSON.stringify(payload.payload)}')`;
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
 
-            this.db.run(sql, [], (err, result) => {
+            this.db.run(sql, [
+                this.transactionId, 
+                this.blockId, 
+                this.blockNumber, 
+                metadata.sender, 
+                metadata.isSignedWithActiveKey ? 1 : 0, 
+                payload.name, 
+                payload.action, 
+                JSON.stringify(payload.payload)
+            ], (err, result) => {
                 if (!err) {
                     resolve(true);
                 } else {
@@ -120,9 +138,15 @@ export class SqliteAdapter extends AdapterBase {
     public async addEvent(date: string, contract: string, action: string, payload: ContractPayload, data: unknown): Promise<boolean> {
         return new Promise((resolve, reject) => {
             const sql = `INSERT INTO events (date, contract, action, payload, data) 
-            VALUES ('${date}', '${contract}', '${action}', '${JSON.stringify(payload)}', '${JSON.stringify(data)}')`;
+            VALUES (?, ?, ?, ?, ?)`;
 
-            this.db.run(sql, [], (err, result) => {
+            this.db.run(sql, [
+                date, 
+                contract, 
+                action, 
+                JSON.stringify(payload), 
+                JSON.stringify(data)
+            ], (err, result) => {
                 if (!err) {
                     resolve(true);
                 } else {
@@ -176,7 +200,7 @@ export class SqliteAdapter extends AdapterBase {
 
     public async getTransfersByContract(contract: string) {
         return new Promise((resolve, reject) => {
-            this.db.all(`SELECT id, blockId, blockNumber, sender, amount, contractName, contractAction, contractPayload FROM transfers WHERE contractName = '${contract}'`, (err, rows) => {
+            this.db.all(`SELECT id, blockId, blockNumber, sender, amount, contractName, contractAction, contractPayload FROM transfers WHERE contractName = ?`, [contract], (err, rows) => {
                 if (!err) {
                     if (rows.length) {
                         resolve(rows.reduce((arr, row) => {
@@ -196,7 +220,7 @@ export class SqliteAdapter extends AdapterBase {
 
     public async getTransfersByAccount(account: string) {
         return new Promise((resolve, reject) => {
-            this.db.all(`SELECT id, blockId, blockNumber, sender, amount, contractName, contractAction, contractPayload FROM transfers WHERE sender = '${account}'`, (err, rows) => {
+            this.db.all(`SELECT id, blockId, blockNumber, sender, amount, contractName, contractAction, contractPayload FROM transfers WHERE sender = ?`, [account], (err, rows) => {
                 if (!err) {
                     if (rows.length) {
                         resolve(rows.reduce((arr, row) => {
@@ -216,7 +240,7 @@ export class SqliteAdapter extends AdapterBase {
 
     public async getTransfersByBlockid(blockId: any) {
         return new Promise((resolve, reject) => {
-            this.db.all(`SELECT id, blockId, blockNumber, sender, amount, contractName, contractAction, contractPayload FROM transfers WHERE blockId = ${blockId}`, (err, rows) => {
+            this.db.all(`SELECT id, blockId, blockNumber, sender, amount, contractName, contractAction, contractPayload FROM transfers WHERE blockId = ?`, [blockId], (err, rows) => {
                 if (!err) {
                     if (rows.length) {
                         resolve(rows.reduce((arr, row) => {
@@ -256,7 +280,7 @@ export class SqliteAdapter extends AdapterBase {
 
     public async getJsonByContract(contract: string) {
         return new Promise((resolve, reject) => {
-            this.db.all(`SELECT id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload FROM customJson WHERE contractName = '${contract}'`, (err, rows) => {
+            this.db.all(`SELECT id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload FROM customJson WHERE contractName = ?`, [contract], (err, rows) => {
                 if (!err) {
                     if (rows.length) {
                         resolve(rows.reduce((arr, row) => {
@@ -276,7 +300,7 @@ export class SqliteAdapter extends AdapterBase {
 
     public async getJsonByAccount(account: string) {
         return new Promise((resolve, reject) => {
-            this.db.all(`SELECT id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload FROM customJson WHERE sender = '${account}'`, (err, rows) => {
+            this.db.all(`SELECT id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload FROM customJson WHERE sender = ?`, [account], (err, rows) => {
                 if (!err) {
                     if (rows.length) {
                         resolve(rows.reduce((arr, row) => {
@@ -296,7 +320,7 @@ export class SqliteAdapter extends AdapterBase {
 
     public async getJsonByBlockid(blockId: any) {
         return new Promise((resolve, reject) => {
-            this.db.all(`SELECT id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload FROM customJson WHERE blockId = ${blockId}`, (err, rows) => {
+            this.db.all(`SELECT id, blockId, blockNumber, sender, isSignedWithActiveKey, contractName, contractAction, contractPayload FROM customJson WHERE blockId = ?`, [blockId], (err, rows) => {
                 if (!err) {
                     if (rows.length) {
                         resolve(rows.reduce((arr, row) => {
@@ -326,14 +350,14 @@ export class SqliteAdapter extends AdapterBase {
         });
     }
 
-    public async find(table, query) {
+    public async find(table: string, query: Record<string, any>) {
         return new Promise((resolve, reject) => {
-            query = Object.keys(query).reduce((arr, key) => {
+            const queryStr = Object.keys(query).reduce((arr, key) => {
                 arr.push(`${key} = ${query[key]}`);
                 return arr;
             }, []).join(' AND ');
 
-            this.db.all(`SELECT * FROM ${table} WHERE ${query}`, (err, rows) => {
+            this.db.all(`SELECT * FROM ${table} WHERE ${queryStr}`, (err, rows) => {
                 if (!err) {
                     if (rows.length) {
                         resolve(rows);
@@ -347,14 +371,14 @@ export class SqliteAdapter extends AdapterBase {
         });
     }
 
-    public async findOne(table, query) {
+    public async findOne(table: string, query: Record<string, any>) {
         return new Promise((resolve, reject) => {
-            query = Object.keys(query).reduce((arr, key) => {
+            const queryStr = Object.keys(query).reduce((arr, key) => {
                 arr.push(`${key} = ${query[key]}`);
                 return arr;
             }, []).join(' AND ');
 
-            this.db.get(`SELECT * FROM ${table} WHERE ${query}`, (err, row) => {
+            this.db.get(`SELECT * FROM ${table} WHERE ${queryStr}`, (err, row) => {
                 if (!err) {
                     if (row) {
                         resolve(row);
@@ -368,7 +392,7 @@ export class SqliteAdapter extends AdapterBase {
         });
     }
 
-    public async insert(table, data) {
+    public async insert(table: string, data: string) {
         return new Promise((resolve, reject) => {
             this.db.run(`INSERT INTO ${table} VALUES (${data})`, (err) => {
                 if (!err) {
@@ -380,14 +404,14 @@ export class SqliteAdapter extends AdapterBase {
         });
     }
 
-    public async replace(table: string, queryObject: any, data: any): Promise<any> {
+    public async replace(table: string, queryObject: Record<string, any>, data: any): Promise<any> {
         return new Promise((resolve, reject) => {
-            queryObject = Object.keys(queryObject).reduce((arr, key) => {
+            const queryStr = Object.keys(queryObject).reduce((arr, key) => {
                 arr.push(`${key} = ${queryObject[key]}`);
                 return arr;
             }, []).join(' AND ');
 
-            this.db.run(`REPLACE INTO ${table} ${queryObject} VALUES (${data})`, (err) => {
+            this.db.run(`REPLACE INTO ${table} ${queryStr} VALUES (${data})`, (err) => {
                 if (!err) {
                     resolve(data);
                 } else {

@@ -12,6 +12,13 @@
         "sourceMap": true,
         "outDir": "dist",
         "baseUrl": ".",
+        "strict": false,
+        "noImplicitAny": false,
+        "noImplicitReturns": false,
+        "noImplicitThis": false,
+        "noUnusedLocals": false,
+        "noUnusedParameters": false,
+        "exactOptionalPropertyTypes": false,
         "paths": {
             "*": [
                 "node_modules/*",

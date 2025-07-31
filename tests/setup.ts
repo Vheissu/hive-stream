@@ -10,8 +10,19 @@ import { GlobalWithFetchMock } from 'jest-fetch-mock';
 //     debug: console.debug,
 // };
 
+const fetchMock = require('jest-fetch-mock');
 const customGlobal: GlobalWithFetchMock = global as unknown as GlobalWithFetchMock;
-customGlobal.fetch = require('jest-fetch-mock');
+
+// Safely assign fetch mock
+if (!customGlobal.fetch) {
+    customGlobal.fetch = fetchMock;
+} else {
+    Object.defineProperty(customGlobal, 'fetch', {
+        value: fetchMock,
+        writable: true,
+        configurable: true
+    });
+}
 customGlobal.fetchMock = customGlobal.fetch;
 
 process.on('unhandledRejection', (error) => {

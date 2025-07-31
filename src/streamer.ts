@@ -6,16 +6,22 @@ import { TimeAction } from './actions';
 import { Client } from '@hiveio/dhive';
 import { Utils } from './utils';
 import { Config, ConfigInterface } from './config';
+import { 
+    ContractPayload, 
+    StreamerContract, 
+    ContractInstance,
+    SubscriptionCallback,
+    TransferSubscription,
+    CustomJsonIdSubscription,
+    TransferMetadata,
+    CustomJsonMetadata
+} from './types/hive-stream';
 
 import moment from 'moment';
 import hivejs from 'sscjs';
 
-interface Contract {
-    name: string;
-    contract: any;
-}
 
-interface Action {
+interface ProcessingAction {
     when: number;
     what: string;
     params: any;
@@ -23,12 +29,12 @@ interface Action {
 }
 
 export class Streamer {
-    private customJsonSubscriptions: any[] = [];
-    private customJsonIdSubscriptions: any[] = [];
-    private customJsonHiveEngineSubscriptions: any[] = [];
-    private commentSubscriptions: any[] = [];
-    private postSubscriptions: any[] = [];
-    private transferSubscriptions: any[] = [];
+    private customJsonSubscriptions: SubscriptionCallback[] = [];
+    private customJsonIdSubscriptions: CustomJsonIdSubscription[] = [];
+    private customJsonHiveEngineSubscriptions: SubscriptionCallback[] = [];
+    private commentSubscriptions: SubscriptionCallback[] = [];
+    private postSubscriptions: SubscriptionCallback[] = [];
+    private transferSubscriptions: TransferSubscription[] = [];
 
     private attempts = 0;
 
@@ -51,7 +57,7 @@ export class Streamer {
     private latestBlockchainTime: Date;
     private disableAllProcessing = false;
 
-    private contracts: Contract[] = [];
+    private contracts: StreamerContract[] = [];
     private adapter;
     private actions: TimeAction[] = [];
 
@@ -77,7 +83,7 @@ export class Streamer {
         }
     }
 
-    public registerAdapter(adapter: any) {
+    public registerAdapter(adapter: AdapterBase) {
         this.adapter = adapter;
 
         if (this?.adapter?.create) {
@@ -125,7 +131,7 @@ export class Streamer {
         }
     }
 
-    public registerContract(name: string, contract: any) {
+    public registerContract(name: string, contract: ContractInstance) {
         // Store an instance of the streamer
         contract['_instance'] = this;
 
@@ -134,7 +140,7 @@ export class Streamer {
             contract.create();
         }
 
-        const storedReference: Contract = { name, contract };
+        const storedReference: StreamerContract = { name, contract };
 
         // Push the contract reference to be called later on
         this.contracts.push(storedReference);
@@ -287,9 +293,16 @@ export class Streamer {
                 this.blockNumberTimeout = setTimeout(() => { this.getBlock(); }, this.config.BLOCK_CHECK_INTERVAL);
             }
         } catch (e) {
-            const message = e.message.toLowerCase();
-
-            console.error(message);
+            const error = e instanceof Error ? e : new Error(String(e));
+            console.error(`[Streamer] Block processing error: ${error.message}`, {
+                stack: error.stack,
+                blockNumber: this.lastBlockNumber + 1
+            });
+            
+            // Retry after a longer delay on error
+            if (!this.disableAllProcessing) {
+                this.blockNumberTimeout = setTimeout(() => { this.getBlock(); }, this.config.BLOCK_CHECK_INTERVAL * 2);
+            }
         }
     }
 
@@ -321,12 +334,12 @@ export class Streamer {
         }
 
         // Loop over all transactions in the block
-        for (const [i, transaction] of Object.entries(block.transactions)) {
+        for (const [i, transaction] of Object.entries(block.transactions as any[])) {
             // Loop over operations in the block
-            for (const [opIndex, op] of Object.entries(transaction.operations)) {
+            for (const [opIndex, op] of Object.entries((transaction as any).operations)) {
                 // For every operation, process it
                 await this.processOperation(
-                    op,
+                    op as [string, any],
                     blockNumber,
                     block.block_id,
                     block.previous,
@@ -340,7 +353,7 @@ export class Streamer {
         this.saveStateToDisk();
     }
 
-    public processOperation(op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date): void {
+    public processOperation(op: [string, any], blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date): void {
         if (this.adapter?.processOperation) {
             this.adapter.processOperation(op, blockNumber, blockId, prevBlockId, trxId, blockTime);
         }

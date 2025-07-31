@@ -1,10 +1,13 @@
 import { TimeAction } from './../actions';
-import { TransactionType, ContractPayload } from './../types/hive-stream';
+import { TransactionType, ContractPayload, TransferMetadata, CustomJsonMetadata } from './../types/hive-stream';
 import { SignedBlock } from '@hiveio/dhive';
 export class AdapterBase {
+    protected client: any = null;
+    protected db: any = null;
+
     constructor() {
-        this['client'] = null;
-        this['db'] = null;
+        this.client = null;
+        this.db = null;
     }
 
     public async create(): Promise<boolean> {
@@ -35,27 +38,27 @@ export class AdapterBase {
         return true;
     }
 
-    public async processTransfer(operation, payload: ContractPayload, metadata: { sender: string, amount: string }): Promise<boolean> {
+    public async processTransfer(operation: any, payload: ContractPayload, metadata: TransferMetadata): Promise<boolean> {
         return true;
     }
 
-    public async processCustomJson(operation, payload: ContractPayload, metadata: { sender: string, isSignedWithActiveKey: boolean }): Promise<boolean> {
+    public async processCustomJson(operation: any, payload: ContractPayload, metadata: CustomJsonMetadata): Promise<boolean> {
         return true;
     }
 
-    public async find(table: string, queryObject: any): Promise<any> {
-        return true;
+    public async find(table: string, queryObject: Record<string, any>): Promise<any> {
+        return [];
     }
 
-    public async findOne(table: string, queryObject: any): Promise<any> {
-        return true;
+    public async findOne(table: string, queryObject: Record<string, any>): Promise<any> {
+        return null;
     }
 
     public async insert(table: string, data: any): Promise<any> {
         return true;
     }
 
-    public async replace(table: string, queryObject: any, data: any): Promise<any> {
-        return true;
+    public async replace(table: string, queryObject: Record<string, any>, data: any): Promise<any> {
+        return data;
     }
 }

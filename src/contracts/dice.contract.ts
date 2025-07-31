@@ -24,27 +24,26 @@ const rng = (previousBlockId, blockId, transactionId) => {
 const VALID_CURRENCIES = ['HIVE'];
 
 export class DiceContract {
-    // tslint:disable-next-line: variable-name
-    private _instance: Streamer;
+    public _instance: Streamer;
 
     private blockNumber: number;
     private blockId;
     private previousBlockId;
     private transactionId;
 
-    private create() {
+    public create() {
         // Runs every time register is called on this contract
         // Do setup logic and code in here (creating a database, etc)
     }
 
-    private destroy() {
+    public destroy() {
         // Runs every time unregister is run for this contract
         // Close database connections, write to a database with state, etc
     }
 
     // Updates the contract with information about the current block
     // This is a method automatically called if it exists
-    private updateBlockInfo(blockNumber, blockId, previousBlockId, transactionId) {
+    public updateBlockInfo(blockNumber, blockId, previousBlockId, transactionId) {
         // Lifecycle method which sets block info 
         this.blockNumber = blockNumber;
         this.blockId = blockId;
@@ -164,12 +163,25 @@ export class DiceContract {
                         // We need to refund the user
                         await this._instance.transferHiveTokens(ACCOUNT, sender, amountTrim[0], amountTrim[1], `[Refund] You sent an invalid bet amount.`);
                     } catch (e) {
-                        console.log(e);
+                        const error = e instanceof Error ? e : new Error(String(e));
+                        console.error(`[DiceContract] Refund error: ${error.message}`, {
+                            sender,
+                            amount: amountTrim[0],
+                            currency: amountTrim[1],
+                            stack: error.stack
+                        });
                     }
                 }
             }
         } catch (e) {
-            throw e;
+            const error = e instanceof Error ? e : new Error(String(e));
+            console.error(`[DiceContract] Roll processing error: ${error.message}`, {
+                sender,
+                amount,
+                payload,
+                stack: error.stack
+            });
+            throw error;
         }
     }
 
