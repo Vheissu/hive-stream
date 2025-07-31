@@ -27,6 +27,7 @@
         "moment": "^2.29.4",
         "mongodb": "^4.11.0",
         "node-fetch": "^3.2.10",
+        "pg": "^8.16.3",
         "seedrandom": "^3.0.5",
         "sscjs": "^0.0.9",
         "uuid": "^9.0.0"
@@ -38,6 +39,7 @@
         "@types/mongodb": "^4.0.7",
         "@types/node": "^18.19.121",
         "@types/node-cron": "^3.0.5",
+        "@types/pg": "^8.15.5",
         "@types/seedrandom": "^3.0.8",
         "@types/uuid": "^10.0.0",
         "jest": "^29.3.1",

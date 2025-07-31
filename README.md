@@ -204,11 +204,47 @@ At the moment, the `timeValue` passed in as the first argument to `TimeAction` c
 - `12h` or `halfday` will run a task every 12 hours (half a day)
 - `24h` or `day` will run a task every 24 hours (day)
 
-Values will be persisted if using one of the three adapters that ship with the library.
+Values will be persisted if using one of the database adapters that ship with the library.
 
 ## Adapters
 
-The Hive Stream library supports custom adapters for various actions that take place in the library. When the library first loads, it makes a call to get the last block number or when a block is processed, storing the processed block number. This library ships with two adapters; File and SQLite, both of which are file based adapters. The SQLite database works more like a traditional database and shows how you might create an adapter for a database like MongoDB or MySQL.
+The Hive Stream library supports custom adapters for various actions that take place in the library. When the library first loads, it makes a call to get the last block number or when a block is processed, storing the processed block number. This library ships with three adapters: SQLite, MongoDB, and PostgreSQL. These provide robust database storage for blockchain state and operations.
+
+### SQLite Adapter
+```javascript
+import { Streamer, SqliteAdapter } from 'hive-stream';
+
+const adapter = new SqliteAdapter('./hive-stream.db');
+const streamer = new Streamer(adapter, config);
+```
+
+### MongoDB Adapter
+```javascript
+import { Streamer, MongodbAdapter } from 'hive-stream';
+
+const adapter = new MongodbAdapter('mongodb://localhost:27017', 'hive_stream');
+const streamer = new Streamer(adapter, config);
+```
+
+### PostgreSQL Adapter
+```javascript
+import { Streamer, PostgreSQLAdapter } from 'hive-stream';
+
+const adapter = new PostgreSQLAdapter({
+    host: 'localhost',
+    port: 5432,
+    user: 'postgres',
+    password: 'your_password',
+    database: 'hive_stream'
+});
+
+// Or with connection string
+const adapter = new PostgreSQLAdapter({
+    connectionString: 'postgresql://user:pass@localhost:5432/hive_stream'
+});
+
+const streamer = new Streamer(adapter, config);
+```
 
 When creating an adapter, at a minimum your adapter requires two methods: `loadState` and `saveState`. It must also extend `AdapterBase` which is exported from the package.
 
