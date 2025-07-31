@@ -438,12 +438,11 @@ export class SqliteAdapter extends AdapterBase {
 
     public async find(table: string, query: Record<string, any>) {
         return new Promise((resolve, reject) => {
-            const queryStr = Object.keys(query).reduce((arr, key) => {
-                arr.push(`${key} = ${query[key]}`);
-                return arr;
-            }, []).join(' AND ');
+            const keys = Object.keys(query);
+            const queryStr = keys.map(key => `${key} = ?`).join(' AND ');
+            const values = keys.map(key => query[key]);
 
-            this.db.all(`SELECT * FROM ${table} WHERE ${queryStr}`, (err, rows) => {
+            this.db.all(`SELECT * FROM ${table} WHERE ${queryStr}`, values, (err, rows) => {
                 if (!err) {
                     if (rows.length) {
                         resolve(rows);
@@ -459,12 +458,11 @@ export class SqliteAdapter extends AdapterBase {
 
     public async findOne(table: string, query: Record<string, any>) {
         return new Promise((resolve, reject) => {
-            const queryStr = Object.keys(query).reduce((arr, key) => {
-                arr.push(`${key} = ${query[key]}`);
-                return arr;
-            }, []).join(' AND ');
+            const keys = Object.keys(query);
+            const queryStr = keys.map(key => `${key} = ?`).join(' AND ');
+            const values = keys.map(key => query[key]);
 
-            this.db.get(`SELECT * FROM ${table} WHERE ${queryStr}`, (err, row) => {
+            this.db.get(`SELECT * FROM ${table} WHERE ${queryStr}`, values, (err, row) => {
                 if (!err) {
                     if (row) {
                         resolve(row);
@@ -492,12 +490,11 @@ export class SqliteAdapter extends AdapterBase {
 
     public async replace(table: string, queryObject: Record<string, any>, data: any): Promise<any> {
         return new Promise((resolve, reject) => {
-            const queryStr = Object.keys(queryObject).reduce((arr, key) => {
-                arr.push(`${key} = ${queryObject[key]}`);
-                return arr;
-            }, []).join(' AND ');
+            const dataKeys = Object.keys(data);
+            const placeholders = dataKeys.map(() => '?').join(', ');
+            const values = dataKeys.map(key => data[key]);
 
-            this.db.run(`REPLACE INTO ${table} ${queryStr} VALUES (${data})`, (err) => {
+            this.db.run(`REPLACE INTO ${table} (${dataKeys.join(', ')}) VALUES (${placeholders})`, values, (err) => {
                 if (!err) {
                     resolve(data);
                 } else {
