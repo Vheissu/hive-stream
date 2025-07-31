@@ -7,7 +7,14 @@ import { Database } from 'sqlite3';
 import path from 'path';
 
 export class SqliteAdapter extends AdapterBase {
-    public db = new Database(path.resolve(__dirname, 'hive-stream.db'));
+    public declare db: Database;
+    private dbPath: string;
+    
+    constructor(dbPath?: string) {
+        super();
+        this.dbPath = dbPath || path.resolve(__dirname, 'hive-stream.db');
+        this.db = new Database(this.dbPath);
+    }
     
     // Performance optimization: prepared statements cache
     private preparedStatements: Map<string, any> = new Map();
@@ -97,8 +104,20 @@ export class SqliteAdapter extends AdapterBase {
     public async loadActions(): Promise<TimeAction[]> {
         const state = await this.loadState();
 
-        if (state) {
-            return (state?.actions) ? state.actions : [];
+        if (state && state.actions) {
+            try {
+                return state.actions.map((actionData: any) => {
+                    try {
+                        return TimeAction.fromJSON(actionData);
+                    } catch (error) {
+                        console.warn(`[SqliteAdapter] Failed to restore action ${actionData?.id || 'unknown'}:`, error);
+                        return null;
+                    }
+                }).filter(Boolean) as TimeAction[];
+            } catch (error) {
+                console.error('[SqliteAdapter] Error loading actions:', error);
+                return [];
+            }
         }
 
         return [];
@@ -110,7 +129,12 @@ export class SqliteAdapter extends AdapterBase {
                 if (!err) {
                     if (rows.length) {
                         const row = rows[0];
-                        row.actions = JSON.parse(row.actions) ?? [];
+                        try {
+                            row.actions = row.actions ? JSON.parse(row.actions) : [];
+                        } catch (parseError) {
+                            console.warn('[SqliteAdapter] Failed to parse actions from database, using empty array:', parseError);
+                            row.actions = [];
+                        }
                         resolve(row);
                     } else {
                         resolve(null);
@@ -125,11 +149,20 @@ export class SqliteAdapter extends AdapterBase {
     public async saveState(data: any): Promise<boolean> {
         return new Promise((resolve, reject) => {
             const sql = `REPLACE INTO params (id, actions, lastBlockNumber) VALUES(1, ?, ?)`;
+            
+            let actionsJson: string;
+            try {
+                actionsJson = JSON.stringify(data.actions || []);
+            } catch (error) {
+                console.error('[SqliteAdapter] Failed to serialize actions:', error);
+                actionsJson = '[]';
+            }
 
-            this.db.run(sql, [JSON.stringify(data.actions), data.lastBlockNumber], (err, result) => {
+            this.db.run(sql, [actionsJson, data.lastBlockNumber], (err, result) => {
                 if (!err) {
                     resolve(true);
                 } else {
+                    console.error('[SqliteAdapter] Error saving state:', err);
                     reject(err);
                 }
             });
@@ -380,6 +413,19 @@ export class SqliteAdapter extends AdapterBase {
 
     public async destroy(): Promise<boolean> {
         return new Promise((resolve, reject) => {
+            // Finalize all prepared statements first
+            this.preparedStatements.forEach((stmt, key) => {
+                try {
+                    stmt.finalize();
+                } catch (error) {
+                    console.warn(`[SqliteAdapter] Error finalizing statement ${key}:`, error);
+                }
+            });
+            this.preparedStatements.clear();
+            
+            // Flush any remaining batch operations
+            this.flushBatch();
+            
             this.db.close((err) => {
                 if (!err) {
                     resolve(true);

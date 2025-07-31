@@ -57,8 +57,20 @@ export class MongodbAdapter extends AdapterBase {
 
         const state = await this.loadState();
 
-        if (state) {
-            return (state?.actions) ? state.actions : [];
+        if (state && state.actions) {
+            try {
+                return state.actions.map((actionData: any) => {
+                    try {
+                        return TimeAction.fromJSON(actionData);
+                    } catch (error) {
+                        console.warn(`[MongodbAdapter] Failed to restore action ${actionData?.id || 'unknown'}:`, error);
+                        return null;
+                    }
+                }).filter(Boolean) as TimeAction[];
+            } catch (error) {
+                console.error('[MongodbAdapter] Error loading actions:', error);
+                return [];
+            }
         }
 
         return [];
@@ -88,11 +100,18 @@ export class MongodbAdapter extends AdapterBase {
             }
 
             const collection = this.db.collection('params');
+            
+            // Ensure actions are properly serialized
+            const stateData = {
+                ...data,
+                actions: data.actions || []
+            };
 
-            await collection.replaceOne({}, data, {  upsert: true});
+            await collection.replaceOne({}, stateData, { upsert: true });
 
             return true;
         } catch (e) {
+            console.error('[MongodbAdapter] Error saving state:', e);
             throw e;
         }
     }

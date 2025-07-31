@@ -13,8 +13,8 @@ export interface StreamerContract {
 
 export interface ContractInstance {
     _instance?: any;
-    create?(): void;
-    destroy?(): void;
+    create?(): void | Promise<void>;
+    destroy?(): void | Promise<void>;
     updateBlockInfo?(blockNumber: number, blockId: string, prevBlockId: string, trxId: string): void;
     [key: string]: any;
 }

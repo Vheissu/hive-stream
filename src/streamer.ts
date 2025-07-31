@@ -74,10 +74,10 @@ export class Streamer {
     // Action processing optimization
     private actionFrequencyMap = new Map([
         ['3s', 3], ['block', 3], ['10s', 10], ['30s', 30],
-        ['1m', 60], ['minute', 60], ['15m', 900], ['quarter', 900],
+        ['1m', 60], ['5m', 300], ['minute', 60], ['15m', 900], ['quarter', 900],
         ['30m', 1800], ['halfhour', 1800], ['hourly', 3600], ['1h', 3600],
-        ['12h', 43200], ['halfday', 43200], ['24h', 86400], ['day', 86400],
-        ['week', 604800]
+        ['12h', 43200], ['halfday', 43200], ['24h', 86400], ['day', 86400], ['daily', 86400],
+        ['week', 604800], ['weekly', 604800]
     ]);
     private contractCache = new Map<string, StreamerContract>();
     
@@ -128,39 +128,155 @@ export class Streamer {
     }
 
     /**
-     * Register a new action
-     * 
+     * Register a new action with improved validation and persistence
      */
-    public async registerAction(action: TimeAction) {
+    public async registerAction(action: TimeAction): Promise<void> {
+        if (!action || !(action instanceof TimeAction)) {
+            throw new Error('Invalid action: must be an instance of TimeAction');
+        }
+
         const loadedActions: TimeAction[] = await this.adapter.loadActions() as TimeAction[];
 
         for (const a of loadedActions) {
             const exists = this.actions.find(i => i.id === a.id);
 
             if (!exists) {
-                this.actions.push(new TimeAction(a.timeValue, a.id, a.contractName, a.contractMethod, a.date));
+                try {
+                    const restoredAction = TimeAction.fromJSON(a);
+                    this.actions.push(restoredAction);
+                } catch (error) {
+                    console.warn(`[Streamer] Failed to restore action ${a.id}:`, error);
+                }
             }
         }
 
         const exists = this.actions.find(a => a.id === action.id);
 
         if (!exists) {
+            this.validateActionContract(action);
             this.actions.push(action);
+            
+            await this.saveActionsToDisk();
+            
+            if (this.config.DEBUG_MODE) {
+                console.log(`[Streamer] Registered time-based action: ${action.id} (${action.timeValue})`);
+            }
+        } else {
+            if (this.config.DEBUG_MODE) {
+                console.warn(`[Streamer] Action with ID ${action.id} already exists, skipping registration`);
+            }
+        }
+    }
+
+    /**
+     * Validate that the contract and method exist for the action
+     */
+    private validateActionContract(action: TimeAction): void {
+        const contract = this.contractCache.get(action.contractName) || 
+                        this.contracts.find(c => c.name === action.contractName);
+        
+        if (!contract) {
+            throw new Error(`Contract '${action.contractName}' not found for action '${action.id}'`);
+        }
+        
+        if (!contract.contract[action.contractMethod] || typeof contract.contract[action.contractMethod] !== 'function') {
+            throw new Error(`Method '${action.contractMethod}' not found in contract '${action.contractName}' for action '${action.id}'`);
+        }
+    }
+
+    /**
+     * Remove an action by ID
+     */
+    public async removeAction(actionId: string): Promise<boolean> {
+        const index = this.actions.findIndex(a => a.id === actionId);
+        
+        if (index >= 0) {
+            const removedAction = this.actions.splice(index, 1)[0];
+            await this.saveActionsToDisk();
+            
+            if (this.config.DEBUG_MODE) {
+                console.log(`[Streamer] Removed time-based action: ${actionId}`);
+            }
+            
+            return true;
+        }
+        
+        return false;
+    }
+
+    /**
+     * Get all registered actions
+     */
+    public getActions(): TimeAction[] {
+        return [...this.actions];
+    }
+
+    /**
+     * Get action by ID
+     */
+    public getAction(actionId: string): TimeAction | undefined {
+        return this.actions.find(a => a.id === actionId);
+    }
+
+    /**
+     * Enable/disable an action
+     */
+    public async setActionEnabled(actionId: string, enabled: boolean): Promise<boolean> {
+        const action = this.actions.find(a => a.id === actionId);
+        
+        if (action) {
+            if (enabled) {
+                action.enable();
+            } else {
+                action.disable();
+            }
+            
+            await this.saveActionsToDisk();
+            
+            if (this.config.DEBUG_MODE) {
+                console.log(`[Streamer] Action ${actionId} ${enabled ? 'enabled' : 'disabled'}`);
+            }
+            
+            return true;
+        }
+        
+        return false;
+    }
+
+    /**
+     * Save actions to disk asynchronously
+     */
+    private async saveActionsToDisk(): Promise<void> {
+        try {
+            if (this.adapter?.saveState) {
+                await this.adapter.saveState({
+                    lastBlockNumber: this.lastBlockNumber,
+                    actions: this.actions.map(a => a.toJSON())
+                });
+            }
+        } catch (error) {
+            console.error('[Streamer] Failed to save actions to disk:', error);
         }
     }
 
     /**
      * Resets a specific action time value
-     * 
-     * @param id 
-     * 
      */
-    public resetAction(id: string) {
+    public async resetAction(id: string): Promise<boolean> {
         const action = this.actions.find(i => i.id === id);
 
         if (action) {
             action.reset();
+            await this.saveActionsToDisk();
+            
+            if (this.config.DEBUG_MODE) {
+                console.log(`[Streamer] Reset action: ${id}`);
+            }
+            
+            return true;
         }
+        
+        return false;
     }
 
     public registerContract(name: string, contract: ContractInstance) {
@@ -384,7 +500,9 @@ export class Streamer {
         const blockTime = new Date(`${block.timestamp}Z`);
 
         if (this.lastBlockNumber !== blockNumber) {
-            this.processActions();
+            this.processActions().catch(error => {
+                console.error('[Streamer] Error processing actions:', error);
+            });
         }
 
         this.blockId = block.block_id;
@@ -627,16 +745,22 @@ export class Streamer {
         }
     }
 
-    private processActions() {
+    private async processActions(): Promise<void> {
         if (!this.latestBlockchainTime || this.actions.length === 0) {
             return;
         }
         
         const currentTime = this.latestBlockchainTime.getTime();
+        const executedActions: string[] = [];
         
         // Process actions in batch with optimized time calculations
         for (let i = 0; i < this.actions.length; i++) {
             const action = this.actions[i];
+            
+            // Skip disabled actions or actions that have reached max executions
+            if (!action.enabled || action.hasReachedMaxExecutions()) {
+                continue;
+            }
             
             // Get contract from cache or find and cache it
             let contract = this.contractCache.get(action.contractName);
@@ -647,14 +771,21 @@ export class Streamer {
                 }
             }
 
-            // Contract doesn't exist or action doesn't exist, skip
-            if (!contract || !contract?.contract?.[action.contractMethod]) {
+            // Contract doesn't exist or method doesn't exist, log warning and skip
+            if (!contract) {
+                console.warn(`[Streamer] Contract '${action.contractName}' not found for action '${action.id}'`);
+                continue;
+            }
+            
+            if (!contract?.contract?.[action.contractMethod] || typeof contract.contract[action.contractMethod] !== 'function') {
+                console.warn(`[Streamer] Method '${action.contractMethod}' not found in contract '${action.contractName}' for action '${action.id}'`);
                 continue;
             }
 
             // Get frequency in seconds from optimized map
             const frequencySeconds = this.actionFrequencyMap.get(action.timeValue);
             if (!frequencySeconds) {
+                console.warn(`[Streamer] Invalid time value '${action.timeValue}' for action '${action.id}'`);
                 continue;
             }
 
@@ -665,12 +796,78 @@ export class Streamer {
             // Check if enough time has passed
             if (differenceSeconds >= frequencySeconds) {
                 try {
-                    contract.contract[action.contractMethod](action.payload);
+                    // Execute the action with error isolation
+                    await this.executeAction(action, contract);
+                    
+                    // Reset the action timer and increment execution count
                     action.reset();
+                    action.incrementExecutionCount();
+                    executedActions.push(action.id);
+                    
+                    if (this.config.DEBUG_MODE) {
+                        console.log(`[Streamer] Executed action: ${action.id} (execution #${action.executionCount})`);
+                    }
                 } catch (error) {
-                    console.error(`[Streamer] Action execution error for ${action.contractName}.${action.contractMethod}:`, error);
+                    const err = error instanceof Error ? error : new Error(String(error));
+                    console.error(`[Streamer] Action execution error for ${action.contractName}.${action.contractMethod}:`, {
+                        actionId: action.id,
+                        error: err.message,
+                        stack: err.stack,
+                        payload: action.payload
+                    });
+                    
+                    // Optionally disable action after repeated failures
+                    // This could be configurable in the future
                 }
             }
+        }
+        
+        // Save state if any actions were executed
+        if (executedActions.length > 0) {
+            await this.saveActionsToDisk();
+        }
+        
+        // Clean up disabled or completed actions periodically
+        this.cleanupActions();
+    }
+    
+    /**
+     * Execute a single action with proper isolation
+     */
+    private async executeAction(action: TimeAction, contract: StreamerContract): Promise<void> {
+        const method = contract.contract[action.contractMethod];
+        
+        if (method.constructor.name === 'AsyncFunction') {
+            await method.call(contract.contract, action.payload);
+        } else {
+            method.call(contract.contract, action.payload);
+        }
+    }
+    
+    /**
+     * Clean up completed or disabled actions to prevent memory leaks
+     */
+    private cleanupActions(): void {
+        const beforeCount = this.actions.length;
+        
+        // Remove actions that have reached their max executions
+        this.actions = this.actions.filter(action => {
+            if (action.hasReachedMaxExecutions()) {
+                if (this.config.DEBUG_MODE) {
+                    console.log(`[Streamer] Removing completed action: ${action.id} (${action.executionCount}/${action.maxExecutions} executions)`);
+                }
+                return false;
+            }
+            return true;
+        });
+        
+        const afterCount = this.actions.length;
+        
+        if (beforeCount !== afterCount) {
+            // Save state if we removed any actions
+            this.saveActionsToDisk().catch(error => {
+                console.error('[Streamer] Failed to save state after action cleanup:', error);
+            });
         }
     }
 
