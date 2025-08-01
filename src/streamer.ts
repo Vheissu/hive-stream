@@ -7,17 +7,13 @@ import { Client } from '@hiveio/dhive';
 import { Utils } from './utils';
 import { Config, ConfigInterface } from './config';
 import { 
-    ContractPayload, 
     StreamerContract, 
     ContractInstance,
     SubscriptionCallback,
     TransferSubscription,
     CustomJsonIdSubscription,
-    TransferMetadata,
-    CustomJsonMetadata
 } from './types/hive-stream';
 
-import moment from 'moment';
 import hivejs from 'sscjs';
 
 
