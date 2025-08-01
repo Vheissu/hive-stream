@@ -5,12 +5,7 @@ dotenv.config();
 import { Streamer } from './streamer';
 import { DiceContract } from './contracts/dice.contract';
 
-import { SqliteAdapter } from './adapters/sqlite.adapter';
-import { TimeAction } from './actions';
-import { Utils } from './utils';
-import { LottoContract } from './contracts/lotto.contract';
-
-import fetch from 'node-fetch';
+import { SqliteAdapter } from './adapters/sqlite.adapter';  
 
 const streamer = new Streamer({
     JSON_ID: 'hivestream',
