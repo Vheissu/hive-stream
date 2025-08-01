@@ -16,7 +16,7 @@ describe('Utils', () => {
         });
     
         test('Invalid numeric values passed', () => {
-            expect(Utils.roundPrecision('dasd', 3)).toBeNaN();
+            expect(Utils.roundPrecision('dasd' as any, 3)).toBeNaN();
         });
     });
 
@@ -76,16 +76,18 @@ describe('Utils', () => {
     
             const value = await Utils.convertHiveAmount(amount, fiatSymbol, hiveSymbol);
             
-            expect(fetch).toBeCalledWith('https://api.coingecko.com/api/v3/simple/price?ids=hive,hive_dollar&vs_currencies=usd');
-            expect(fetch).toBeCalledWith('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json');
+            expect(fetch).toHaveBeenCalledWith('https://api.coingecko.com/api/v3/simple/price?ids=hive,hive_dollar&vs_currencies=usd');
+            expect(fetch).toHaveBeenCalledWith('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json');
 
             expect(value).toStrictEqual(Number((amount / 0.229951).toFixed(3))); // amount / HIVE price from CoinGecko (fiat to HIVE conversion)
         });
     });
 
     describe('Get transfer URL', () => {
-        test('Gets a transfer URL string', () => {
-            expect(Utils.getTransferUrl('beggars', 'TEST123', '10.000 HIVE', 'http://localhost:5001')).toStrictEqual(`https://hivesigner.com/sign/transfer?to=beggars&memo=TEST123&amount=10.000 HIVE&redirect_uri=http://localhost:5001`);
+        test('Gets a transfer URL string with proper URL encoding', () => {
+            const result = Utils.getTransferUrl('beggars', 'TEST123', '10.000 HIVE', 'http://localhost:5001');
+            const expected = 'https://hivesigner.com/sign/transfer?to=beggars&memo=TEST123&amount=10.000%20HIVE&redirect_uri=http%3A%2F%2Flocalhost%3A5001';
+            expect(result).toStrictEqual(expected);
         });
     });
 
