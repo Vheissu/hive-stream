@@ -29,7 +29,7 @@ The `BLOCK_CHECK_INTERVAL` value is how often to check for new blocks or in case
 
 The `BLOCKS_BEHIND_WARNING` value is a numeric value of the number of blocks your API will fall behind from the master before warning to the console.
 
-The `API_URL` is the Hive API. If you want to enable debug mode, set to `DEBUG_MODE` to `true`. The configuration values and their defaults can be found [here](https://github.com/Vheissu/hive-stream/blob/master/config.js).
+The `API_NODES` are the Hive API endpoints used for failover. If you want to enable debug mode, set `DEBUG_MODE` to `true`. The configuration values and their defaults can be found in `src/config.ts`.
 
 ```
 const options = {
@@ -40,7 +40,7 @@ const options = {
   LAST_BLOCK_NUMBER: 0,
   BLOCK_CHECK_INTERVAL: 1000,
   BLOCKS_BEHIND_WARNING: 25,
-  API_URL: 'https://api.hiveit.com',
+  API_NODES: ['https://api.hive.blog', 'https://api.openhive.network', 'https://rpc.ausbit.dev'],
   DEBUG_MODE: false
 }
 
@@ -117,9 +117,48 @@ transferHiveTokens(from, to, amount, symbol, memo = '') {
 }
 ```
 
+### Transfer Hive Engine Tokens
+```javascript
+transferHiveEngineTokens(from, to, symbol, quantity, memo = '') {
+
+}
+```
+
+### Transfer Hive Engine Tokens to Multiple Accounts
+```javascript
+transferHiveEngineTokensMultiple(from, accounts = [], symbol, memo = '', amount = '0') {
+
+}
+```
+
+### Issue Hive Engine Tokens
+```javascript
+issueHiveEngineTokens(from, to, symbol, quantity, memo = '') {
+
+}
+```
+
+### Issue Hive Engine Tokens to Multiple Accounts
+```javascript
+issueHiveEngineTokensMultiple(from, accounts = [], symbol, memo = '', amount = '0') {
+
+}
+```
+
+### Upvote/Downvote Posts
+```javascript
+upvote(votePercentage = '100.0', username, permlink) {
+
+}
+
+downvote(votePercentage = '100.0', username, permlink) {
+
+}
+```
+
 ## Contracts
 
-Hive Stream allows you to write contracts which get executed when a custom JSON operation matches. The only requirement is sending a payload which contains `hiveContract` inside of it.
+Hive Stream allows you to write contracts which get executed when a custom JSON operation matches. The only requirement is sending a payload which contains `hivePayload` inside of it.
 
 The payload consists of:
 
@@ -154,10 +193,26 @@ unregisterContract('mycontract');
 ### Example Payload
 
 ```javascript
-JSON.stringify({ hiveContract: { name: 'hivedice', action: 'roll', payload: { roll: 22, amount: '1'} } })
+JSON.stringify({ hivePayload: { name: 'hivedice', action: 'roll', payload: { roll: 22, amount: '1'} } })
 ```
 
-This will match a registered contract called `hivedice` and inside of the contract code, a function called `roll` and finally, the payload is sent to the function as an argument, allowing you to access the values inside of it. See the example file `dice.contract.ts` in the `src/contracts` folder in the repository. there is also a coinflip and lotto contract showing you how to build a coinflip or lottery based contract.
+This will match a registered contract called `hivedice` and inside of the contract code, a function called `roll` and finally, the payload is sent to the function as an argument, allowing you to access the values inside of it. 
+
+### Built-in Contract Examples
+
+The library includes several built-in contract examples in the `src/contracts` folder:
+
+- `DiceContract` - A dice rolling game contract
+- `CoinflipContract` - A coin flip game contract  
+- `LottoContract` - A lottery-style game contract
+- `TokenContract` - A contract for token operations
+- `NFTContract` - A contract for NFT operations
+
+These can be imported and used as examples for building your own contracts:
+
+```javascript
+import { DiceContract, CoinflipContract, LottoContract } from 'hive-stream';
+```
 
 ## Time-based Actions
 
@@ -196,13 +251,16 @@ new TimeAction(timeValue, uniqueId, contractName, contractMethod, date)
 At the moment, the `timeValue` passed in as the first argument to `TimeAction` cannot accept just any value. However, there are many available out-of-the-box with more flexibility to come in the future.
 
 - `3s` or `block` will run a task every block (3 seconds, approximately)
+- `10s` will run a task every 10 seconds
 - `30s` will run a task every 30 seconds
 - `1m` or `minute` will run a task every 60 seconds (1 minute)
+- `5m` will run a task every 5 minutes
 - `15m` or `quarter` will run a task every 15 minutes
 - `30m` or `halfhour` will run a task every 30 minutes
 - `1h` or `hourly` will run a task every 60 minutes (every hour)
 - `12h` or `halfday` will run a task every 12 hours (half a day)
-- `24h` or `day` will run a task every 24 hours (day)
+- `24h`, `day`, or `daily` will run a task every 24 hours (day)
+- `week` or `weekly` will run a task every 7 days (week)
 
 Values will be persisted if using one of the database adapters that ship with the library.
 
@@ -210,26 +268,32 @@ Values will be persisted if using one of the database adapters that ship with th
 
 The Hive Stream library supports custom adapters for various actions that take place in the library. When the library first loads, it makes a call to get the last block number or when a block is processed, storing the processed block number. This library ships with three adapters: SQLite, MongoDB, and PostgreSQL. These provide robust database storage for blockchain state and operations.
 
-### SQLite Adapter
+By default, Streamer uses SQLite adapter. To use a different adapter, use the `registerAdapter()` method:
+
+### SQLite Adapter (Default)
 ```javascript
 import { Streamer, SqliteAdapter } from 'hive-stream';
 
+const streamer = new Streamer(config);
+// SQLite is used by default, but you can explicitly register a custom SQLite database:
 const adapter = new SqliteAdapter('./hive-stream.db');
-const streamer = new Streamer(adapter, config);
+await streamer.registerAdapter(adapter);
 ```
 
 ### MongoDB Adapter
 ```javascript
 import { Streamer, MongodbAdapter } from 'hive-stream';
 
+const streamer = new Streamer(config);
 const adapter = new MongodbAdapter('mongodb://localhost:27017', 'hive_stream');
-const streamer = new Streamer(adapter, config);
+await streamer.registerAdapter(adapter);
 ```
 
 ### PostgreSQL Adapter
 ```javascript
 import { Streamer, PostgreSQLAdapter } from 'hive-stream';
 
+const streamer = new Streamer(config);
 const adapter = new PostgreSQLAdapter({
     host: 'localhost',
     port: 5432,
@@ -243,7 +307,7 @@ const adapter = new PostgreSQLAdapter({
     connectionString: 'postgresql://user:pass@localhost:5432/hive_stream'
 });
 
-const streamer = new Streamer(adapter, config);
+await streamer.registerAdapter(adapter);
 ```
 
 When creating an adapter, at a minimum your adapter requires two methods: `loadState` and `saveState`. It must also extend `AdapterBase` which is exported from the package.
