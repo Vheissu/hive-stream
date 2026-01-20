@@ -43,7 +43,7 @@ describe('CoinGeckoExchange', () => {
         });
 
         it('should retry on failure', async () => {
-            const retryExchange = new CoinGeckoExchange({ maxRetries: 2, retryDelay: 100 });
+            const retryExchange = new CoinGeckoExchange({ maxRetries: 3, retryDelay: 100 });
             
             // Mock first two calls to fail, third to succeed
             let callCount = 0;
@@ -61,7 +61,7 @@ describe('CoinGeckoExchange', () => {
                 });
             });
 
-            const success = await retryExchange.fetchRates();
+            const success = await retryExchange.updateRates();
             
             expect(success).toBe(true);
             expect(retryExchange.rateUsdHive).toBe(0.25);
@@ -116,12 +116,13 @@ describe('CoinGeckoExchange', () => {
             mockSuccessfulApis();
 
             // First fetch
-            const rates1 = await exchange.fetchRates();
+            const rates1 = await exchange.updateRates();
             
             // Second fetch should use cache
-            const rates2 = await exchange.fetchRates();
+            const rates2 = await exchange.updateRates();
 
-            expect(rates1).toEqual(rates2);
+            expect(rates1).toBe(true);
+            expect(rates2).toBe(false);
             expect(global.fetch).toHaveBeenCalledTimes(1);
         });
 
@@ -130,13 +131,13 @@ describe('CoinGeckoExchange', () => {
             mockSuccessfulApis();
 
             // First fetch
-            await shortCacheExchange.fetchRates();
+            await shortCacheExchange.updateRates();
 
             // Wait for cache to expire
             await new Promise(resolve => setTimeout(resolve, 150));
 
             // Second fetch should hit API again
-            await shortCacheExchange.fetchRates();
+            await shortCacheExchange.updateRates();
 
             expect(global.fetch).toHaveBeenCalledTimes(2);
         });
@@ -146,7 +147,7 @@ describe('CoinGeckoExchange', () => {
 
             expect(exchange.isCacheValid()).toBe(false);
 
-            await exchange.fetchRates();
+            await exchange.updateRates();
             
             expect(exchange.isCacheValid()).toBe(true);
         });
@@ -154,10 +155,10 @@ describe('CoinGeckoExchange', () => {
         it('should report last fetch time', async () => {
             mockSuccessfulApis();
 
-            expect(exchange.getLastFetchTime()).toBeNull();
+            expect(exchange.getLastFetchTime()).toBeUndefined();
 
             const beforeFetch = Date.now();
-            await exchange.fetchRates();
+            await exchange.updateRates();
             const afterFetch = Date.now();
 
             const lastFetchTime = exchange.getLastFetchTime();

@@ -75,9 +75,9 @@ describe('Coinflip Contract', () => {
 
         await sleep(100);
 
-        expect(contract['flip']).toBeCalled();
-        expect(contract['_instance'].getTransaction).toBeCalledWith(778782, 'fhkjsdhfkjsdf');
-        expect(contract['_instance'].transferHiveTokens).toBeCalledWith('beggars', 'testuser', '18.000', 'HIVE', '[Winner] | Guess: heads | Server Roll: heads | Previous block id: fkjs7878dkfj | BlockID: dfjfsdfsdfs4hfkj88787 | Trx ID: fhkjsdhfkjsdf | Server Seed: j93jgsjghjdhgjfhgkfdhgkj34872394723');
+        expect(contract['flip']).toHaveBeenCalled();
+        expect(contract['_instance'].getTransaction).toHaveBeenCalledWith(778782, 'fhkjsdhfkjsdf');
+        expect(contract['_instance'].transferHiveTokens).toHaveBeenCalledWith('beggars', 'testuser', '18.000', 'HIVE', '[Winner] | Guess: heads | Server Roll: heads | Previous block id: fkjs7878dkfj | BlockID: dfjfsdfsdfs4hfkj88787 | Trx ID: fhkjsdhfkjsdf | Server Seed: j93jgsjghjdhgjfhgkfdhgkj34872394723');
     });
 
     test('User loses a flip', async () => {
@@ -110,9 +110,9 @@ describe('Coinflip Contract', () => {
 
         await sleep(100);
 
-        expect(contract['flip']).toBeCalled();
-        expect(contract['_instance'].getTransaction).toBeCalledWith(778782, 'fhkjsdhfkjsdf');
-        expect(contract['_instance'].transferHiveTokens).toBeCalledWith('beggars', 'testuser', '0.001', 'HIVE', '[Lost] | Guess: heads | Server Roll: tails | Previous block id: fkjs7878dkfj | BlockID: dfjfsdfsdfs4hfkj88787 | Trx ID: fhkjsdhfkjsdf | Server Seed: j93jgsjghjdhgjfhgkfdhgkj34872394723');
+        expect(contract['flip']).toHaveBeenCalled();
+        expect(contract['_instance'].getTransaction).toHaveBeenCalledWith(778782, 'fhkjsdhfkjsdf');
+        expect(contract['_instance'].transferHiveTokens).toHaveBeenCalledWith('beggars', 'testuser', '0.001', 'HIVE', '[Lost] | Guess: heads | Server Roll: tails | Previous block id: fkjs7878dkfj | BlockID: dfjfsdfsdfs4hfkj88787 | Trx ID: fhkjsdhfkjsdf | Server Seed: j93jgsjghjdhgjfhgkfdhgkj34872394723');
     });
 
     test('User sent an unsupported currency, refund them', async () => {
@@ -142,9 +142,9 @@ describe('Coinflip Contract', () => {
 
         await sleep(100);
 
-        expect(contract['flip']).toBeCalled();
-        expect(sut.getTransaction).toBeCalledWith(778782, 'fhkjsdhfkjsdf');
-        expect(sut.transferHiveTokens).toBeCalledWith('beggars', 'testuser', '10.000', 'HBD', '[Refund] You sent an invalid currency.');
+        expect(contract['flip']).toHaveBeenCalled();
+        expect(sut.getTransaction).toHaveBeenCalledWith(778782, 'fhkjsdhfkjsdf');
+        expect(sut.transferHiveTokens).toHaveBeenCalledWith('beggars', 'testuser', '10.000', 'HBD', '[Refund] You sent an invalid currency.');
     });
 
     test('Server cannot afford payout, refund user', async () => {
@@ -174,9 +174,9 @@ describe('Coinflip Contract', () => {
 
         await sleep(100);
 
-        expect(contract['flip']).toBeCalled();
-        expect(sut.getTransaction).toBeCalledWith(778782, 'fhkjsdhfkjsdf');
-        expect(sut.transferHiveTokens).toBeCalledWith('beggars', 'testuser', '15.000', 'HIVE', '[Refund] The server cannot afford this bet payout.');
+        expect(contract['flip']).toHaveBeenCalled();
+        expect(sut.getTransaction).toHaveBeenCalledWith(778782, 'fhkjsdhfkjsdf');
+        expect(sut.transferHiveTokens).toHaveBeenCalledWith('beggars', 'testuser', '15.000', 'HIVE', '[Refund] The server cannot afford this bet payout.');
     });
 
     test('Queue processes multiple concurrent bets', async () => {

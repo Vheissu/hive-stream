@@ -13,9 +13,13 @@ class MockExchange extends Exchange {
     public mockHiveRate = 0.5;
     public mockHbdRate = 1.0;
 
-    constructor() {
+    constructor(config: Partial<{ cacheDuration: number; maxRetries: number; retryDelay: number }> = {}) {
         // Use shorter timeouts for tests
-        super({ cacheDuration: 100, maxRetries: 1, retryDelay: 10 });
+        super({
+            cacheDuration: config.cacheDuration ?? 100,
+            maxRetries: config.maxRetries ?? 1,
+            retryDelay: config.retryDelay ?? 10
+        });
     }
 
     public async fetchRates(): Promise<boolean> {

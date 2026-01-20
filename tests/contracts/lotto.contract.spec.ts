@@ -82,7 +82,7 @@ describe('Lotto Contract', () => {
     
             await sleep(100);
     
-            expect(contract.buy).toBeCalled();
+            expect(contract.buy).toHaveBeenCalled();
         } catch (e) {
             throw e;
         }
@@ -131,7 +131,7 @@ describe('Lotto Contract', () => {
     
             await sleep(100);
     
-            expect(sut.transferHiveTokens).toBeCalledWith('beggars', 'beggars', '10.000', 'HIVE', '[Refund] You have exceeded the allowed number of entries');
+            expect(sut.transferHiveTokens).toHaveBeenCalledWith('beggars', 'beggars', '10.000', 'HIVE', '[Refund] You have exceeded the allowed number of entries');
         } catch (e) {
             throw e;
         }
@@ -168,9 +168,9 @@ describe('Lotto Contract', () => {
 
             if (drawn) {
                 expect(drawn).toHaveLength(3);
-                expect(sut.transferHiveTokensMultiple).toBeCalledTimes(2);
-                expect(sut.transferHiveTokensMultiple).toBeCalledWith('beggars', expect.any(Array), '164.667', 'HIVE', expect.stringContaining('Congratulations you won the hourly lottery. You won 164.667 HIVE'));
-                expect(sut.transferHiveTokensMultiple).toBeCalledWith(expect.any(String), expect.any(Array), '0.001', 'HIVE', expect.stringContaining('Sorry, you didn\'t win the hourly draw. Winners:'));
+                expect(sut.transferHiveTokensMultiple).toHaveBeenCalledTimes(2);
+                expect(sut.transferHiveTokensMultiple).toHaveBeenCalledWith('beggars', expect.any(Array), '164.667', 'HIVE', expect.stringContaining('Congratulations you won the hourly lottery. You won 164.667 HIVE'));
+                expect(sut.transferHiveTokensMultiple).toHaveBeenCalledWith(expect.any(String), expect.any(Array), '0.001', 'HIVE', expect.stringContaining('Sorry, you didn\'t win the hourly draw. Winners:'));
             }
         } catch (e) {
             throw e;
@@ -207,7 +207,7 @@ describe('Lotto Contract', () => {
     
             const drawn = await contract.drawHourlyLottery();
 
-            expect(sut.transferHiveTokensMultiple).toBeCalledTimes(1);
+            expect(sut.transferHiveTokensMultiple).toHaveBeenCalledTimes(1);
         } catch (e) {
             throw e;
         }
@@ -277,7 +277,7 @@ describe('Lotto Contract', () => {
             const drawn = await contract.drawDailyLottery();
 
             expect(drawn).toHaveLength(10);
-            expect(sut.transferHiveTokensMultiple).toBeCalledWith('beggars', expect.any(Array), '98.800', 'HIVE', 'Congratulations you won the daily lottery. You won 98.800 HIVE');
+            expect(sut.transferHiveTokensMultiple).toHaveBeenCalledWith('beggars', expect.any(Array), '98.800', 'HIVE', 'Congratulations you won the daily lottery. You won 98.800 HIVE');
         } catch (e) {
             throw e;
         }
@@ -315,7 +315,7 @@ describe('Lotto Contract', () => {
     
             await sleep(100);
     
-            expect(sut.transferHiveTokens).toBeCalledWith('beggars', 'testuser', '10.000', 'HBD', '[Refund] You sent an invalid currency.');
+            expect(sut.transferHiveTokens).toHaveBeenCalledWith('beggars', 'testuser', '10.000', 'HBD', '[Refund] You sent an invalid currency.');
         } catch (e) {
             throw e;
         }

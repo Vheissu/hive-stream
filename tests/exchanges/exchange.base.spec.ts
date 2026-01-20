@@ -92,23 +92,33 @@ describe('Exchange', () => {
         });
 
         it('should retry on failure', async () => {
-            exchange.shouldSucceed = false;
+            let callCount = 0;
+            exchange.fetchRates = jest.fn().mockImplementation(() => {
+                callCount++;
+                if (callCount === 1) {
+                    throw new Error('Test error');
+                }
+                exchange.rateUsdHive = 0.5;
+                exchange.rateUsdHbd = 1.0;
+                return Promise.resolve(true);
+            });
 
-            // First attempt fails, second succeeds
-            setTimeout(() => {
-                exchange.shouldSucceed = true;
-            }, 15);
-
-            const result = await exchange.updateRates();
+            const resultPromise = exchange.updateRates();
+            await jest.runAllTimersAsync();
+            const result = await resultPromise;
             expect(result).toBe(true);
-            expect(exchange.fetchCallCount).toBe(2);
+            expect(exchange.fetchRates).toHaveBeenCalledTimes(2);
         }, 10000);
 
         it('should throw NetworkError after max retries', async () => {
             exchange.shouldSucceed = false;
 
-            await expect(exchange.updateRates()).rejects.toThrow(NetworkError);
-            await expect(exchange.updateRates()).rejects.toThrow('Failed to fetch rates after 2 attempts');
+            const resultPromise = exchange.updateRates();
+            const expectation = expect(resultPromise).rejects.toThrow(NetworkError);
+            const messageExpectation = expect(resultPromise).rejects.toThrow('Failed to fetch rates after 2 attempts');
+            await jest.runAllTimersAsync();
+            await expectation;
+            await messageExpectation;
             expect(exchange.fetchCallCount).toBe(2);
         }, 10000);
     });
@@ -162,12 +172,21 @@ describe('Exchange', () => {
             const exchange = new TestExchange({ timeout: 50 });
             
             // Mock fetch to never resolve (timeout scenario)
-            mockFetch.mockImplementationOnce(() => 
-                new Promise(() => {}) // Never resolves
+            mockFetch.mockImplementationOnce((_, options) => 
+                new Promise((_, reject) => {
+                    const signal = options?.signal as AbortSignal | undefined;
+                    if (signal) {
+                        signal.addEventListener('abort', () => {
+                            reject(new Error('Aborted'));
+                        });
+                    }
+                })
             );
 
-            await expect(exchange['fetchWithTimeout']('https://example.com'))
-                .rejects.toThrow();
+            const timeoutPromise = exchange['fetchWithTimeout']('https://example.com');
+            const timeoutExpectation = expect(timeoutPromise).rejects.toThrow();
+            await jest.advanceTimersByTimeAsync(60);
+            await timeoutExpectation;
         }, 1000);
     });
 
@@ -208,7 +227,9 @@ describe('Exchange', () => {
                 return Promise.resolve(true);
             });
 
-            const result = await exchange.updateRates();
+            const resultPromise = exchange.updateRates();
+            await jest.runAllTimersAsync();
+            const result = await resultPromise;
             expect(result).toBe(true);
             expect(exchange.fetchRates).toHaveBeenCalledTimes(2);
         }, 10000);
@@ -216,7 +237,10 @@ describe('Exchange', () => {
         it('should handle non-Error rejections', async () => {
             exchange.fetchRates = jest.fn().mockRejectedValue('string error');
 
-            await expect(exchange.updateRates()).rejects.toThrow(NetworkError);
+            const resultPromise = exchange.updateRates();
+            const expectation = expect(resultPromise).rejects.toThrow(NetworkError);
+            await jest.runAllTimersAsync();
+            await expectation;
         }, 10000);
     });
 });

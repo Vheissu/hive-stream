@@ -61,9 +61,9 @@ describe('Dice Contract', () => {
 
         await sleep(100);
 
-        expect(contract['roll']).toBeCalled();
-        expect(contract['_instance'].getTransaction).toBeCalledWith(778782, 'fhkjsdhfkjsdf');
-        expect(contract['_instance'].transferHiveTokens).toBeCalledWith('beggars', 'testuser', '12.391', 'HIVE', 'You won 12.391 HIVE. Roll: 54, Your guess: 69');
+        expect(contract['roll']).toHaveBeenCalled();
+        expect(contract['_instance'].getTransaction).toHaveBeenCalledWith(778782, 'fhkjsdhfkjsdf');
+        expect(contract['_instance'].transferHiveTokens).toHaveBeenCalledWith('beggars', 'testuser', '12.391', 'HIVE', 'You won 12.391 HIVE. Roll: 54, Your guess: 69');
     });
 
     test('User loses a roll', async () => {
@@ -93,9 +93,9 @@ describe('Dice Contract', () => {
 
         await sleep(100);
 
-        expect(contract['roll']).toBeCalled();
-        expect(sut.getTransaction).toBeCalledWith(778782, 'fhkjsdhfkjsdf');
-        expect(sut.transferHiveTokens).toBeCalledWith('beggars', 'testuser', '0.001', 'HIVE', 'You lost 9.000 HIVE. Roll: 81, Your guess: 69');
+        expect(contract['roll']).toHaveBeenCalled();
+        expect(sut.getTransaction).toHaveBeenCalledWith(778782, 'fhkjsdhfkjsdf');
+        expect(sut.transferHiveTokens).toHaveBeenCalledWith('beggars', 'testuser', '0.001', 'HIVE', 'You lost 9.000 HIVE. Roll: 81, Your guess: 69');
     });
 
     test('User sent an invalid amount, refund them', async () => {
@@ -125,9 +125,9 @@ describe('Dice Contract', () => {
 
         await sleep(100);
 
-        expect(contract['roll']).toBeCalled();
-        expect(sut.getTransaction).toBeCalledWith(778782, 'fhkjsdhfkjsdf');
-        expect(sut.transferHiveTokens).toBeCalledWith('beggars', 'testuser', '100.000', 'HIVE', '[Refund] You sent an invalid bet amount.');
+        expect(contract['roll']).toHaveBeenCalled();
+        expect(sut.getTransaction).toHaveBeenCalledWith(778782, 'fhkjsdhfkjsdf');
+        expect(sut.transferHiveTokens).toHaveBeenCalledWith('beggars', 'testuser', '100.000', 'HIVE', '[Refund] You sent an invalid bet amount.');
     });
 
     test('User sent an unsupported currency, refund them', async () => {
@@ -157,9 +157,9 @@ describe('Dice Contract', () => {
 
         await sleep(100);
 
-        expect(contract['roll']).toBeCalled();
-        expect(sut.getTransaction).toBeCalledWith(778782, 'fhkjsdhfkjsdf');
-        expect(sut.transferHiveTokens).toBeCalledWith('beggars', 'testuser', '10.000', 'HBD', '[Refund] Invalid bet params.');
+        expect(contract['roll']).toHaveBeenCalled();
+        expect(sut.getTransaction).toHaveBeenCalledWith(778782, 'fhkjsdhfkjsdf');
+        expect(sut.transferHiveTokens).toHaveBeenCalledWith('beggars', 'testuser', '10.000', 'HBD', '[Refund] Invalid bet params.');
     });
 
     test('Queue processes multiple concurrent rolls', async () => {

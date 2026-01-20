@@ -1,7 +1,9 @@
 import { HiveRates } from '../../src/hive-rates';
 
+const shouldRunIntegration = process.env.RUN_INTEGRATION === 'true';
+
 describe('HiveRates Integration Test', () => {
-    it('should fetch real rates successfully', async () => {
+    (shouldRunIntegration ? it : it.skip)('should fetch real rates successfully', async () => {
         const hiveRates = new HiveRates();
         
         const result = await hiveRates.fetchRates();

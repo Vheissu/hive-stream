@@ -45,6 +45,9 @@ export class Streamer {
     private blockNumberTimeout: NodeJS.Timeout = null;
     private latestBlockTimer: NodeJS.Timeout = null;
     private lastBlockNumber: number = 0;
+    private headBlockNumber: number = 0;
+    private isPollingBlock = false;
+    private isCatchingUp = false;
 
     private blockId: string;
     private previousBlockId: string;
@@ -370,10 +373,10 @@ export class Streamer {
             console.log(`Restoring state from file`);
         }
 
-        if (!this.config.LAST_BLOCK_NUMBER && state?.lastBlockNumber) {
-            if (state.lastBlockNumber) {
-                this.lastBlockNumber = state.lastBlockNumber;
-            }
+        if (this.config.RESUME_FROM_STATE && state?.lastBlockNumber) {
+            this.lastBlockNumber = state.lastBlockNumber;
+        } else if (this.config.LAST_BLOCK_NUMBER) {
+            this.lastBlockNumber = this.config.LAST_BLOCK_NUMBER;
         }
 
         // Kicks off the blockchain streaming and operation parsing
@@ -425,20 +428,25 @@ export class Streamer {
     }
 
     private async getBlock(): Promise<void> {
+        if (this.isPollingBlock) {
+            return;
+        }
+
+        this.isPollingBlock = true;
+        let nextDelay = this.config.BLOCK_CHECK_INTERVAL;
+
         try {
             // Load global properties from the Hive API
             const props = await this.client.database.getDynamicGlobalProperties();
 
             // We have no props, so try loading them again.
-            if (!props && !this.disableAllProcessing) {
-                this.blockNumberTimeout = setTimeout(() => {
-                    this.getBlock();
-                }, this.config.BLOCK_CHECK_INTERVAL);
+            if (!props) {
                 return;
             }
 
-            // If the block number we've got is zero
-            // set it to the last irreversible block number
+            this.headBlockNumber = props.head_block_number;
+
+            // If the block number we've got is zero set it to the latest head block
             if (this.lastBlockNumber === 0) {
                 this.lastBlockNumber = props.head_block_number - 1;
             }
@@ -449,24 +457,25 @@ export class Streamer {
             }
 
             const BLOCKS_BEHIND = parseInt(this.config.BLOCKS_BEHIND_WARNING as any, 10);
+            const maxBatchSize = Math.max(1, this.config.CATCH_UP_BATCH_SIZE || 1);
+            const blocksBehind = Math.max(0, props.head_block_number - this.lastBlockNumber);
+            const blocksToProcess = Math.min(blocksBehind, maxBatchSize);
 
-            if (!this.disableAllProcessing) {
-                await this.loadBlock(this.lastBlockNumber + 1);
+            if (blocksBehind >= BLOCKS_BEHIND && this.config.DEBUG_MODE) {
+                console.log(`[Streamer] ${blocksBehind} blocks behind head (${props.head_block_number}). Catching up...`);
             }
 
-            // We are more than 25 blocks behind, uh oh, we gotta catch up
-            if (props.head_block_number >= (this.lastBlockNumber + BLOCKS_BEHIND) && this.config.DEBUG_MODE) {
-                console.log(`We are more than ${BLOCKS_BEHIND} blocks behind ${props.head_block_number}, ${(this.lastBlockNumber + BLOCKS_BEHIND)}`);
-
-                if (!this.disableAllProcessing) {
-                    this.getBlock();
-                    return;
+            if (!this.disableAllProcessing) {
+                for (let i = 0; i < blocksToProcess; i++) {
+                    await this.loadBlock(this.lastBlockNumber + 1);
                 }
             }
 
-            // Storing timeout allows us to clear it, as this just calls itself
-            if (!this.disableAllProcessing) {
-                this.blockNumberTimeout = setTimeout(() => { this.getBlock(); }, this.config.BLOCK_CHECK_INTERVAL);
+            const remainingBehind = Math.max(0, props.head_block_number - this.lastBlockNumber);
+            this.isCatchingUp = remainingBehind > 0;
+
+            if (remainingBehind > 0) {
+                nextDelay = Math.max(0, this.config.CATCH_UP_DELAY_MS);
             }
         } catch (e) {
             const error = e instanceof Error ? e : new Error(String(e));
@@ -476,8 +485,12 @@ export class Streamer {
             });
             
             // Retry after a longer delay on error
+            nextDelay = this.config.BLOCK_CHECK_INTERVAL * 2;
+        } finally {
+            this.isPollingBlock = false;
+            // Storing timeout allows us to clear it, as this just calls itself
             if (!this.disableAllProcessing) {
-                this.blockNumberTimeout = setTimeout(() => { this.getBlock(); }, this.config.BLOCK_CHECK_INTERVAL * 2);
+                this.blockNumberTimeout = setTimeout(() => { this.getBlock(); }, nextDelay);
             }
         }
     }
@@ -973,6 +986,18 @@ export class Streamer {
 
     public getTransaction(blockNumber: number, transactionId: string) {
         return Utils.getTransaction(this.client, blockNumber, transactionId);
+    }
+
+    public getStatus() {
+        return {
+            lastBlockNumber: this.lastBlockNumber,
+            headBlockNumber: this.headBlockNumber,
+            blocksBehind: this.headBlockNumber
+                ? Math.max(0, this.headBlockNumber - this.lastBlockNumber)
+                : 0,
+            latestBlockchainTime: this.latestBlockchainTime,
+            isCatchingUp: this.isCatchingUp
+        };
     }
 
     public verifyTransfer(transaction, from: string, to: string, amount: string) {

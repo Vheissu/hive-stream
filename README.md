@@ -29,6 +29,10 @@ The `BLOCK_CHECK_INTERVAL` value is how often to check for new blocks or in case
 
 The `BLOCKS_BEHIND_WARNING` value is a numeric value of the number of blocks your API will fall behind from the master before warning to the console.
 
+To resume automatically from stored state, keep `RESUME_FROM_STATE` enabled (default). To force a specific start block, set `RESUME_FROM_STATE` to `false` and supply `LAST_BLOCK_NUMBER`.
+
+For faster catch-up, `CATCH_UP_BATCH_SIZE` controls how many blocks are processed per polling cycle, and `CATCH_UP_DELAY_MS` controls the delay between catch-up batches (set to `0` for fastest catch-up).
+
 The `API_NODES` are the Hive API endpoints used for failover. If you want to enable debug mode, set `DEBUG_MODE` to `true`. The configuration values and their defaults can be found in `src/config.ts`.
 
 ```
@@ -40,6 +44,9 @@ const options = {
   LAST_BLOCK_NUMBER: 0,
   BLOCK_CHECK_INTERVAL: 1000,
   BLOCKS_BEHIND_WARNING: 25,
+  RESUME_FROM_STATE: true,
+  CATCH_UP_BATCH_SIZE: 50,
+  CATCH_UP_DELAY_MS: 0,
   API_NODES: ['https://api.hive.blog', 'https://api.openhive.network', 'https://rpc.ausbit.dev'],
   DEBUG_MODE: false
 }

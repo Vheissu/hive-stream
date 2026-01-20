@@ -76,8 +76,27 @@ describe('Utils', () => {
     
             const value = await Utils.convertHiveAmount(amount, fiatSymbol, hiveSymbol);
             
-            expect(fetch).toHaveBeenCalledWith('https://api.coingecko.com/api/v3/simple/price?ids=hive,hive_dollar&vs_currencies=usd');
-            expect(fetch).toHaveBeenCalledWith('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json');
+            expect(fetch).toHaveBeenNthCalledWith(
+                1,
+                'https://api.coingecko.com/api/v3/simple/price?ids=hive,hive_dollar&vs_currencies=usd',
+                expect.objectContaining({
+                    headers: expect.objectContaining({
+                        'User-Agent': 'hive-stream/3.0.0',
+                        'Accept': 'application/json'
+                    })
+                })
+            );
+            expect(fetch).toHaveBeenNthCalledWith(
+                2,
+                'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json',
+                expect.objectContaining({
+                    headers: expect.objectContaining({
+                        'User-Agent': 'hive-stream/3.0.0',
+                        'Accept': 'application/json',
+                        'Cache-Control': 'no-cache'
+                    })
+                })
+            );
 
             expect(value).toStrictEqual(Number((amount / 0.229951).toFixed(3))); // amount / HIVE price from CoinGecko (fiat to HIVE conversion)
         });
