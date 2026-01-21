@@ -59,7 +59,7 @@ describe('Actions Persistence', () => {
             expect(action1).toBeDefined();
             expect(action1?.timeValue).toBe('1m');
             expect(action1?.contractName).toBe('contract1');
-            expect(action1?.contractMethod).toBe('method1');
+            expect(action1?.contractAction).toBe('method1');
             expect(action1?.payload).toEqual({ data: 'test1' });
             expect(action1?.enabled).toBe(true);
             expect(action1?.executionCount).toBe(0);
@@ -67,7 +67,7 @@ describe('Actions Persistence', () => {
             expect(action2).toBeDefined();
             expect(action2?.timeValue).toBe('5m');
             expect(action2?.contractName).toBe('contract2');
-            expect(action2?.contractMethod).toBe('method2');
+            expect(action2?.contractAction).toBe('method2');
             expect(action2?.payload).toEqual({ data: 'test2' });
             expect(action2?.enabled).toBe(false);
             expect(action2?.executionCount).toBe(5);
@@ -92,7 +92,7 @@ describe('Actions Persistence', () => {
             const stateData = {
                 lastBlockNumber: 12345,
                 actions: [
-                    { timeValue: '1m', id: 'valid-action', contractName: 'test', contractMethod: 'test' },
+                    { timeValue: '1m', id: 'valid-action', contractName: 'test', contractAction: 'test' },
                     { invalid: 'data' }, // Invalid action
                     null, // Null action
                     'invalid string' // Invalid type
@@ -136,7 +136,7 @@ describe('Actions Persistence', () => {
             expect(stateData.actions[0]).toHaveProperty('timeValue');
             expect(stateData.actions[0]).toHaveProperty('id');
             expect(stateData.actions[0]).toHaveProperty('contractName');
-            expect(stateData.actions[0]).toHaveProperty('contractMethod');
+            expect(stateData.actions[0]).toHaveProperty('contractAction');
             expect(stateData.actions[0]).toHaveProperty('date');
             expect(typeof stateData.actions[0].date).toBe('string'); // Should be ISO string
         });

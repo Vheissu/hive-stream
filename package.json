@@ -30,7 +30,8 @@
         "pg": "^8.16.3",
         "seedrandom": "^3.0.5",
         "sscjs": "^0.0.9",
-        "uuid": "^10.0.0"
+        "uuid": "^10.0.0",
+        "zod": "^3.25.76"
     },
     "devDependencies": {
         "@types/bytebuffer": "^5.0.49",

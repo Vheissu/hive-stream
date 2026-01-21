@@ -1,5 +1,6 @@
 import { TimeAction } from '../src/actions';
 import { Streamer } from '../src/streamer';
+import { action as contractAction, defineContract } from '../src/contracts/contract';
 import { createMockAdapter } from './helpers/mock-adapter';
 
 describe('Streamer', () => {
@@ -46,11 +47,14 @@ describe('Streamer', () => {
 
     describe('Actions', () => {
         test('Registers a new action', async () => {
-            const mockContract = {
-                testmethod: jest.fn()
-            };
+            const mockContract = defineContract({
+                name: 'testcontract',
+                actions: {
+                    testmethod: contractAction(jest.fn(), { trigger: 'time' })
+                }
+            });
             
-            sut.registerContract('testcontract', mockContract);
+            await sut.registerContract(mockContract);
             
             const adapter = {
                 create: jest.fn().mockResolvedValue(true),
@@ -70,7 +74,7 @@ describe('Streamer', () => {
                 db: null
             } as any;
 
-            sut.registerAdapter(adapter);
+            await sut.registerAdapter(adapter);
 
             const action = new TimeAction('1m', 'testoneminute', 'testcontract', 'testmethod');
 
@@ -82,11 +86,14 @@ describe('Streamer', () => {
         });
 
         test('Does not allow duplicate actions of the same id', async () => {
-            const mockContract = {
-                testmethod: jest.fn()
-            };
+            const mockContract = defineContract({
+                name: 'testcontract',
+                actions: {
+                    testmethod: contractAction(jest.fn(), { trigger: 'time' })
+                }
+            });
             
-            sut.registerContract('testcontract', mockContract);
+            await sut.registerContract(mockContract);
             
             const adapter = {
                 create: jest.fn().mockResolvedValue(true),
@@ -106,7 +113,7 @@ describe('Streamer', () => {
                 db: null
             } as any;
 
-            sut.registerAdapter(adapter);
+            await sut.registerAdapter(adapter);
 
             const action = new TimeAction('1m', 'testoneminute', 'testcontract', 'testmethod');
             const action2 = new TimeAction('1m', 'testoneminute', 'testcontract', 'testmethod');
@@ -118,11 +125,14 @@ describe('Streamer', () => {
         });
 
         test('Registers actions loaded from adapter loadActions call', async () => {
-            const mockContract = {
-                testmethod: jest.fn()
-            };
+            const mockContract = defineContract({
+                name: 'testcontract',
+                actions: {
+                    testmethod: contractAction(jest.fn(), { trigger: 'time' })
+                }
+            });
             
-            sut.registerContract('testcontract', mockContract);
+            await sut.registerContract(mockContract);
             
             const adapter = {
                 create: jest.fn().mockResolvedValue(true),
@@ -131,7 +141,7 @@ describe('Streamer', () => {
                     timeValue: '1m',
                     id: 'testoneminute',
                     contractName: 'testcontract',
-                    contractMethod: 'testmethod',
+                    contractAction: 'testmethod',
                     payload: {},
                     date: new Date().toISOString(),
                     enabled: true,
@@ -164,51 +174,67 @@ describe('Streamer', () => {
     });
 
     describe('Contracts', () => {
-        test('Should register a new contract', () => {
-            const contract = {
-                myMethod: jest.fn()
-            };
+        test('Should register a new contract', async () => {
+            const contract = defineContract({
+                name: 'testcontract',
+                actions: {
+                    myMethod: contractAction(jest.fn())
+                }
+            });
 
-            sut.registerContract('testcontract', contract);
+            await sut.registerContract(contract);
 
-            expect(contract['_instance']).toBeInstanceOf(Streamer);
             expect(sut['contracts'].length).toStrictEqual(1);
         });
 
-        test('Should register a new contract and call its create method', () => {
-            const contract = {
-                create: jest.fn(),
-                myMethod: jest.fn()
-            };
+        test('Should register a new contract and call its create hook', async () => {
+            const createHook = jest.fn();
+            const contract = defineContract({
+                name: 'testcontract',
+                hooks: {
+                    create: createHook
+                },
+                actions: {
+                    myMethod: contractAction(jest.fn())
+                }
+            });
 
-            sut.registerContract('testcontract', contract);
+            await sut.registerContract(contract);
 
-            expect(contract.create).toHaveBeenCalled();
-            expect(contract['_instance']).toBeInstanceOf(Streamer);
+            expect(createHook).toHaveBeenCalled();
             expect(sut['contracts'].length).toStrictEqual(1);
         });
 
-        test('Should unregister a registered contract', () => {
-            const contract = {
-                myMethod: jest.fn()
-            };
+        test('Should unregister a registered contract', async () => {
+            const contract = defineContract({
+                name: 'testcontract',
+                actions: {
+                    myMethod: contractAction(jest.fn())
+                }
+            });
 
-            sut.registerContract('testcontract', contract);
-            sut.unregisterContract('testcontract');
+            await sut.registerContract(contract);
+            await sut.unregisterContract('testcontract');
 
             expect(sut['contracts'].length).toStrictEqual(0);
         });
 
-        test('Should unregister a registered contract and call its destroy method', () => {
-            const contract = {
-                destroy: jest.fn(),
-                myMethod: jest.fn()
-            };
+        test('Should unregister a registered contract and call its destroy hook', async () => {
+            const destroyHook = jest.fn();
+            const contract = defineContract({
+                name: 'testcontract',
+                hooks: {
+                    destroy: destroyHook
+                },
+                actions: {
+                    myMethod: contractAction(jest.fn())
+                }
+            });
 
-            sut.registerContract('testcontract', contract);
-            sut.unregisterContract('testcontract');
+            await sut.registerContract(contract);
+            await sut.unregisterContract('testcontract');
 
-            expect(contract.destroy).toHaveBeenCalled();
+            expect(destroyHook).toHaveBeenCalled();
             expect(sut['contracts'].length).toStrictEqual(0);
         });
     });

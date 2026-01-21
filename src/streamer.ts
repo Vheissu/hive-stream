@@ -7,8 +7,10 @@ import { Client } from '@hiveio/dhive';
 import { Utils } from './utils';
 import { Config, ConfigInterface } from './config';
 import { 
-    StreamerContract, 
-    ContractInstance,
+    ContractDefinition,
+    ContractPayload,
+    ContractContext,
+    ContractTrigger,
     SubscriptionCallback,
     TransferSubscription,
     CustomJsonIdSubscription,
@@ -56,7 +58,7 @@ export class Streamer {
     private latestBlockchainTime: Date;
     private disableAllProcessing = false;
 
-    private contracts: StreamerContract[] = [];
+    private contracts: ContractDefinition[] = [];
     private adapter;
     private actions: TimeAction[] = [];
 
@@ -78,7 +80,7 @@ export class Streamer {
         ['12h', 43200], ['halfday', 43200], ['24h', 86400], ['day', 86400], ['daily', 86400],
         ['week', 604800], ['weekly', 604800]
     ]);
-    private contractCache = new Map<string, StreamerContract>();
+    private contractCache = new Map<string, ContractDefinition>();
     
     // Data caching for performance
     private blockCache = new Map<number, any>();
@@ -193,9 +195,24 @@ export class Streamer {
             throw new Error(`Contract '${action.contractName}' not found for action '${action.id}'`);
         }
         
-        if (!contract.contract[action.contractMethod] || typeof contract.contract[action.contractMethod] !== 'function') {
-            throw new Error(`Method '${action.contractMethod}' not found in contract '${action.contractName}' for action '${action.id}'`);
+        const actionDefinition = contract.actions?.[action.contractAction];
+
+        if (!actionDefinition || typeof actionDefinition.handler !== 'function') {
+            throw new Error(`Action '${action.contractAction}' not found in contract '${action.contractName}' for action '${action.id}'`);
         }
+
+        if (!this.isActionTriggerAllowed(actionDefinition, 'time')) {
+            throw new Error(`Action '${action.contractAction}' does not allow time triggers for action '${action.id}'`);
+        }
+    }
+
+    private isActionTriggerAllowed(actionDefinition: any, trigger: ContractTrigger): boolean {
+        const configured = actionDefinition?.trigger;
+        const triggers = configured
+            ? (Array.isArray(configured) ? configured : [configured])
+            : ['custom_json'];
+
+        return triggers.includes(trigger);
     }
 
     /**
@@ -295,43 +312,52 @@ export class Streamer {
         return false;
     }
 
-    public registerContract(name: string, contract: ContractInstance) {
-        // Store an instance of the streamer
-        contract['_instance'] = this;
-
-        // Call the contract create lifecycle method if it exists
-        if (contract && typeof contract['create'] !== 'undefined') {
-            contract.create();
+    public async registerContract(contract: ContractDefinition): Promise<void> {
+        if (!contract || typeof contract !== 'object') {
+            throw new Error('Contract must be a valid definition object');
         }
 
-        const storedReference: StreamerContract = { name, contract };
+        if (!contract.name || typeof contract.name !== 'string') {
+            throw new Error('Contract name must be a non-empty string');
+        }
 
-        // Push the contract reference to be called later on
-        this.contracts.push(storedReference);
-        
-        // Cache the contract for faster lookups
-        this.contractCache.set(name, storedReference);
+        if (this.contractCache.has(contract.name)) {
+            throw new Error(`Contract '${contract.name}' is already registered`);
+        }
 
-        return this;
+        if (!contract.actions || typeof contract.actions !== 'object') {
+            throw new Error(`Contract '${contract.name}' must define actions`);
+        }
+
+        const lifecycleContext = {
+            streamer: this,
+            adapter: this.adapter,
+            config: this.config
+        };
+
+        if (contract.hooks?.create) {
+            await contract.hooks.create(lifecycleContext);
+        }
+
+        this.contracts.push(contract);
+        this.contractCache.set(contract.name, contract);
     }
 
-    public unregisterContract(name: string) {
-        // Find the registered contract by it's ID
+    public async unregisterContract(name: string): Promise<void> {
         const contractIndex = this.contracts.findIndex(c => c.name === name);
 
         if (contractIndex >= 0) {
-            // Get the contract itself
-            const contract = this.contracts.find(c => c.name === name);
+            const contract = this.contracts[contractIndex];
 
-            // Call the contract destroy lifecycle method if it exists
-            if (contract && typeof contract.contract['destroy'] !== 'undefined') {
-                contract.contract.destroy();
+            if (contract?.hooks?.destroy) {
+                await contract.hooks.destroy({
+                    streamer: this,
+                    adapter: this.adapter,
+                    config: this.config
+                });
             }
 
-            // Remove the contract
             this.contracts.splice(contractIndex, 1);
-            
-            // Remove from cache
             this.contractCache.delete(name);
         }
     }
@@ -627,30 +653,31 @@ export class Streamer {
         // This is a transfer
         if (op[0] === 'transfer') {
             const sender = op[1]?.from;
-            const amount = op[1]?.amount;
+            const rawAmount = op[1]?.amount;
+            const amountParts = typeof rawAmount === 'string' ? rawAmount.split(' ') : [];
+            const transferInfo = {
+                from: sender,
+                to: op[1]?.to,
+                rawAmount: rawAmount || '',
+                amount: amountParts[0] || '',
+                asset: amountParts[1] || '',
+                memo: op[1]?.memo
+            };
 
             const json = Utils.jsonParse(op[1].memo);
+            const payload = this.normalizeContractPayload(json?.[this.config.PAYLOAD_IDENTIFIER]);
 
-            if (json?.[this.config.PAYLOAD_IDENTIFIER] && json?.[this.config.PAYLOAD_IDENTIFIER]?.id === this.config.JSON_ID) {
-                // Pull out details of contract
-                const { name, action, payload } = json[this.config.PAYLOAD_IDENTIFIER];
-
-                // Do we have a contract that matches the name in the payload?
-                const contract = this.contracts.find(c => c.name === name);
-
-                if (contract) {
-                    if (this?.adapter?.processTransfer) {
-                        this.adapter.processTransfer(op[1], { name, action, payload }, { sender, amount });
-                    }
-
-                    if (contract?.contract?.updateBlockInfo) {
-                        contract.contract.updateBlockInfo(blockNumber, blockId, prevBlockId, trxId);
-                    }
-
-                    if (contract?.contract[action]) {
-                        contract.contract[action](payload, { sender, amount });
-                    }
+            if (payload) {
+                if (this?.adapter?.processTransfer) {
+                    await this.adapter.processTransfer(op[1], payload, { sender, amount: rawAmount });
                 }
+
+                const context = this.buildContractContext('transfer', blockNumber, blockId, prevBlockId, trxId, blockTime, {
+                    sender,
+                    transfer: transferInfo
+                });
+
+                await this.dispatchContractAction(payload, context);
             }
 
             this.transferSubscriptions.forEach(sub => {
@@ -683,25 +710,25 @@ export class Streamer {
             }
 
             const json = Utils.jsonParse(op[1].json);
+            const payload = id === this.config.JSON_ID
+                ? this.normalizeContractPayload(json?.[this.config.PAYLOAD_IDENTIFIER])
+                : null;
 
-            if (json && json?.[this.config.PAYLOAD_IDENTIFIER]  && id === this.config.JSON_ID) {
-                // Pull out details of contract
-                const { name, action, payload } = json[this.config.PAYLOAD_IDENTIFIER];
-
-                // Do we have a contract that matches the name in the payload?
-                const contract = this.contracts.find(c => c.name === name);
-
-                if (contract) {
-                    this.adapter.processCustomJson(op[1], { name, action, payload }, { sender, isSignedWithActiveKey });
-
-                    if (contract?.contract?.updateBlockInfo) {
-                        contract.contract.updateBlockInfo(blockNumber, blockId, prevBlockId, trxId);
-                    }
-
-                    if (contract?.contract[action]) {
-                        contract.contract[action](payload, { sender, isSignedWithActiveKey }, id);
-                    }
+            if (payload) {
+                if (this?.adapter?.processCustomJson) {
+                    await this.adapter.processCustomJson(op[1], payload, { sender, isSignedWithActiveKey });
                 }
+
+                const context = this.buildContractContext('custom_json', blockNumber, blockId, prevBlockId, trxId, blockTime, {
+                    sender,
+                    customJson: {
+                        id,
+                        json,
+                        isSignedWithActiveKey
+                    }
+                });
+
+                await this.dispatchContractAction(payload, context);
             }
 
             this.customJsonSubscriptions.forEach(sub => {
@@ -771,6 +798,119 @@ export class Streamer {
         }
     }
 
+    private normalizeContractPayload(payload: any): ContractPayload | null {
+        if (!payload || typeof payload !== 'object') {
+            return null;
+        }
+
+        const contract = typeof payload.contract === 'string'
+            ? payload.contract
+            : (typeof payload.name === 'string' ? payload.name : null);
+        const action = typeof payload.action === 'string' ? payload.action : null;
+
+        if (!contract || !action) {
+            return null;
+        }
+
+        if (!payload.contract && payload.name && this.config.DEBUG_MODE) {
+            console.warn('[Streamer] Legacy contract payload detected (name/action). Please migrate to { contract, action, payload }.');
+        }
+
+        return {
+            contract,
+            action,
+            payload: payload.payload ?? {},
+            meta: payload.meta ?? payload.metadata
+        };
+    }
+
+    private buildContractContext(
+        trigger: ContractTrigger,
+        blockNumber: number,
+        blockId: string,
+        previousBlockId: string,
+        transactionId: string,
+        blockTime: Date,
+        details: {
+            sender?: string;
+            transfer?: ContractContext['transfer'];
+            customJson?: ContractContext['customJson'];
+        }
+    ): ContractContext {
+        return {
+            trigger,
+            streamer: this,
+            adapter: this.adapter,
+            config: this.config,
+            block: {
+                number: blockNumber,
+                id: blockId,
+                previousId: previousBlockId,
+                time: blockTime
+            },
+            transaction: {
+                id: transactionId
+            },
+            sender: details.sender,
+            transfer: details.transfer,
+            customJson: details.customJson
+        };
+    }
+
+    private async dispatchContractAction(payload: ContractPayload, context: ContractContext): Promise<void> {
+        const contract = this.contractCache.get(payload.contract) ||
+            this.contracts.find(c => c.name === payload.contract);
+
+        if (!contract) {
+            console.warn(`[Streamer] Contract '${payload.contract}' not found for action '${payload.action}'`);
+            return;
+        }
+
+        if (contract && !this.contractCache.has(payload.contract)) {
+            this.contractCache.set(payload.contract, contract);
+        }
+
+        const actionDefinition = contract.actions?.[payload.action];
+
+        if (!actionDefinition || typeof actionDefinition.handler !== 'function') {
+            console.warn(`[Streamer] Action '${payload.action}' not found in contract '${payload.contract}'`);
+            return;
+        }
+
+        if (!this.isActionTriggerAllowed(actionDefinition, context.trigger)) {
+            console.warn(`[Streamer] Action '${payload.action}' does not allow trigger '${context.trigger}'`);
+            return;
+        }
+
+        if (actionDefinition.requiresActiveKey &&
+            context.trigger === 'custom_json' &&
+            !context.customJson?.isSignedWithActiveKey) {
+            console.warn(`[Streamer] Action '${payload.action}' requires active key signature`);
+            return;
+        }
+
+        let actionPayload: any = payload.payload ?? {};
+        if (actionDefinition.schema) {
+            const result = actionDefinition.schema.safeParse(actionPayload);
+            if (!result.success) {
+                console.warn(`[Streamer] Invalid payload for ${payload.contract}.${payload.action}`, {
+                    errors: result.error?.errors
+                });
+                return;
+            }
+            actionPayload = result.data;
+        }
+
+        try {
+            await actionDefinition.handler(actionPayload, context);
+        } catch (error) {
+            console.error(`[Streamer] Contract action error for ${payload.contract}.${payload.action}:`, error);
+            if (context.trigger === 'time') {
+                throw error;
+            }
+        }
+    }
+
     private async processActions(): Promise<void> {
         if (!this.latestBlockchainTime || this.actions.length === 0) {
             return;
@@ -803,8 +943,14 @@ export class Streamer {
                 continue;
             }
             
-            if (!contract?.contract?.[action.contractMethod] || typeof contract.contract[action.contractMethod] !== 'function') {
-                console.warn(`[Streamer] Method '${action.contractMethod}' not found in contract '${action.contractName}' for action '${action.id}'`);
+            const actionDefinition = contract.actions?.[action.contractAction];
+            if (!actionDefinition || typeof actionDefinition.handler !== 'function') {
+                console.warn(`[Streamer] Action '${action.contractAction}' not found in contract '${action.contractName}' for action '${action.id}'`);
+                continue;
+            }
+
+            if (!this.isActionTriggerAllowed(actionDefinition, 'time')) {
+                console.warn(`[Streamer] Action '${action.contractAction}' does not allow time triggers for action '${action.id}'`);
                 continue;
             }
 
@@ -823,7 +969,21 @@ export class Streamer {
             if (differenceSeconds >= frequencySeconds) {
                 try {
                     // Execute the action with error isolation
-                    await this.executeAction(action, contract);
+                    const context = this.buildContractContext(
+                        'time',
+                        this.lastBlockNumber,
+                        this.blockId,
+                        this.previousBlockId,
+                        action.id,
+                        this.latestBlockchainTime || new Date(),
+                        {}
+                    );
+
+                    await this.dispatchContractAction({
+                        contract: action.contractName,
+                        action: action.contractAction,
+                        payload: action.payload || {}
+                    }, context);
                     
                     // Reset the action timer and increment execution count
                     action.reset();
@@ -835,7 +995,7 @@ export class Streamer {
                     }
                 } catch (error) {
                     const err = error instanceof Error ? error : new Error(String(error));
-                    console.error(`[Streamer] Action execution error for ${action.contractName}.${action.contractMethod}:`, {
+                    console.error(`[Streamer] Action execution error for ${action.contractName}.${action.contractAction}:`, {
                         actionId: action.id,
                         error: err.message,
                         stack: err.stack,
@@ -855,19 +1015,6 @@ export class Streamer {
         
         // Clean up disabled or completed actions periodically
         this.cleanupActions();
-    }
-    
-    /**
-     * Execute a single action with proper isolation
-     */
-    private async executeAction(action: TimeAction, contract: StreamerContract): Promise<void> {
-        const method = contract.contract[action.contractMethod];
-        
-        if (method.constructor.name === 'AsyncFunction') {
-            await method.call(contract.contract, action.payload);
-        } else {
-            method.call(contract.contract, action.payload);
-        }
     }
     
     /**

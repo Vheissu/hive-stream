@@ -136,7 +136,7 @@ export class MongodbAdapter extends AdapterBase {
             blockNumber: this.blockNumber,
             sender: metadata.sender,
             amount: metadata.amount,
-            contractName: payload.name,
+            contractName: payload.contract,
             contractAction: payload.action,
             ContractPayload: payload.payload
         };
@@ -159,7 +159,7 @@ export class MongodbAdapter extends AdapterBase {
             blockNumber: this.blockNumber,
             sender: metadata.sender,
             isSignedWithActiveKey: metadata.isSignedWithActiveKey,
-            contractName: payload.name,
+            contractName: payload.contract,
             contractAction: payload.action,
             ContractPayload: payload.payload
         };

@@ -4,28 +4,26 @@ import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
 
-const DEFAULT_NAME = 'coinflip';
+const DEFAULT_NAME = 'rps';
 const DEFAULT_ACCOUNT = 'beggars';
 const DEFAULT_TOKEN_SYMBOL = 'HIVE';
 const DEFAULT_MIN_AMOUNT = 0.001;
 const DEFAULT_MAX_AMOUNT = 20;
 
-function rng(previousBlockId: string, blockId: string, transactionId: string, serverSeed: string, clientSeed = ''): 'heads' | 'tails' {
+const MOVES = ['rock', 'paper', 'scissors'] as const;
+
+function rng(previousBlockId: string, blockId: string, transactionId: string, serverSeed: string, clientSeed = ''): 'rock' | 'paper' | 'scissors' {
     if (!previousBlockId || !blockId || !transactionId || !serverSeed) {
         throw new Error('Invalid RNG parameters');
     }
 
     const random = seedrandom(`${previousBlockId}${blockId}${transactionId}${clientSeed}${serverSeed}`).double();
-    const randomRoll = Math.floor(random * 2) + 1;
+    const randomRoll = Math.floor(random * 3);
 
-    if (randomRoll < 1 || randomRoll > 2) {
-        throw new Error('RNG generated invalid result');
-    }
-
-    return randomRoll === 1 ? 'heads' : 'tails';
+    return MOVES[randomRoll];
 }
 
-export interface CoinflipContractOptions {
+export interface RpsContractOptions {
     name?: string;
     account?: string;
     tokenSymbol?: string;
@@ -34,7 +32,7 @@ export interface CoinflipContractOptions {
     maxAmount?: number;
 }
 
-export function createCoinflipContract(options: CoinflipContractOptions = {}) {
+export function createRpsContract(options: RpsContractOptions = {}) {
     const name = options.name || DEFAULT_NAME;
     const account = options.account || DEFAULT_ACCOUNT;
     const tokenSymbol = options.tokenSymbol || DEFAULT_TOKEN_SYMBOL;
@@ -52,8 +50,8 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
         pendingPayouts: new BigNumber(0)
     };
 
-    const flipSchema = z.object({
-        guess: z.enum(['heads', 'tails']),
+    const playSchema = z.object({
+        move: z.enum(MOVES),
         seed: z.string().optional()
     });
 
@@ -83,7 +81,7 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
                 return amount;
             }
         } catch (error) {
-            console.error('[CoinflipContract] Error fetching balance:', error);
+            console.error('[RpsContract] Error fetching balance:', error);
             if (state.balanceCache) {
                 return state.balanceCache.balance;
             }
@@ -105,7 +103,7 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
                 try {
                     await nextBet();
                 } catch (error) {
-                    console.error('[CoinflipContract] Queue processing error:', error);
+                    console.error('[RpsContract] Queue processing error:', error);
                 }
             }
         }
@@ -113,9 +111,17 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
         state.processingQueue = false;
     };
 
-    const processFlip = async (payload: { guess: 'heads' | 'tails'; seed?: string }, ctx: any): Promise<void> => {
+    const beats = (player: string, opponent: string): boolean => {
+        return (
+            (player === 'rock' && opponent === 'scissors') ||
+            (player === 'scissors' && opponent === 'paper') ||
+            (player === 'paper' && opponent === 'rock')
+        );
+    };
+
+    const processPlay = async (payload: { move: 'rock' | 'paper' | 'scissors'; seed?: string }, ctx: any): Promise<void> => {
         if (!ctx.transfer) {
-            throw new Error('Transfer context required for flip');
+            throw new Error('Transfer context required for play');
         }
 
         const sender = ctx.sender;
@@ -160,7 +166,6 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
                 }
 
                 const potentialPayout = amountParsed.multipliedBy(2);
-
                 if (potentialPayout.isGreaterThan(availableBalance)) {
                     await state.streamer.transferHiveTokens(account, sender, amountTrim[0], amountTrim[1], '[Refund] The server cannot afford this bet payout.');
                     return;
@@ -170,77 +175,56 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
 
                 try {
                     const serverSeed = uuidv4();
-                    if (!serverSeed || typeof serverSeed !== 'string') {
-                        throw new Error('Failed to generate server seed');
+                    const serverMove = rng(ctx.block.previousId, ctx.block.id, ctx.transaction.id, serverSeed, payload.seed ?? '');
+
+                    let result: 'win' | 'lose' | 'tie' = 'lose';
+                    if (serverMove === payload.move) {
+                        result = 'tie';
+                    } else if (beats(payload.move, serverMove)) {
+                        result = 'win';
                     }
 
-                    const generatedGuess = rng(ctx.block.previousId, ctx.block.id, ctx.transaction.id, serverSeed, payload.seed ?? '');
-
-                    if (generatedGuess === payload.guess) {
-                        await state.adapter.addEvent(new Date(), name, 'flip', payload, {
-                            action: 'transfer',
-                            data: {
-                                date: new Date(),
-                                guess: payload.guess,
-                                serverSeed,
-                                previousBlockId: ctx.block.previousId,
-                                blockId: ctx.block.id,
-                                transactionId: ctx.transaction.id,
-                                userWon: 'true'
-                            }
-                        });
-
-                        await state.streamer.transferHiveTokens(account, sender, potentialPayout.toFixed(3), amountTrim[1], `[Winner] | Guess: ${payload.guess} | Server Roll: ${generatedGuess} | Previous block id: ${ctx.block.previousId} | BlockID: ${ctx.block.id} | Trx ID: ${ctx.transaction.id} | Server Seed: ${serverSeed}`);
-                        return;
-                    }
-
-                    await state.adapter.addEvent(new Date(), name, 'flip', payload, {
-                        action: 'transfer',
+                    await state.adapter.addEvent(new Date(), name, 'play', payload, {
+                        action: 'rps_result',
                         data: {
-                            guess: payload.guess,
+                            player: sender,
+                            playerMove: payload.move,
+                            serverMove,
                             serverSeed,
-                            previousBlockId: ctx.block.previousId,
+                            result,
                             blockId: ctx.block.id,
-                            transactionId: ctx.transaction.id,
-                            userWon: 'false'
+                            transactionId: ctx.transaction.id
                         }
                     });
 
-                    await state.streamer.transferHiveTokens(account, sender, '0.001', amountTrim[1], `[Lost] | Guess: ${payload.guess} | Server Roll: ${generatedGuess} | Previous block id: ${ctx.block.previousId} | BlockID: ${ctx.block.id} | Trx ID: ${ctx.transaction.id} | Server Seed: ${serverSeed}`);
+                    if (result === 'win') {
+                        await state.streamer.transferHiveTokens(account, sender, potentialPayout.toFixed(3), amountTrim[1], `[Winner] | You: ${payload.move} | Server: ${serverMove} | Seed: ${serverSeed}`);
+                    } else if (result === 'tie') {
+                        await state.streamer.transferHiveTokens(account, sender, amountTrim[0], amountTrim[1], `[Tie] | You: ${payload.move} | Server: ${serverMove} | Seed: ${serverSeed}`);
+                    } else {
+                        await state.streamer.transferHiveTokens(account, sender, '0.001', amountTrim[1], `[Lost] | You: ${payload.move} | Server: ${serverMove} | Seed: ${serverSeed}`);
+                    }
                 } finally {
                     state.pendingPayouts = state.pendingPayouts.minus(potentialPayout);
                 }
             }
         } catch (e) {
             const error = e instanceof Error ? e : new Error(String(e));
-            console.error('[CoinflipContract] Flip processing error:', {
+            console.error('[RpsContract] Play processing error:', {
                 sender,
                 amount: amountRaw,
                 payload,
                 message: error.message
             });
-
-            try {
-                if (amountRaw && typeof amountRaw === 'string' && amountRaw.includes(' ')) {
-                    const [amountStr, currency] = amountRaw.split(' ');
-                    const amountBN = new BigNumber(amountStr);
-                    if (!amountBN.isNaN() && amountBN.isFinite() && !amountBN.isNegative()) {
-                        await state.streamer.transferHiveTokens(account, sender, amountStr, currency, '[Refund] Processing error occurred.');
-                    }
-                }
-            } catch (refundError) {
-                console.error('[CoinflipContract] Failed to refund after error:', refundError);
-            }
-
             throw error;
         }
     };
 
-    const flip = async (payload: { guess: 'heads' | 'tails'; seed?: string }, ctx: any): Promise<void> => {
+    const play = async (payload: { move: 'rock' | 'paper' | 'scissors'; seed?: string }, ctx: any): Promise<void> => {
         return new Promise<void>((resolve, reject) => {
             state.betQueue.push(async () => {
                 try {
-                    await processFlip(payload, ctx);
+                    await processPlay(payload, ctx);
                     resolve();
                 } catch (error) {
                     reject(error);
@@ -257,15 +241,11 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
             create: ({ streamer, adapter }) => {
                 state.streamer = streamer;
                 state.adapter = adapter;
-            },
-            destroy: () => {
-                state.betQueue = [];
-                state.processingQueue = false;
             }
         },
         actions: {
-            flip: action(flip, {
-                schema: flipSchema,
+            play: action(play, {
+                schema: playSchema,
                 trigger: 'transfer'
             })
         }

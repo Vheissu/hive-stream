@@ -77,4 +77,21 @@ export class AdapterBase {
     public async getEventsByAccount(account: string): Promise<any[]> {
         return [];
     }
+
+    // Exchange helpers (SQL adapters implement these)
+    public async getExchangeBalances(account?: string): Promise<any[]> {
+        return [];
+    }
+
+    public async getExchangeOrders(filters: { account?: string; base?: string; quote?: string; status?: string } = {}): Promise<any[]> {
+        return [];
+    }
+
+    public async getExchangeTrades(filters: { account?: string; base?: string; quote?: string } = {}): Promise<any[]> {
+        return [];
+    }
+
+    public async getExchangeOrderBookSnapshots(filters: { base?: string; quote?: string; limit?: number } = {}): Promise<any[]> {
+        return [];
+    }
 }

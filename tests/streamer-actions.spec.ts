@@ -1,10 +1,13 @@
 import { TimeAction } from '../src/actions';
 import { Streamer } from '../src/streamer';
+import { action, defineContract } from '../src/contracts/contract';
 
 describe('Streamer Time-based Actions', () => {
     let streamer: Streamer;
     let mockAdapter: any;
     let mockContract: any;
+    let testHandler: jest.Mock;
+    let asyncTestHandler: jest.Mock;
 
     beforeEach(async () => {
         mockAdapter = {
@@ -23,12 +26,20 @@ describe('Streamer Time-based Actions', () => {
             replace: jest.fn().mockResolvedValue(true)
         };
 
-        mockContract = {
-            testMethod: jest.fn(),
-            asyncTestMethod: jest.fn().mockResolvedValue(true),
-            create: jest.fn(),
-            destroy: jest.fn()
-        };
+        testHandler = jest.fn();
+        asyncTestHandler = jest.fn().mockResolvedValue(true);
+
+        mockContract = defineContract({
+            name: 'testcontract',
+            hooks: {
+                create: jest.fn(),
+                destroy: jest.fn()
+            },
+            actions: {
+                testMethod: action(testHandler, { trigger: 'time' }),
+                asyncTestMethod: action(asyncTestHandler, { trigger: 'time' })
+            }
+        });
 
         streamer = new Streamer({
             JSON_ID: 'testing',
@@ -36,7 +47,7 @@ describe('Streamer Time-based Actions', () => {
         });
 
         await streamer.registerAdapter(mockAdapter);
-        streamer.registerContract('testcontract', mockContract);
+        await streamer.registerContract(mockContract);
     });
 
     afterEach(async () => {
@@ -75,11 +86,11 @@ describe('Streamer Time-based Actions', () => {
             );
         });
 
-        test('Should throw error when registering action for non-existent method', async () => {
+        test('Should throw error when registering action for non-existent action', async () => {
             const action = new TimeAction('1m', 'test-action', 'testcontract', 'nonexistentMethod');
             
             await expect(streamer.registerAction(action)).rejects.toThrow(
-                'Method \'nonexistentMethod\' not found in contract \'testcontract\' for action \'test-action\''
+                'Action \'nonexistentMethod\' not found in contract \'testcontract\' for action \'test-action\''
             );
         });
     });
@@ -166,7 +177,7 @@ describe('Streamer Time-based Actions', () => {
             
             await streamer['processActions']();
             
-            expect(mockContract.testMethod).toHaveBeenCalledWith({ testData: 'value' });
+            expect(testHandler).toHaveBeenCalledWith({ testData: 'value' }, expect.any(Object));
             expect(testAction.executionCount).toBe(1);
             expect(testAction.lastExecution).toBeInstanceOf(Date);
         });
@@ -180,7 +191,7 @@ describe('Streamer Time-based Actions', () => {
             
             await streamer['processActions']();
             
-            expect(mockContract.testMethod).not.toHaveBeenCalled();
+            expect(testHandler).not.toHaveBeenCalled();
             expect(testAction.executionCount).toBe(0);
         });
 
@@ -190,7 +201,7 @@ describe('Streamer Time-based Actions', () => {
             
             await streamer['processActions']();
             
-            expect(mockContract.testMethod).not.toHaveBeenCalled();
+            expect(testHandler).not.toHaveBeenCalled();
         });
 
         test('Should not execute actions that have reached max executions', async () => {
@@ -200,11 +211,11 @@ describe('Streamer Time-based Actions', () => {
             
             await streamer['processActions']();
             
-            expect(mockContract.testMethod).not.toHaveBeenCalled();
+            expect(testHandler).not.toHaveBeenCalled();
         });
 
         test('Should handle contract method errors gracefully', async () => {
-            mockContract.testMethod.mockImplementation(() => {
+            testHandler.mockImplementation(() => {
                 throw new Error('Contract method error');
             });
             
@@ -213,7 +224,7 @@ describe('Streamer Time-based Actions', () => {
             // Should not throw, but log error
             await expect(streamer['processActions']()).resolves.toBeUndefined();
             
-            expect(mockContract.testMethod).toHaveBeenCalled();
+            expect(testHandler).toHaveBeenCalled();
             // Action should not increment execution count on error
             expect(testAction.executionCount).toBe(0);
         });
@@ -224,7 +235,7 @@ describe('Streamer Time-based Actions', () => {
             
             await streamer['processActions']();
             
-            expect(mockContract.testMethod).toHaveBeenCalled();
+            expect(testHandler).toHaveBeenCalled();
             expect(streamer.getActions()).toHaveLength(0); // Action should be removed
         });
     });
@@ -255,7 +266,7 @@ describe('Streamer Time-based Actions', () => {
                 
                 await streamer['processActions']();
                 
-                expect(mockContract.testMethod).toHaveBeenCalled();
+                expect(testHandler).toHaveBeenCalled();
                 expect(action.executionCount).toBe(1);
             });
         });

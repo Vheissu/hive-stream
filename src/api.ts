@@ -115,5 +115,91 @@ export class Api {
                 res.status(500).json({ error: 'Failed to retrieve statistics' });
             }
         });
+
+        // Exchange endpoints (SQL adapters only)
+        app.get('/exchange/balances', async (req, res) => {
+            try {
+                const account = req.query.account as string | undefined;
+                const balances = await this.streamer.adapter.getExchangeBalances(account);
+                res.json(balances);
+            } catch (error) {
+                res.status(501).json({ error: 'Exchange endpoints require a SQL-capable adapter' });
+            }
+        });
+
+        app.get('/exchange/balances/:account', async (req, res) => {
+            try {
+                const balances = await this.streamer.adapter.getExchangeBalances(req.params.account);
+                res.json(balances);
+            } catch (error) {
+                res.status(501).json({ error: 'Exchange endpoints require a SQL-capable adapter' });
+            }
+        });
+
+        app.get('/exchange/orders', async (req, res) => {
+            try {
+                const filters = {
+                    account: req.query.account as string | undefined,
+                    base: req.query.base as string | undefined,
+                    quote: req.query.quote as string | undefined,
+                    status: req.query.status as string | undefined
+                };
+                const orders = await this.streamer.adapter.getExchangeOrders(filters);
+                res.json(orders);
+            } catch (error) {
+                res.status(501).json({ error: 'Exchange endpoints require a SQL-capable adapter' });
+            }
+        });
+
+        app.get('/exchange/orders/account/:account', async (req, res) => {
+            try {
+                const orders = await this.streamer.adapter.getExchangeOrders({ account: req.params.account });
+                res.json(orders);
+            } catch (error) {
+                res.status(501).json({ error: 'Exchange endpoints require a SQL-capable adapter' });
+            }
+        });
+
+        app.get('/exchange/trades', async (req, res) => {
+            try {
+                const filters = {
+                    account: req.query.account as string | undefined,
+                    base: req.query.base as string | undefined,
+                    quote: req.query.quote as string | undefined
+                };
+                const trades = await this.streamer.adapter.getExchangeTrades(filters);
+                res.json(trades);
+            } catch (error) {
+                res.status(501).json({ error: 'Exchange endpoints require a SQL-capable adapter' });
+            }
+        });
+
+        app.get('/exchange/orderbook', async (req, res) => {
+            try {
+                const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+                const snapshots = await this.streamer.adapter.getExchangeOrderBookSnapshots({
+                    base: req.query.base as string | undefined,
+                    quote: req.query.quote as string | undefined,
+                    limit
+                });
+                res.json(snapshots);
+            } catch (error) {
+                res.status(501).json({ error: 'Exchange endpoints require a SQL-capable adapter' });
+            }
+        });
+
+        app.get('/exchange/orderbook/:base/:quote', async (req, res) => {
+            try {
+                const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+                const snapshots = await this.streamer.adapter.getExchangeOrderBookSnapshots({
+                    base: req.params.base,
+                    quote: req.params.quote,
+                    limit
+                });
+                res.json(snapshots);
+            } catch (error) {
+                res.status(501).json({ error: 'Exchange endpoints require a SQL-capable adapter' });
+            }
+        });
     }
 }

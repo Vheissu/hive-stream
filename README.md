@@ -165,28 +165,38 @@ downvote(votePercentage = '100.0', username, permlink) {
 
 ## Contracts
 
-Hive Stream allows you to write contracts which get executed when a custom JSON operation matches. The only requirement is sending a payload which contains `hivePayload` inside of it.
+Hive Stream allows you to register contract definitions that execute when a transfer memo or custom JSON operation matches. The payload lives under the `PAYLOAD_IDENTIFIER` (default: `hive_stream`).
 
-The payload consists of:
+The payload shape is:
 
-`name` the name of the smart contract you registered.
-
-`action` matches the name of a function defined inside of your contract
-
-`payload` an object of data which will be provided to the action
+- `contract`: the name of the contract you registered
+- `action`: the action name defined in your contract
+- `payload`: data passed to the action
+- `meta`: optional metadata
 
 ### Writing contracts
 
-Really, a contract is nothing more than a bunch of functions which get matched to values inside of JSON payloads.
+Contracts are defined with `defineContract` + `action`. Each action can specify a trigger (`custom_json`, `transfer`, or `time`) and an optional Zod schema for payload validation.
+
+For a full contract-building guide (payloads, context, triggers, validation, error handling, and exchange setup), see `DOCUMENTATION.md`.
 
 ### Register a contract
 
-Register a file containing contract code which will be executed.
+Register a contract definition. Registration is async so hooks can initialize state.
 
 ```javascript
-import contract from './my-contract';
+import { defineContract, action } from 'hive-stream';
 
-registerContract('mycontract', Contract);
+const MyContract = defineContract({
+    name: 'mycontract',
+    actions: {
+        hello: action(async (payload, ctx) => {
+            console.log('hello', payload, ctx.sender);
+        }, { trigger: 'custom_json' })
+    }
+});
+
+await streamer.registerContract(MyContract);
 ```
 
 ### Unregister a contract
@@ -194,32 +204,51 @@ registerContract('mycontract', Contract);
 Unregister a contract that has been registered.
 
 ```javascript
-unregisterContract('mycontract');
+await streamer.unregisterContract('mycontract');
 ```
 
 ### Example Payload
 
 ```javascript
-JSON.stringify({ hivePayload: { name: 'hivedice', action: 'roll', payload: { roll: 22, amount: '1'} } })
+JSON.stringify({
+    hive_stream: {
+        contract: 'hivedice',
+        action: 'roll',
+        payload: { roll: 22 }
+    }
+})
 ```
 
-This will match a registered contract called `hivedice` and inside of the contract code, a function called `roll` and finally, the payload is sent to the function as an argument, allowing you to access the values inside of it. 
+This will match a registered contract called `hivedice`, run the `roll` action, and pass the payload into your handler.
 
 ### Built-in Contract Examples
 
 The library includes several built-in contract examples in the `src/contracts` folder:
 
-- `DiceContract` - A dice rolling game contract
-- `CoinflipContract` - A coin flip game contract  
-- `LottoContract` - A lottery-style game contract
-- `TokenContract` - A contract for token operations
-- `NFTContract` - A contract for NFT operations
+- `createDiceContract` - A dice rolling game contract
+- `createCoinflipContract` - A coin flip game contract
+- `createLottoContract` - A lottery-style game contract
+- `createTokenContract` - A contract for token operations
+- `createNFTContract` - A contract for NFT operations
+- `createRpsContract` - A rock-paper-scissors game contract
+- `createPollContract` - A poll/voting contract
+- `createTipJarContract` - A tip jar + message board contract
+- `createExchangeContract` - A basic exchange with deposits, withdrawals, balances, and order matching (SQL adapter required)
 
 These can be imported and used as examples for building your own contracts:
 
 ```javascript
-import { DiceContract, CoinflipContract, LottoContract } from 'hive-stream';
+import { createDiceContract, createCoinflipContract, createLottoContract } from 'hive-stream';
 ```
+
+### Example Snippets
+
+Sample snippets for the newest contracts live in `examples/contracts/`:
+
+- `examples/contracts/rps.ts`
+- `examples/contracts/poll.ts`
+- `examples/contracts/tipjar.ts`
+- `examples/contracts/exchange.ts`
 
 ## Time-based Actions
 
@@ -246,11 +275,11 @@ The `TimeAction` instance accepts the following values:
 - timeValue - When should this action be run?
 - uniqueId - A unique ID to describe your action
 - contractName - The name of the contract
-- contractMethod - The method we are calling inside of the contract
+- contractAction - The action we are calling inside of the contract
 - date - An optional final parameter that accepts a date of creation
 
 ```
-new TimeAction(timeValue, uniqueId, contractName, contractMethod, date)
+new TimeAction(timeValue, uniqueId, contractName, contractAction, date)
 ```
 
 ### Valid time values

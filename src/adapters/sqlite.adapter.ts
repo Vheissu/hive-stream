@@ -170,7 +170,7 @@ export class SqliteAdapter extends AdapterBase {
                 blockNumber: this.blockNumber,
                 sender: metadata.sender,
                 amount: metadata.amount,
-                contractName: payload.name,
+                contractName: payload.contract,
                 contractAction: payload.action,
                 contractPayload: JSON.stringify(payload.payload)
             });
@@ -190,7 +190,7 @@ export class SqliteAdapter extends AdapterBase {
                 blockNumber: this.blockNumber,
                 sender: metadata.sender,
                 isSignedWithActiveKey: metadata.isSignedWithActiveKey ? 1 : 0,
-                contractName: payload.name,
+                contractName: payload.contract,
                 contractAction: payload.action,
                 contractPayload: JSON.stringify(payload.payload)
             });
@@ -435,6 +435,113 @@ export class SqliteAdapter extends AdapterBase {
             return null;
         } catch (error) {
             console.error('[SqliteAdapter] Error getting JSON by blockId:', error);
+            throw error;
+        }
+    }
+
+    public async getExchangeBalances(account?: string) {
+        try {
+            const query = this.db('exchange_balances')
+                .select('account', 'asset', 'available', 'locked');
+
+            if (account) {
+                query.where('account', account);
+            }
+
+            const rows = await query;
+            return rows.length ? rows : null;
+        } catch (error) {
+            console.error('[SqliteAdapter] Error getting exchange balances:', error);
+            throw error;
+        }
+    }
+
+    public async getExchangeOrders(filters: { account?: string; base?: string; quote?: string; status?: string } = {}) {
+        try {
+            const query = this.db('exchange_orders')
+                .select('id', 'account', 'side', 'base_asset', 'quote_asset', 'price', 'amount', 'remaining', 'status', 'created_at');
+
+            if (filters.account) {
+                query.where('account', filters.account);
+            }
+
+            if (filters.base) {
+                query.where('base_asset', filters.base);
+            }
+
+            if (filters.quote) {
+                query.where('quote_asset', filters.quote);
+            }
+
+            if (filters.status) {
+                query.where('status', filters.status);
+            }
+
+            const rows = await query;
+            return rows.length ? rows : null;
+        } catch (error) {
+            console.error('[SqliteAdapter] Error getting exchange orders:', error);
+            throw error;
+        }
+    }
+
+    public async getExchangeTrades(filters: { account?: string; base?: string; quote?: string } = {}) {
+        try {
+            const query = this.db('exchange_trades')
+                .select('id', 'buy_order_id', 'sell_order_id', 'price', 'amount', 'base_asset', 'quote_asset', 'buyer', 'seller', 'created_at');
+
+            if (filters.account) {
+                query.where(builder => {
+                    builder.where('buyer', filters.account).orWhere('seller', filters.account);
+                });
+            }
+
+            if (filters.base) {
+                query.where('base_asset', filters.base);
+            }
+
+            if (filters.quote) {
+                query.where('quote_asset', filters.quote);
+            }
+
+            const rows = await query;
+            return rows.length ? rows : null;
+        } catch (error) {
+            console.error('[SqliteAdapter] Error getting exchange trades:', error);
+            throw error;
+        }
+    }
+
+    public async getExchangeOrderBookSnapshots(filters: { base?: string; quote?: string; limit?: number } = {}) {
+        try {
+            const query = this.db('exchange_orderbook_snapshots')
+                .select('id', 'base_asset', 'quote_asset', 'bids', 'asks', 'created_at')
+                .orderBy('created_at', 'desc');
+
+            if (filters.base) {
+                query.where('base_asset', filters.base);
+            }
+
+            if (filters.quote) {
+                query.where('quote_asset', filters.quote);
+            }
+
+            if (filters.limit) {
+                query.limit(filters.limit);
+            }
+
+            const rows = await query;
+            if (rows.length) {
+                return rows.map(row => ({
+                    ...row,
+                    bids: JSON.parse(row.bids) ?? [],
+                    asks: JSON.parse(row.asks) ?? []
+                }));
+            }
+
+            return null;
+        } catch (error) {
+            console.error('[SqliteAdapter] Error getting exchange order book snapshots:', error);
             throw error;
         }
     }

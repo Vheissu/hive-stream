@@ -1,6 +1,7 @@
+import BigNumber from 'bignumber.js';
 import { Streamer } from '../streamer';
 import { Utils } from '../utils';
-import BigNumber from 'bignumber.js';
+import { action, defineContract } from './contract';
 
 const CONTRACT_NAME = 'hivenft';
 
@@ -831,4 +832,74 @@ export class NFTContract {
             throw error;
         }
     }
+}
+
+export interface NFTContractOptions {
+    name?: string;
+}
+
+export function createNFTContract(options: NFTContractOptions = {}) {
+    const name = options.name || CONTRACT_NAME;
+    const instance = new NFTContract();
+
+    const callWithContext = async (payload: any, ctx: any, handler: (data: any, meta: any) => any, meta: any) => {
+        instance.updateBlockInfo(ctx.block.number, ctx.block.id, ctx.block.previousId, ctx.transaction.id);
+        return handler(payload, meta);
+    };
+
+    return defineContract({
+        name,
+        hooks: {
+            create: async ({ streamer }) => {
+                instance._instance = streamer as any;
+                await instance.create();
+            },
+            destroy: async () => {
+                await instance.destroy();
+            }
+        },
+        actions: {
+            createCollection: action((payload, ctx) => callWithContext(payload, ctx, (instance as any).createCollection.bind(instance), { sender: ctx.sender }), {
+                trigger: 'custom_json'
+            }),
+            mintNFT: action((payload, ctx) => callWithContext(payload, ctx, (instance as any).mintNFT.bind(instance), { sender: ctx.sender }), {
+                trigger: 'custom_json'
+            }),
+            updateNFT: action((payload, ctx) => callWithContext(payload, ctx, (instance as any).updateNFT.bind(instance), { sender: ctx.sender }), {
+                trigger: 'custom_json'
+            }),
+            transferNFT: action((payload, ctx) => callWithContext(payload, ctx, (instance as any).transferNFT.bind(instance), { sender: ctx.sender }), {
+                trigger: 'custom_json'
+            }),
+            burnNFT: action((payload, ctx) => callWithContext(payload, ctx, (instance as any).burnNFT.bind(instance), { sender: ctx.sender }), {
+                trigger: 'custom_json'
+            }),
+            listNFT: action((payload, ctx) => callWithContext(payload, ctx, (instance as any).listNFT.bind(instance), { sender: ctx.sender }), {
+                trigger: 'custom_json'
+            }),
+            unlistNFT: action((payload, ctx) => callWithContext(payload, ctx, (instance as any).unlistNFT.bind(instance), { sender: ctx.sender }), {
+                trigger: 'custom_json'
+            }),
+            buyNFT: action((payload, ctx) => {
+                const amountRaw = ctx.transfer?.rawAmount || '';
+                const [amount, asset] = amountRaw.split(' ');
+                return callWithContext(payload, ctx, (instance as any).buyNFT.bind(instance), {
+                    sender: ctx.sender,
+                    amount,
+                    asset
+                });
+            }, {
+                trigger: 'transfer'
+            }),
+            getTokenInfo: action((payload, ctx) => callWithContext(payload, ctx, (instance as any).getTokenInfo.bind(instance), { sender: ctx.sender }), {
+                trigger: 'custom_json'
+            }),
+            getCollectionInfo: action((payload, ctx) => callWithContext(payload, ctx, (instance as any).getCollectionInfo.bind(instance), { sender: ctx.sender }), {
+                trigger: 'custom_json'
+            }),
+            getUserTokens: action((payload, ctx) => callWithContext(payload, ctx, (instance as any).getUserTokens.bind(instance), { sender: ctx.sender }), {
+                trigger: 'custom_json'
+            })
+        }
+    });
 }

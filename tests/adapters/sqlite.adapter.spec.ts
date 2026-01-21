@@ -111,7 +111,7 @@ describe('SQLite Adapter', () => {
 
     test('processTransfer works correctly', async () => {
         const mockPayload = {
-            name: 'test-contract',
+            contract: 'test-contract',
             action: 'transfer',
             payload: { amount: '100', recipient: 'bob' }
         };
@@ -136,7 +136,7 @@ describe('SQLite Adapter', () => {
 
     test('processCustomJson works correctly', async () => {
         const mockPayload = {
-            name: 'test-contract',
+            contract: 'test-contract',
             action: 'custom',
             payload: { data: 'test' }
         };

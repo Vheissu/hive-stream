@@ -8,7 +8,7 @@ describe('TimeAction', () => {
             expect(action.timeValue).toBe('1m');
             expect(action.id).toBe('test-action');
             expect(action.contractName).toBe('testcontract');
-            expect(action.contractMethod).toBe('testmethod');
+            expect(action.contractAction).toBe('testmethod');
             expect(action.payload).toEqual({});
             expect(action.enabled).toBe(true);
             expect(action.executionCount).toBe(0);
@@ -72,10 +72,10 @@ describe('TimeAction', () => {
             }).toThrow('contractName must be a non-empty string');
         });
 
-        test('Should throw error for empty contractMethod', () => {
+        test('Should throw error for empty contractAction', () => {
             expect(() => {
                 new TimeAction('1m', 'test-action', 'testcontract', '');
-            }).toThrow('contractMethod must be a non-empty string');
+            }).toThrow('contractAction must be a non-empty string');
         });
 
         test('Should throw error for invalid date string', () => {
@@ -163,7 +163,7 @@ describe('TimeAction', () => {
                 timeValue: '1h',
                 id: 'test-action',
                 contractName: 'testcontract',
-                contractMethod: 'testmethod',
+                contractAction: 'testmethod',
                 payload: payload,
                 date: testDate.toISOString(),
                 enabled: false,
@@ -183,7 +183,7 @@ describe('TimeAction', () => {
                 timeValue: '1h',
                 id: 'test-action',
                 contractName: 'testcontract',
-                contractMethod: 'testmethod',
+                contractAction: 'testmethod',
                 payload: payload,
                 date: testDate.toISOString(),
                 enabled: false,
@@ -198,7 +198,7 @@ describe('TimeAction', () => {
             expect(action.timeValue).toBe('1h');
             expect(action.id).toBe('test-action');
             expect(action.contractName).toBe('testcontract');
-            expect(action.contractMethod).toBe('testmethod');
+            expect(action.contractAction).toBe('testmethod');
             expect(action.payload).toEqual(payload);
             expect(action.date).toEqual(testDate);
             expect(action.enabled).toBe(false);
@@ -217,7 +217,7 @@ describe('TimeAction', () => {
             expect(restored.timeValue).toBe(action.timeValue);
             expect(restored.id).toBe(action.id);
             expect(restored.contractName).toBe(action.contractName);
-            expect(restored.contractMethod).toBe(action.contractMethod);
+            expect(restored.contractAction).toBe(action.contractAction);
             expect(restored.payload).toEqual({});
             expect(restored.enabled).toBe(true);
             expect(restored.executionCount).toBe(0);

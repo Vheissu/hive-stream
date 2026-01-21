@@ -28,7 +28,7 @@ export const Config: ConfigInterface = {
 
     APP_NAME: 'hive-stream',
 
-    PAYLOAD_IDENTIFIER: 'hivePayload',
+    PAYLOAD_IDENTIFIER: 'hive_stream',
 
     USERNAME: '',
 

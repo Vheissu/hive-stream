@@ -2,7 +2,7 @@ export interface TimeActionInterface {
     timeValue: string;
     id: string;
     contractName: string;
-    contractMethod: string;
+    contractAction: string;
     payload: any;
     date: Date;
     enabled: boolean;
@@ -16,7 +16,7 @@ export class TimeAction implements TimeActionInterface {
     public timeValue: string;
     public id: string;
     public contractName: string;
-    public contractMethod: string;
+    public contractAction: string;
     public payload: any;
     public date: Date;
     public enabled: boolean;
@@ -35,7 +35,7 @@ export class TimeAction implements TimeActionInterface {
         timeValue: string, 
         id: string, 
         contractName: string, 
-        contractMethod: string, 
+        contractAction: string, 
         payload: any = {},
         date: Date | string = new Date(),
         enabled: boolean = true,
@@ -46,12 +46,12 @@ export class TimeAction implements TimeActionInterface {
         this.validateTimeValue(timeValue);
         this.validateId(id);
         this.validateContractName(contractName);
-        this.validateMethodName(contractMethod);
+        this.validateMethodName(contractAction);
         
         this.timeValue = timeValue;
         this.id = id;
         this.contractName = contractName;
-        this.contractMethod = contractMethod;
+        this.contractAction = contractAction;
         this.payload = payload || {};
         this.date = this.parseDate(date);
         this.enabled = enabled;
@@ -92,7 +92,7 @@ export class TimeAction implements TimeActionInterface {
 
     private validateMethodName(methodName: string): void {
         if (!methodName || typeof methodName !== 'string') {
-            throw new Error('TimeAction: contractMethod must be a non-empty string');
+            throw new Error('TimeAction: contractAction must be a non-empty string');
         }
     }
 
@@ -139,7 +139,7 @@ export class TimeAction implements TimeActionInterface {
             timeValue: this.timeValue,
             id: this.id,
             contractName: this.contractName,
-            contractMethod: this.contractMethod,
+            contractAction: this.contractAction,
             payload: this.payload,
             date: this.date.toISOString(),
             enabled: this.enabled,
@@ -159,7 +159,7 @@ export class TimeAction implements TimeActionInterface {
             data.timeValue,
             data.id,
             data.contractName,
-            data.contractMethod,
+            data.contractAction || data.contractMethod,
             data.payload,
             data.date,
             data.enabled !== undefined ? data.enabled : true,
