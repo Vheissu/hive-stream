@@ -14,6 +14,8 @@ import {
     SubscriptionCallback,
     TransferSubscription,
     CustomJsonIdSubscription,
+    EscrowSubscription,
+    EscrowOperationType,
 } from './types/hive-stream';
 
 import hivejs from 'sscjs';
@@ -33,6 +35,7 @@ export class Streamer {
     private commentSubscriptions: SubscriptionCallback[] = [];
     private postSubscriptions: SubscriptionCallback[] = [];
     private transferSubscriptions: TransferSubscription[] = [];
+    private escrowSubscriptions: EscrowSubscription[] = [];
 
     private attempts = 0;
 
@@ -434,7 +437,7 @@ export class Streamer {
         }
 
         if (this?.adapter?.destroy) {
-            this.adapter.destroy();
+            await this.adapter.destroy();
         }
 
         await sleep(800);
@@ -617,17 +620,27 @@ export class Streamer {
     }
 
     public async processOperation(op: [string, any], blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date): Promise<void> {
+        const operationType = op[0];
+        const operationData = op[1];
+        const operationMetadata = {
+            blockNumber,
+            blockId,
+            previousBlockId: prevBlockId,
+            transactionId: trxId,
+            blockTime
+        };
+
         if (this.adapter?.processOperation) {
-            this.adapter.processOperation(op, blockNumber, blockId, prevBlockId, trxId, blockTime);
+            await this.adapter.processOperation(op, blockNumber, blockId, prevBlockId, trxId, blockTime);
         }
 
         // Operation is a "comment" which could either be a post or comment
-        if (op[0] === 'comment') {
+        if (operationType === 'comment') {
             // This is a post
-            if (op[1].parent_author === '') {
+            if (operationData.parent_author === '') {
                 this.postSubscriptions.forEach(sub => {
                     sub.callback(
-                        op[1],
+                        operationData,
                         blockNumber,
                         blockId,
                         prevBlockId,
@@ -639,7 +652,7 @@ export class Streamer {
             } else {
                 this.commentSubscriptions.forEach(sub => {
                     sub.callback(
-                        op[1],
+                        operationData,
                         blockNumber,
                         blockId,
                         prevBlockId,
@@ -651,39 +664,47 @@ export class Streamer {
         }
 
         // This is a transfer
-        if (op[0] === 'transfer') {
-            const sender = op[1]?.from;
-            const rawAmount = op[1]?.amount;
+        if (operationType === 'transfer') {
+            const sender = operationData?.from;
+            const rawAmount = operationData?.amount;
             const amountParts = typeof rawAmount === 'string' ? rawAmount.split(' ') : [];
             const transferInfo = {
                 from: sender,
-                to: op[1]?.to,
+                to: operationData?.to,
                 rawAmount: rawAmount || '',
                 amount: amountParts[0] || '',
                 asset: amountParts[1] || '',
-                memo: op[1]?.memo
+                memo: operationData?.memo
             };
 
-            const json = Utils.jsonParse(op[1].memo);
+            const json = Utils.jsonParse(operationData.memo);
             const payload = this.normalizeContractPayload(json?.[this.config.PAYLOAD_IDENTIFIER]);
 
             if (payload) {
                 if (this?.adapter?.processTransfer) {
-                    await this.adapter.processTransfer(op[1], payload, { sender, amount: rawAmount });
+                    await this.adapter.processTransfer(operationData, payload, {
+                        sender: sender || '',
+                        amount: rawAmount || '',
+                        ...operationMetadata
+                    });
                 }
 
                 const context = this.buildContractContext('transfer', blockNumber, blockId, prevBlockId, trxId, blockTime, {
                     sender,
-                    transfer: transferInfo
+                    transfer: transferInfo,
+                    operation: {
+                        type: operationType,
+                        data: operationData
+                    }
                 });
 
                 await this.dispatchContractAction(payload, context);
             }
 
             this.transferSubscriptions.forEach(sub => {
-                if (sub.account === op[1].to) {
+                if (sub.account === operationData.to) {
                     sub.callback(
-                        op[1],
+                        operationData,
                         blockNumber,
                         blockId,
                         prevBlockId,
@@ -695,28 +716,32 @@ export class Streamer {
         }
 
         // This is a custom JSON operation
-        if (op[0] === 'custom_json') {
+        if (operationType === 'custom_json') {
             let isSignedWithActiveKey = false;
             let sender;
 
-            const id = op[1]?.id;
+            const id = operationData?.id;
 
-            if (op[1]?.required_auths?.length > 0) {
-                sender = op[1].required_auths[0];
+            if (operationData?.required_auths?.length > 0) {
+                sender = operationData.required_auths[0];
                 isSignedWithActiveKey = true;
-            } else if (op[1]?.required_posting_auths?.length > 0) {
-                sender = op[1].required_posting_auths[0];
+            } else if (operationData?.required_posting_auths?.length > 0) {
+                sender = operationData.required_posting_auths[0];
                 isSignedWithActiveKey = false;
             }
 
-            const json = Utils.jsonParse(op[1].json);
+            const json = Utils.jsonParse(operationData.json);
             const payload = id === this.config.JSON_ID
                 ? this.normalizeContractPayload(json?.[this.config.PAYLOAD_IDENTIFIER])
                 : null;
 
             if (payload) {
                 if (this?.adapter?.processCustomJson) {
-                    await this.adapter.processCustomJson(op[1], payload, { sender, isSignedWithActiveKey });
+                    await this.adapter.processCustomJson(operationData, payload, {
+                        sender: sender || '',
+                        isSignedWithActiveKey,
+                        ...operationMetadata
+                    });
                 }
 
                 const context = this.buildContractContext('custom_json', blockNumber, blockId, prevBlockId, trxId, blockTime, {
@@ -725,6 +750,10 @@ export class Streamer {
                         id,
                         json,
                         isSignedWithActiveKey
+                    },
+                    operation: {
+                        type: operationType,
+                        data: operationData
                     }
                 });
 
@@ -733,7 +762,7 @@ export class Streamer {
 
             this.customJsonSubscriptions.forEach(sub => {
                 sub.callback(
-                    op[1],
+                    operationData,
                     { sender, isSignedWithActiveKey },
                     blockNumber,
                     blockId,
@@ -744,11 +773,9 @@ export class Streamer {
             });
 
             this.customJsonIdSubscriptions.forEach(sub => {
-                const byId = this.customJsonIdSubscriptions.find(s => s.id === op[1].id);
-
-                if (byId) {
+                if (sub.id === operationData.id) {
                     sub.callback(
-                        op[1],
+                        operationData,
                         { sender, isSignedWithActiveKey },
                         blockNumber,
                         blockId,
@@ -759,40 +786,91 @@ export class Streamer {
                 }
             });
 
-            Utils.asyncForEach(this.customJsonHiveEngineSubscriptions, async (sub: any) => {
-                let isSignedWithActiveKey = null;
-                let sender;
+            if (id === this.config.HIVE_ENGINE_ID && this.customJsonHiveEngineSubscriptions.length > 0) {
+                const enginePayload = json || {};
+                const { contractName, contractAction, contractPayload } = enginePayload;
 
-                if (op[1].required_auths.length > 0) {
-                    sender = op[1].required_auths[0];
-                    isSignedWithActiveKey = true;
-                } else {
-                    sender = op[1].required_posting_auths[0];
-                    isSignedWithActiveKey = false;
-                }
+                try {
+                    const txInfo = await this.hive.getTransactionInfo(trxId);
+                    const logs = txInfo && txInfo.logs ? Utils.jsonParse(txInfo.logs) : null;
 
-                const id = op[1].id;
-                const json = Utils.jsonParse(op[1].json);
-
-                // Hive Engine JSON operation
-                if (id === this.config.HIVE_ENGINE_ID) {
-                    const { contractName, contractAction, contractPayload } = json;
-
-                    try {
-                        // Attempt to get the transaction from Hive Engine itself
-                        const txInfo = await this.hive.getTransactionInfo(trxId);
-
-                        const logs = txInfo && txInfo.logs ? Utils.jsonParse(txInfo.logs) : null;
-
-                        // Do we have a valid transaction and are there no errors? It's a real transaction
-                        if (txInfo && logs && typeof logs.errors === 'undefined') {
-                            sub.callback(contractName, contractAction, contractPayload, sender,
-                                op[1], blockNumber, blockId, prevBlockId, trxId, blockTime);
-                        }
-                    } catch(e) {
-                        console.error(e);
-                        return;
+                    if (txInfo && logs && typeof logs.errors === 'undefined') {
+                        await Promise.all(this.customJsonHiveEngineSubscriptions.map(async (sub: any) => {
+                            sub.callback(
+                                contractName,
+                                contractAction,
+                                contractPayload,
+                                sender,
+                                operationData,
+                                blockNumber,
+                                blockId,
+                                prevBlockId,
+                                trxId,
+                                blockTime
+                            );
+                        }));
                     }
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+        }
+
+        // Recurrent transfers carry payloads in memo, similar to transfer.
+        if (operationType === 'recurrent_transfer') {
+            const sender = operationData?.from;
+            const json = Utils.jsonParse(operationData?.memo);
+            const payload = this.normalizeContractPayload(json?.[this.config.PAYLOAD_IDENTIFIER]);
+
+            if (payload) {
+                const context = this.buildContractContext('recurrent_transfer', blockNumber, blockId, prevBlockId, trxId, blockTime, {
+                    sender,
+                    operation: {
+                        type: operationType,
+                        data: operationData
+                    }
+                });
+
+                await this.dispatchContractAction(payload, context);
+            }
+        }
+
+        if (this.isEscrowOperationType(operationType)) {
+            const escrow = this.buildEscrowDetails(operationType, operationData);
+            const sender = operationData?.from;
+
+            if (this.adapter?.processEscrow) {
+                await this.adapter.processEscrow(operationType, operationData, operationMetadata);
+            }
+
+            if (operationType === 'escrow_transfer') {
+                const jsonMeta = Utils.jsonParse(operationData?.json_meta);
+                const payload = this.normalizeContractPayload(jsonMeta?.[this.config.PAYLOAD_IDENTIFIER]);
+
+                if (payload) {
+                    const context = this.buildContractContext('escrow_transfer', blockNumber, blockId, prevBlockId, trxId, blockTime, {
+                        sender,
+                        escrow,
+                        operation: {
+                            type: operationType,
+                            data: operationData
+                        }
+                    });
+
+                    await this.dispatchContractAction(payload, context);
+                }
+            }
+
+            this.escrowSubscriptions.forEach(sub => {
+                if (sub.type === operationType) {
+                    sub.callback(
+                        operationData,
+                        blockNumber,
+                        blockId,
+                        prevBlockId,
+                        trxId,
+                        blockTime
+                    );
                 }
             });
         }
@@ -824,6 +902,31 @@ export class Streamer {
         };
     }
 
+    private isEscrowOperationType(operationType: string): operationType is EscrowOperationType {
+        return operationType === 'escrow_transfer'
+            || operationType === 'escrow_approve'
+            || operationType === 'escrow_dispute'
+            || operationType === 'escrow_release';
+    }
+
+    private buildEscrowDetails(operationType: EscrowOperationType, operation: any): ContractContext['escrow'] {
+        return {
+            type: operationType,
+            from: operation?.from,
+            to: operation?.to,
+            agent: operation?.agent,
+            escrowId: operation?.escrow_id,
+            who: operation?.who,
+            receiver: operation?.receiver,
+            hiveAmount: operation?.hive_amount,
+            hbdAmount: operation?.hbd_amount,
+            fee: operation?.fee,
+            ratificationDeadline: operation?.ratification_deadline,
+            expiration: operation?.escrow_expiration,
+            approved: typeof operation?.approve === 'boolean' ? operation.approve : undefined
+        };
+    }
+
     private buildContractContext(
         trigger: ContractTrigger,
         blockNumber: number,
@@ -835,6 +938,8 @@ export class Streamer {
             sender?: string;
             transfer?: ContractContext['transfer'];
             customJson?: ContractContext['customJson'];
+            escrow?: ContractContext['escrow'];
+            operation?: ContractContext['operation'];
         }
     ): ContractContext {
         return {
@@ -853,7 +958,9 @@ export class Streamer {
             },
             sender: details.sender,
             transfer: details.transfer,
-            customJson: details.customJson
+            customJson: details.customJson,
+            escrow: details.escrow,
+            operation: details.operation
         };
     }
 
@@ -1093,8 +1200,123 @@ export class Streamer {
         return Utils.transferHiveTokensMultiple(this.client, this.config, from, accounts, amount, symbol, memo);
     }
 
+    public broadcastOperations(operations: Array<[string, any]>, signingKeys?: string | string[]) {
+        return Utils.broadcastOperations(this.client, operations, signingKeys || this.config.ACTIVE_KEY);
+    }
+
+    public broadcastMultiSigOperations(operations: Array<[string, any]>, signingKeys: string[]) {
+        return Utils.broadcastMultiSigOperations(this.client, operations, signingKeys);
+    }
+
+    public createAuthority(keyAuths: Array<[string, number]> = [], accountAuths: Array<[string, number]> = [], weightThreshold: number = 1): any {
+        return Utils.createAuthority(keyAuths, accountAuths, weightThreshold);
+    }
+
+    public updateAccountAuthorities(
+        account: string,
+        authorityUpdate: {
+            owner?: any;
+            active?: any;
+            posting?: any;
+            memo_key?: string;
+            json_metadata?: string;
+            posting_json_metadata?: string;
+            useAccountUpdate2?: boolean;
+        },
+        signingKeys?: string | string[]
+    ) {
+        return Utils.updateAccountAuthorities(this.client, this.config, account, authorityUpdate, signingKeys);
+    }
+
+    public escrowTransfer(options: {
+        from: string;
+        to: string;
+        agent: string;
+        escrow_id: number;
+        hive_amount?: string;
+        hbd_amount?: string;
+        fee: string;
+        ratification_deadline: string | Date;
+        escrow_expiration: string | Date;
+        json_meta?: string | Record<string, any>;
+    }, signingKeys?: string | string[]) {
+        return Utils.escrowTransfer(this.client, this.config, options, signingKeys);
+    }
+
+    public escrowApprove(options: {
+        from: string;
+        to: string;
+        agent: string;
+        who: string;
+        escrow_id: number;
+        approve: boolean;
+    }, signingKeys?: string | string[]) {
+        return Utils.escrowApprove(this.client, this.config, options, signingKeys);
+    }
+
+    public escrowDispute(options: {
+        from: string;
+        to: string;
+        agent: string;
+        who: string;
+        escrow_id: number;
+    }, signingKeys?: string | string[]) {
+        return Utils.escrowDispute(this.client, this.config, options, signingKeys);
+    }
+
+    public escrowRelease(options: {
+        from: string;
+        to: string;
+        agent: string;
+        who: string;
+        receiver: string;
+        escrow_id: number;
+        hive_amount?: string;
+        hbd_amount?: string;
+    }, signingKeys?: string | string[]) {
+        return Utils.escrowRelease(this.client, this.config, options, signingKeys);
+    }
+
+    public recurrentTransfer(options: {
+        from: string;
+        to: string;
+        amount: string;
+        memo?: string;
+        recurrence: number;
+        executions: number;
+    }, signingKeys?: string | string[]) {
+        return Utils.recurrentTransfer(this.client, this.config, options, signingKeys);
+    }
+
+    public createProposal(options: {
+        creator: string;
+        receiver: string;
+        start_date: string | Date;
+        end_date: string | Date;
+        daily_pay: string;
+        subject: string;
+        permlink: string;
+    }, signingKeys?: string | string[]) {
+        return Utils.createProposal(this.client, this.config, options, signingKeys);
+    }
+
+    public updateProposalVotes(options: {
+        voter: string;
+        proposal_ids: number[];
+        approve: boolean;
+    }, signingKeys?: string | string[]) {
+        return Utils.updateProposalVotes(this.client, this.config, options, signingKeys);
+    }
+
+    public removeProposals(options: {
+        proposal_owner: string;
+        proposal_ids: number[];
+    }, signingKeys?: string | string[]) {
+        return Utils.removeProposals(this.client, this.config, options, signingKeys);
+    }
+
     public transferHiveEngineTokens(from: string, to: string, symbol: string, quantity: string, memo: string = '') {
-        return Utils.transferHiveEngineTokens(this.client, this.config, from, to, symbol, quantity, memo);
+        return Utils.transferHiveEngineTokens(this.client, this.config, from, to, quantity, symbol, memo);
     }
 
     public transferHiveEngineTokensMultiple(from: string, accounts: any[] = [], symbol: string, memo: string = '', amount: string = '0') {
@@ -1181,6 +1403,22 @@ export class Streamer {
     public onHiveEngine(callback: any): void {
         this.customJsonHiveEngineSubscriptions.push({ callback });
     }
+
+    public onEscrowTransfer(callback: any): void {
+        this.escrowSubscriptions.push({ type: 'escrow_transfer', callback });
+    }
+
+    public onEscrowApprove(callback: any): void {
+        this.escrowSubscriptions.push({ type: 'escrow_approve', callback });
+    }
+
+    public onEscrowDispute(callback: any): void {
+        this.escrowSubscriptions.push({ type: 'escrow_dispute', callback });
+    }
+
+    public onEscrowRelease(callback: any): void {
+        this.escrowSubscriptions.push({ type: 'escrow_release', callback });
+    }
     
     // Memory management: cleanup subscriptions
     private cleanupSubscriptions(): void {
@@ -1214,6 +1452,11 @@ export class Streamer {
             this.transferSubscriptions = this.transferSubscriptions.slice(-this.maxSubscriptions);
             console.warn(`[Streamer] Trimmed transferSubscriptions to ${this.maxSubscriptions} items`);
         }
+
+        if (this.escrowSubscriptions.length > this.maxSubscriptions) {
+            this.escrowSubscriptions = this.escrowSubscriptions.slice(-this.maxSubscriptions);
+            console.warn(`[Streamer] Trimmed escrowSubscriptions to ${this.maxSubscriptions} items`);
+        }
     }
     
     // Add method to remove specific subscriptions
@@ -1223,5 +1466,14 @@ export class Streamer {
     
     public removeCustomJsonIdSubscription(id: string): void {
         this.customJsonIdSubscriptions = this.customJsonIdSubscriptions.filter(sub => sub.id !== id);
+    }
+
+    public removeEscrowSubscriptions(type?: EscrowOperationType): void {
+        if (!type) {
+            this.escrowSubscriptions = [];
+            return;
+        }
+
+        this.escrowSubscriptions = this.escrowSubscriptions.filter(sub => sub.type !== type);
     }
 }

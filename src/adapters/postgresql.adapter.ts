@@ -206,9 +206,9 @@ export class PostgreSQLAdapter extends AdapterBase {
     public async processTransfer(operation: any, payload: ContractPayload, metadata: TransferMetadata): Promise<boolean> {
         try {
             await this.db('transfers').insert({
-                id: this.transactionId,
-                blockId: this.blockId,
-                blockNumber: this.blockNumber,
+                id: metadata.transactionId || this.transactionId,
+                blockId: metadata.blockId || this.blockId,
+                blockNumber: metadata.blockNumber || this.blockNumber,
                 sender: metadata.sender,
                 amount: metadata.amount,
                 contractName: payload.contract,
@@ -226,9 +226,9 @@ export class PostgreSQLAdapter extends AdapterBase {
     public async processCustomJson(operation: any, payload: ContractPayload, metadata: CustomJsonMetadata): Promise<boolean> {
         try {
             await this.db('customJson').insert({
-                id: this.transactionId,
-                blockId: this.blockId,
-                blockNumber: this.blockNumber,
+                id: metadata.transactionId || this.transactionId,
+                blockId: metadata.blockId || this.blockId,
+                blockNumber: metadata.blockNumber || this.blockNumber,
                 sender: metadata.sender,
                 isSignedWithActiveKey: metadata.isSignedWithActiveKey ? 1 : 0,
                 contractName: payload.contract,

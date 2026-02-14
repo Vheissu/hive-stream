@@ -1,5 +1,5 @@
 import { TimeAction } from './../actions';
-import { TransactionType, ContractPayload, TransferMetadata, CustomJsonMetadata } from './../types/hive-stream';
+import { ContractPayload, TransferMetadata, CustomJsonMetadata, EscrowOperationType, OperationMetadata } from './../types/hive-stream';
 import { SignedBlock } from '@hiveio/dhive';
 export class AdapterBase {
     protected client: any = null;
@@ -43,6 +43,10 @@ export class AdapterBase {
     }
 
     public async processCustomJson(operation: any, payload: ContractPayload, metadata: CustomJsonMetadata): Promise<boolean> {
+        return true;
+    }
+
+    public async processEscrow(operationType: EscrowOperationType, operation: any, metadata: OperationMetadata): Promise<boolean> {
         return true;
     }
 

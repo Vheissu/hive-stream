@@ -6,6 +6,14 @@ import seedrandom from 'seedrandom';
 const MAX_PAYLOAD_SIZE = 2000;
 const MAX_ACCOUNTS_CHECK = 999;
 
+type HiveKeyInput = string | PrivateKey;
+
+interface AuthorityInput {
+    weight_threshold: number;
+    account_auths: [string, number][];
+    key_auths: [string, number][];
+}
+
 /**
  * Utility functions for Hive blockchain operations and general helpers
  */
@@ -21,6 +29,48 @@ export const Utils = {
             throw new Error('Sleep duration cannot be negative');
         }
         return new Promise((resolve) => setTimeout(resolve, milliseconds));
+    },
+
+    normalizePrivateKeys(keys: HiveKeyInput | HiveKeyInput[]): PrivateKey[] {
+        const input = Array.isArray(keys) ? keys : [keys];
+
+        if (input.length === 0) {
+            throw new Error('At least one private key is required');
+        }
+
+        return input.map((key) => {
+            if (key instanceof PrivateKey) {
+                return key;
+            }
+
+            if (typeof key === 'string' && key.trim().length > 0) {
+                return PrivateKey.fromString(key.trim());
+            }
+
+            throw new Error('Invalid private key input');
+        });
+    },
+
+    toHiveTimestamp(value: string | Date): string {
+        const date = value instanceof Date ? value : new Date(value);
+
+        if (isNaN(date.getTime())) {
+            throw new Error('Invalid date supplied for Hive operation');
+        }
+
+        return date.toISOString().replace(/\.\d{3}Z$/, '');
+    },
+
+    normalizeJsonMeta(meta?: string | Record<string, any>): string {
+        if (meta === undefined || meta === null) {
+            return '{}';
+        }
+
+        if (typeof meta === 'string') {
+            return meta;
+        }
+
+        return JSON.stringify(meta);
     },
 
     /**
@@ -267,6 +317,303 @@ export const Utils = {
         const formattedAmount = `${parseFloat(amount).toFixed(3)} ${symbol}`;
         
         return client.broadcast.transfer({ from, to, amount: formattedAmount, memo }, key);
+    },
+
+    /**
+     * Broadcasts one or more Hive operations signed by one or multiple private keys.
+     */
+    broadcastOperations(
+        client: Client,
+        operations: Array<[string, any]>,
+        signingKeys: HiveKeyInput | HiveKeyInput[]
+    ) {
+        if (!client || !Array.isArray(operations) || operations.length === 0) {
+            throw new Error('Client and at least one operation are required');
+        }
+
+        const keys = this.normalizePrivateKeys(signingKeys);
+
+        return client.broadcast.sendOperations(operations as any, keys.length === 1 ? keys[0] : keys);
+    },
+
+    /**
+     * Alias for explicitly broadcasting with multiple signatures.
+     */
+    broadcastMultiSigOperations(
+        client: Client,
+        operations: Array<[string, any]>,
+        signingKeys: HiveKeyInput[]
+    ) {
+        if (!Array.isArray(signingKeys) || signingKeys.length < 2) {
+            throw new Error('Multi-sign broadcast requires at least two keys');
+        }
+
+        return this.broadcastOperations(client, operations, signingKeys);
+    },
+
+    /**
+     * Builds a Hive authority object for account_update/account_update2 operations.
+     */
+    createAuthority(
+        keyAuths: Array<[string, number]> = [],
+        accountAuths: Array<[string, number]> = [],
+        weightThreshold: number = 1
+    ): AuthorityInput {
+        if (weightThreshold <= 0) {
+            throw new Error('Authority weight threshold must be greater than zero');
+        }
+
+        if (!Array.isArray(keyAuths) || !Array.isArray(accountAuths)) {
+            throw new Error('Authority auths must be arrays');
+        }
+
+        return {
+            weight_threshold: weightThreshold,
+            account_auths: accountAuths,
+            key_auths: keyAuths
+        };
+    },
+
+    /**
+     * Updates account authorities, enabling native Hive multisig thresholds.
+     */
+    async updateAccountAuthorities(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        account: string,
+        authorityUpdate: {
+            owner?: AuthorityInput;
+            active?: AuthorityInput;
+            posting?: AuthorityInput;
+            memo_key?: string;
+            json_metadata?: string;
+            posting_json_metadata?: string;
+            useAccountUpdate2?: boolean;
+        },
+        signingKeys?: HiveKeyInput | HiveKeyInput[]
+    ) {
+        if (!client || !account || !authorityUpdate) {
+            throw new Error('Client, account, and authority update data are required');
+        }
+
+        const keys = signingKeys || config.ACTIVE_KEY;
+
+        if (!keys) {
+            throw new Error('Active key or explicit signing keys are required for account authority updates');
+        }
+
+        const accounts = await client.database.getAccounts([account]);
+        const existingAccount = Array.isArray(accounts) ? accounts[0] : null;
+
+        if (!existingAccount) {
+            throw new Error(`Unable to load account '${account}' for authority update`);
+        }
+
+        const memoKey = authorityUpdate.memo_key || existingAccount.memo_key;
+        const jsonMetadata = authorityUpdate.json_metadata !== undefined
+            ? authorityUpdate.json_metadata
+            : (existingAccount.json_metadata || '');
+        const postingJsonMetadata = authorityUpdate.posting_json_metadata !== undefined
+            ? authorityUpdate.posting_json_metadata
+            : (existingAccount.posting_json_metadata || '');
+
+        const useUpdate2 = Boolean(authorityUpdate.useAccountUpdate2 || authorityUpdate.posting_json_metadata !== undefined);
+
+        if (useUpdate2) {
+            const operation: [string, any] = ['account_update2', {
+                account,
+                owner: authorityUpdate.owner,
+                active: authorityUpdate.active,
+                posting: authorityUpdate.posting,
+                memo_key: memoKey,
+                json_metadata: jsonMetadata,
+                posting_json_metadata: postingJsonMetadata,
+                extensions: []
+            }];
+
+            return this.broadcastOperations(client, [operation], keys);
+        }
+
+        const operation: [string, any] = ['account_update', {
+            account,
+            owner: authorityUpdate.owner,
+            active: authorityUpdate.active,
+            posting: authorityUpdate.posting,
+            memo_key: memoKey,
+            json_metadata: jsonMetadata
+        }];
+
+        return this.broadcastOperations(client, [operation], keys);
+    },
+
+    /**
+     * Creates an escrow transfer on Hive.
+     */
+    escrowTransfer(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        options: {
+            from: string;
+            to: string;
+            agent: string;
+            escrow_id: number;
+            hive_amount?: string;
+            hbd_amount?: string;
+            fee: string;
+            ratification_deadline: string | Date;
+            escrow_expiration: string | Date;
+            json_meta?: string | Record<string, any>;
+        },
+        signingKeys?: HiveKeyInput | HiveKeyInput[]
+    ) {
+        if (!client || !options?.from || !options?.to || !options?.agent) {
+            throw new Error('Escrow transfer requires client, from, to, and agent');
+        }
+
+        if (typeof options.escrow_id !== 'number') {
+            throw new Error('Escrow transfer requires a numeric escrow_id');
+        }
+
+        if (!options.fee) {
+            throw new Error('Escrow transfer requires an escrow fee');
+        }
+
+        const keys = signingKeys || config.ACTIVE_KEY;
+
+        if (!keys) {
+            throw new Error('Active key or explicit signing keys are required for escrow transfer');
+        }
+
+        const operation: [string, any] = ['escrow_transfer', {
+            from: options.from,
+            to: options.to,
+            agent: options.agent,
+            escrow_id: options.escrow_id,
+            hive_amount: options.hive_amount || '0.000 HIVE',
+            hbd_amount: options.hbd_amount || '0.000 HBD',
+            fee: options.fee,
+            ratification_deadline: this.toHiveTimestamp(options.ratification_deadline),
+            escrow_expiration: this.toHiveTimestamp(options.escrow_expiration),
+            json_meta: this.normalizeJsonMeta(options.json_meta)
+        }];
+
+        return this.broadcastOperations(client, [operation], keys);
+    },
+
+    /**
+     * Approves or rejects an escrow transfer.
+     */
+    escrowApprove(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        options: {
+            from: string;
+            to: string;
+            agent: string;
+            who: string;
+            escrow_id: number;
+            approve: boolean;
+        },
+        signingKeys?: HiveKeyInput | HiveKeyInput[]
+    ) {
+        if (!client || !options?.from || !options?.to || !options?.agent || !options?.who) {
+            throw new Error('Escrow approve requires client, from, to, agent, and who');
+        }
+
+        const keys = signingKeys || config.ACTIVE_KEY;
+
+        if (!keys) {
+            throw new Error('Active key or explicit signing keys are required for escrow approval');
+        }
+
+        const operation: [string, any] = ['escrow_approve', {
+            from: options.from,
+            to: options.to,
+            agent: options.agent,
+            who: options.who,
+            escrow_id: options.escrow_id,
+            approve: options.approve
+        }];
+
+        return this.broadcastOperations(client, [operation], keys);
+    },
+
+    /**
+     * Opens an escrow dispute.
+     */
+    escrowDispute(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        options: {
+            from: string;
+            to: string;
+            agent: string;
+            who: string;
+            escrow_id: number;
+        },
+        signingKeys?: HiveKeyInput | HiveKeyInput[]
+    ) {
+        if (!client || !options?.from || !options?.to || !options?.agent || !options?.who) {
+            throw new Error('Escrow dispute requires client, from, to, agent, and who');
+        }
+
+        const keys = signingKeys || config.ACTIVE_KEY;
+
+        if (!keys) {
+            throw new Error('Active key or explicit signing keys are required for escrow dispute');
+        }
+
+        const operation: [string, any] = ['escrow_dispute', {
+            from: options.from,
+            to: options.to,
+            agent: options.agent,
+            who: options.who,
+            escrow_id: options.escrow_id
+        }];
+
+        return this.broadcastOperations(client, [operation], keys);
+    },
+
+    /**
+     * Releases escrow funds.
+     */
+    escrowRelease(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        options: {
+            from: string;
+            to: string;
+            agent: string;
+            who: string;
+            receiver: string;
+            escrow_id: number;
+            hive_amount?: string;
+            hbd_amount?: string;
+        },
+        signingKeys?: HiveKeyInput | HiveKeyInput[]
+    ) {
+        if (!client || !options?.from || !options?.to || !options?.agent || !options?.who || !options?.receiver) {
+            throw new Error('Escrow release requires client, from, to, agent, who, and receiver');
+        }
+
+        const keys = signingKeys || config.ACTIVE_KEY;
+
+        if (!keys) {
+            throw new Error('Active key or explicit signing keys are required for escrow release');
+        }
+
+        const operation: [string, any] = ['escrow_release', {
+            from: options.from,
+            to: options.to,
+            agent: options.agent,
+            who: options.who,
+            receiver: options.receiver,
+            escrow_id: options.escrow_id,
+            hive_amount: options.hive_amount || '0.000 HIVE',
+            hbd_amount: options.hbd_amount || '0.000 HBD'
+        }];
+
+        return this.broadcastOperations(client, [operation], keys);
     },
 
     /**
@@ -672,6 +1019,158 @@ export const Utils = {
                 throw error;
             }
         }
+    },
+
+    /**
+     * Schedules a recurrent transfer on Hive.
+     */
+    recurrentTransfer(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        options: {
+            from: string;
+            to: string;
+            amount: string;
+            memo?: string;
+            recurrence: number;
+            executions: number;
+        },
+        signingKeys?: HiveKeyInput | HiveKeyInput[]
+    ) {
+        if (!client || !options?.from || !options?.to || !options?.amount) {
+            throw new Error('Recurrent transfer requires client, from, to, and amount');
+        }
+
+        if (!Number.isInteger(options.recurrence) || options.recurrence <= 0) {
+            throw new Error('Recurrent transfer requires a positive integer recurrence');
+        }
+
+        if (!Number.isInteger(options.executions) || options.executions <= 0) {
+            throw new Error('Recurrent transfer requires a positive integer executions value');
+        }
+
+        const keys = signingKeys || config.ACTIVE_KEY;
+
+        if (!keys) {
+            throw new Error('Active key or explicit signing keys are required for recurrent transfer');
+        }
+
+        const operation: [string, any] = ['recurrent_transfer', {
+            from: options.from,
+            to: options.to,
+            amount: options.amount,
+            memo: options.memo || '',
+            recurrence: options.recurrence,
+            executions: options.executions,
+            extensions: []
+        }];
+
+        return this.broadcastOperations(client, [operation], keys);
+    },
+
+    /**
+     * Creates a DHF proposal.
+     */
+    createProposal(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        options: {
+            creator: string;
+            receiver: string;
+            start_date: string | Date;
+            end_date: string | Date;
+            daily_pay: string;
+            subject: string;
+            permlink: string;
+        },
+        signingKeys?: HiveKeyInput | HiveKeyInput[]
+    ) {
+        if (!client || !options?.creator || !options?.receiver || !options?.daily_pay || !options?.subject || !options?.permlink) {
+            throw new Error('Create proposal requires creator, receiver, daily_pay, subject, and permlink');
+        }
+
+        const keys = signingKeys || config.ACTIVE_KEY;
+
+        if (!keys) {
+            throw new Error('Active key or explicit signing keys are required for proposal creation');
+        }
+
+        const operation: [string, any] = ['create_proposal', {
+            creator: options.creator,
+            receiver: options.receiver,
+            start_date: this.toHiveTimestamp(options.start_date),
+            end_date: this.toHiveTimestamp(options.end_date),
+            daily_pay: options.daily_pay,
+            subject: options.subject,
+            permlink: options.permlink,
+            extensions: []
+        }];
+
+        return this.broadcastOperations(client, [operation], keys);
+    },
+
+    /**
+     * Votes for/against one or more DHF proposals.
+     */
+    updateProposalVotes(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        options: {
+            voter: string;
+            proposal_ids: number[];
+            approve: boolean;
+        },
+        signingKeys?: HiveKeyInput | HiveKeyInput[]
+    ) {
+        if (!client || !options?.voter || !Array.isArray(options.proposal_ids) || options.proposal_ids.length === 0) {
+            throw new Error('Proposal votes require voter and proposal_ids');
+        }
+
+        const keys = signingKeys || config.ACTIVE_KEY;
+
+        if (!keys) {
+            throw new Error('Active key or explicit signing keys are required for proposal voting');
+        }
+
+        const operation: [string, any] = ['update_proposal_votes', {
+            voter: options.voter,
+            proposal_ids: options.proposal_ids,
+            approve: options.approve,
+            extensions: []
+        }];
+
+        return this.broadcastOperations(client, [operation], keys);
+    },
+
+    /**
+     * Removes one or more DHF proposals.
+     */
+    removeProposals(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        options: {
+            proposal_owner: string;
+            proposal_ids: number[];
+        },
+        signingKeys?: HiveKeyInput | HiveKeyInput[]
+    ) {
+        if (!client || !options?.proposal_owner || !Array.isArray(options.proposal_ids) || options.proposal_ids.length === 0) {
+            throw new Error('Remove proposals requires proposal_owner and proposal_ids');
+        }
+
+        const keys = signingKeys || config.ACTIVE_KEY;
+
+        if (!keys) {
+            throw new Error('Active key or explicit signing keys are required for proposal removal');
+        }
+
+        const operation: [string, any] = ['remove_proposal', {
+            proposal_owner: options.proposal_owner,
+            proposal_ids: options.proposal_ids,
+            extensions: []
+        }];
+
+        return this.broadcastOperations(client, [operation], keys);
     },
 
     /**

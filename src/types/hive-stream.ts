@@ -3,9 +3,24 @@ import type { Streamer } from '../streamer';
 import type { AdapterBase } from '../adapters/base.adapter';
 import type { ConfigInterface } from '../config';
 
-export type TransactionType = 'comment' | 'post' | 'transfer' | 'custom_json';
+export type EscrowOperationType = 'escrow_transfer' | 'escrow_approve' | 'escrow_dispute' | 'escrow_release';
 
-export type ContractTrigger = 'custom_json' | 'transfer' | 'time';
+export type TransactionType =
+    | 'comment'
+    | 'post'
+    | 'transfer'
+    | 'custom_json'
+    | EscrowOperationType
+    | 'recurrent_transfer'
+    | 'account_update'
+    | 'account_update2';
+
+export type ContractTrigger =
+    | 'custom_json'
+    | 'transfer'
+    | 'time'
+    | EscrowOperationType
+    | 'recurrent_transfer';
 
 export interface ContractPayload {
     contract: string;
@@ -45,6 +60,25 @@ export interface ContractContext extends ContractLifecycleContext {
         json: any;
         isSignedWithActiveKey: boolean;
     };
+    escrow?: {
+        type: EscrowOperationType;
+        from: string;
+        to: string;
+        agent: string;
+        escrowId: number;
+        who?: string;
+        receiver?: string;
+        hiveAmount?: string;
+        hbdAmount?: string;
+        fee?: string;
+        ratificationDeadline?: string;
+        expiration?: string;
+        approved?: boolean;
+    };
+    operation?: {
+        type: string;
+        data: any;
+    };
 }
 
 export interface ContractActionDefinition<Payload = any> {
@@ -77,12 +111,24 @@ export interface CustomJsonIdSubscription extends SubscriptionCallback {
     id: string;
 }
 
-export interface TransferMetadata {
+export interface EscrowSubscription extends SubscriptionCallback {
+    type: EscrowOperationType;
+}
+
+export interface OperationMetadata {
+    blockNumber?: number;
+    blockId?: string;
+    previousBlockId?: string;
+    transactionId?: string;
+    blockTime?: Date;
+}
+
+export interface TransferMetadata extends OperationMetadata {
     sender: string;
     amount: string;
 }
 
-export interface CustomJsonMetadata {
+export interface CustomJsonMetadata extends OperationMetadata {
     sender: string;
     isSignedWithActiveKey: boolean;
 }

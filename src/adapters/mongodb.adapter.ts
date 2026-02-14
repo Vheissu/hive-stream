@@ -1,5 +1,5 @@
 import { TimeAction } from './../actions';
-import { ContractPayload } from './../types/hive-stream';
+import { ContractPayload, TransferMetadata, CustomJsonMetadata } from './../types/hive-stream';
 import { AdapterBase } from './base.adapter';
 
 import { MongoClient, Db } from 'mongodb';
@@ -123,7 +123,7 @@ export class MongodbAdapter extends AdapterBase {
         this.transactionId = trxId;
     }
 
-    public async processTransfer(operation, payload: ContractPayload, metadata: { sender: string, amount: string }): Promise<boolean> {
+    public async processTransfer(operation, payload: ContractPayload, metadata: TransferMetadata): Promise<boolean> {
         if (!this.db) {
             await this.getDbInstance();
         }
@@ -131,14 +131,14 @@ export class MongodbAdapter extends AdapterBase {
         const collection = this.db.collection('transfers');
 
         const data = {
-            id: this.transactionId,
-            blockId: this.blockId,
-            blockNumber: this.blockNumber,
+            id: metadata.transactionId || this.transactionId,
+            blockId: metadata.blockId || this.blockId,
+            blockNumber: metadata.blockNumber || this.blockNumber,
             sender: metadata.sender,
             amount: metadata.amount,
             contractName: payload.contract,
             contractAction: payload.action,
-            ContractPayload: payload.payload
+            contractPayload: payload.payload
         };
 
         await collection.insertOne(data);
@@ -146,7 +146,7 @@ export class MongodbAdapter extends AdapterBase {
         return true;
     }
 
-    public async processCustomJson(operation, payload: ContractPayload, metadata: { sender: string, isSignedWithActiveKey: boolean }): Promise<boolean> {
+    public async processCustomJson(operation, payload: ContractPayload, metadata: CustomJsonMetadata): Promise<boolean> {
         if (!this.db) {
             await this.getDbInstance();
         }
@@ -154,14 +154,14 @@ export class MongodbAdapter extends AdapterBase {
         const collection = this.db.collection('customJson');
 
         const data = {
-            id: this.transactionId,
-            blockId: this.blockId,
-            blockNumber: this.blockNumber,
+            id: metadata.transactionId || this.transactionId,
+            blockId: metadata.blockId || this.blockId,
+            blockNumber: metadata.blockNumber || this.blockNumber,
             sender: metadata.sender,
             isSignedWithActiveKey: metadata.isSignedWithActiveKey,
             contractName: payload.contract,
             contractAction: payload.action,
-            ContractPayload: payload.payload
+            contractPayload: payload.payload
         };
 
         await collection.insertOne(data);

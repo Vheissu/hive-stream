@@ -77,6 +77,25 @@ ss.onTransfer((op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
 })
 ```
 
+#### Watch for escrow operations
+```javascript
+ss.onEscrowTransfer((op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+  
+});
+
+ss.onEscrowApprove((op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+  
+});
+
+ss.onEscrowDispute((op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+  
+});
+
+ss.onEscrowRelease((op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+  
+});
+```
+
 #### Watch for custom JSON operations
 ```javascript
 ss.onCustomJson((op, { sender, isSignedWithActiveKey }, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
@@ -152,6 +171,42 @@ issueHiveEngineTokensMultiple(from, accounts = [], symbol, memo = '', amount = '
 }
 ```
 
+### Escrow Operations
+```javascript
+escrowTransfer({
+  from,
+  to,
+  agent,
+  escrow_id,
+  hive_amount = '0.000 HIVE',
+  hbd_amount = '0.000 HBD',
+  fee,
+  ratification_deadline,
+  escrow_expiration,
+  json_meta
+}, signingKeys?)
+
+escrowApprove({ from, to, agent, who, escrow_id, approve }, signingKeys?)
+escrowDispute({ from, to, agent, who, escrow_id }, signingKeys?)
+escrowRelease({ from, to, agent, who, receiver, escrow_id, hive_amount, hbd_amount }, signingKeys?)
+```
+
+### Multisig + Authority Helpers
+```javascript
+broadcastOperations(operations, signingKeys?)
+broadcastMultiSigOperations(operations, signingKeys)
+createAuthority(keyAuths, accountAuths, weightThreshold)
+updateAccountAuthorities(account, authorityUpdate, signingKeys?)
+```
+
+### Recurrent Transfers + Governance
+```javascript
+recurrentTransfer({ from, to, amount, memo, recurrence, executions }, signingKeys?)
+createProposal({ creator, receiver, start_date, end_date, daily_pay, subject, permlink }, signingKeys?)
+updateProposalVotes({ voter, proposal_ids, approve }, signingKeys?)
+removeProposals({ proposal_owner, proposal_ids }, signingKeys?)
+```
+
 ### Upvote/Downvote Posts
 ```javascript
 upvote(votePercentage = '100.0', username, permlink) {
@@ -176,7 +231,7 @@ The payload shape is:
 
 ### Writing contracts
 
-Contracts are defined with `defineContract` + `action`. Each action can specify a trigger (`custom_json`, `transfer`, or `time`) and an optional Zod schema for payload validation.
+Contracts are defined with `defineContract` + `action`. Each action can specify a trigger (`custom_json`, `transfer`, `time`, `escrow_transfer`, `escrow_approve`, `escrow_dispute`, `escrow_release`, or `recurrent_transfer`) and an optional Zod schema for payload validation.
 
 For a full contract-building guide (payloads, context, triggers, validation, error handling, and exchange setup), see `DOCUMENTATION.md`.
 
