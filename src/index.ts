@@ -2,6 +2,7 @@ export * from './config';
 export * from './streamer';
 export * from './utils';
 export * from './actions';
+export * from './metadata';
 export * from './contracts/contract';
 
 export * from './adapters/base.adapter';

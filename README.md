@@ -23,38 +23,53 @@ ss.onCustomJson((op, { sender, isSignedWithActiveKey }, blockNumber, blockId, pr
 
 `new Streamer()` automatically registers the SQLite adapter and starts the built-in Express API server on port `5001` when `NODE_ENV !== 'test'`.
 
+## Builder/Tooling Metadata
+
+For external tooling (like visual builders), Hive Stream now exports a read-only metadata object:
+
+```javascript
+const { HIVE_STREAM_METADATA, getHiveStreamMetadata } = require('hive-stream');
+
+console.log(HIVE_STREAM_METADATA.subscriptions);
+console.log(getHiveStreamMetadata().writeOperations);
+```
+
+This metadata is static runtime data (no network calls) and includes config defaults, event callback signatures, write operation signatures, adapter metadata, contract trigger info, and valid `TimeAction` values.
+
 ## Configuration
 
 The `Streamer` object can accept an object of configuration values which are all optional. However, some operations like transferring Hive Engine tokens or other operations on the blockchain that are not READ ONLY, will require the active key and/or posting keys supplied as well as a username.
 
-The `BLOCK_CHECK_INTERVAL` value is how often to check for new blocks or in cases of error or falling behind, to poll for new blocks. You should keep this as the default 1000ms value which is one second. This allows you to account for situations where blocks fall behind the main block.
+The `blockCheckInterval` value is how often to check for new blocks or in cases of error or falling behind, to poll for new blocks. You should keep this as the default 1000ms value which is one second. This allows you to account for situations where blocks fall behind the main block.
 
-The `BLOCKS_BEHIND_WARNING` value is a numeric value of the number of blocks your API will fall behind from the master before warning to the console.
+The `blocksBehindWarning` value is a numeric value of the number of blocks your API will fall behind from the master before warning to the console.
 
-To resume automatically from stored state, keep `RESUME_FROM_STATE` enabled (default). To force a specific start block, set `RESUME_FROM_STATE` to `false` and supply `LAST_BLOCK_NUMBER`.
+To resume automatically from stored state, keep `resumeFromState` enabled (default). To force a specific start block, set `resumeFromState` to `false` and supply `lastBlockNumber`.
 
-For faster catch-up, `CATCH_UP_BATCH_SIZE` controls how many blocks are processed per polling cycle, and `CATCH_UP_DELAY_MS` controls the delay between catch-up batches (set to `0` for fastest catch-up).
+For faster catch-up, `catchUpBatchSize` controls how many blocks are processed per polling cycle, and `catchUpDelayMs` controls the delay between catch-up batches (set to `0` for fastest catch-up).
 
-The `API_NODES` are the Hive API endpoints used for failover. If you want to enable debug mode, set `DEBUG_MODE` to `true`. The configuration values and their defaults can be found in `src/config.ts`.
+The `apiNodes` are the Hive API endpoints used for failover. If you want to enable debug mode, set `debugMode` to `true`. The configuration values and their defaults can be found in `src/config.ts`.
+
+CamelCase config keys are recommended for readability. Legacy uppercase keys are still supported for backwards compatibility.
 
 ```
 const options = {
-  ACTIVE_KEY: '',
-  POSTING_KEY: '',
-  JSON_ID: 'hivestream',
-  HIVE_ENGINE_API: 'https://api.hive-engine.com/rpc',
-  HIVE_ENGINE_ID: 'ssc-mainnet-hive',
-  PAYLOAD_IDENTIFIER: 'hive_stream',
-  APP_NAME: 'hive-stream',
-  USERNAME: '',
-  LAST_BLOCK_NUMBER: 0,
-  BLOCK_CHECK_INTERVAL: 1000,
-  BLOCKS_BEHIND_WARNING: 25,
-  RESUME_FROM_STATE: true,
-  CATCH_UP_BATCH_SIZE: 50,
-  CATCH_UP_DELAY_MS: 0,
-  API_NODES: ['https://api.hive.blog', 'https://api.openhive.network', 'https://rpc.ausbit.dev'],
-  DEBUG_MODE: true
+  activeKey: '',
+  postingKey: '',
+  jsonId: 'hivestream',
+  hiveEngineApi: 'https://api.hive-engine.com/rpc',
+  hiveEngineId: 'ssc-mainnet-hive',
+  payloadIdentifier: 'hive_stream',
+  appName: 'hive-stream',
+  username: '',
+  lastBlockNumber: 0,
+  blockCheckInterval: 1000,
+  blocksBehindWarning: 25,
+  resumeFromState: true,
+  catchUpBatchSize: 50,
+  catchUpDelayMs: 0,
+  apiNodes: ['https://api.hive.blog', 'https://api.openhive.network', 'https://rpc.ausbit.dev'],
+  debugMode: true
 }
 
 const ss = new Streamer(options);
@@ -64,8 +79,8 @@ The configuration itself can also be overloaded using the `setConfig` method whi
 
 ```
 ss.setConfig({
-  ACTIVE_KEY: 'newactivekey',
-  USERNAME: 'newusername'
+  activeKey: 'newactivekey',
+  username: 'newusername'
 });
 ```
 

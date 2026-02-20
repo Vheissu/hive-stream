@@ -5,7 +5,7 @@ import { sleep } from '@hiveio/dhive/lib/utils';
 import { TimeAction } from './actions';
 import { Client } from '@hiveio/dhive';
 import { Utils } from './utils';
-import { Config, ConfigInterface } from './config';
+import { ConfigInput, ConfigInterface, createConfig, normalizeConfigInput } from './config';
 import { 
     ContractDefinition,
     ContractPayload,
@@ -39,7 +39,7 @@ export class Streamer {
 
     private attempts = 0;
 
-    private config: ConfigInterface = Config;
+    private config: ConfigInterface = createConfig();
     private client: Client;
     private hive;
 
@@ -94,8 +94,8 @@ export class Streamer {
 
     private utils = Utils;
 
-    constructor(userConfig: Partial<ConfigInterface> = {}) {
-        this.config = Object.assign(Config, userConfig);
+    constructor(userConfig: ConfigInput = {}) {
+        this.config = createConfig(userConfig);
 
         this.lastBlockNumber = this.config.LAST_BLOCK_NUMBER;
 
@@ -372,8 +372,8 @@ export class Streamer {
      *
      * @param config
      */
-    public setConfig(config: Partial<ConfigInterface>) {
-        Object.assign(this.config, config);
+    public setConfig(config: ConfigInput) {
+        Object.assign(this.config, normalizeConfigInput(config));
 
         // Set keys and username incase they have changed
         this.username = this.config.USERNAME;

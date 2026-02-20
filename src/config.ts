@@ -17,6 +17,65 @@ export interface ConfigInterface {
     DEBUG_MODE: boolean;
 }
 
+export interface ConfigInput extends Partial<ConfigInterface> {
+    activeKey?: ConfigInterface['ACTIVE_KEY'];
+    postingKey?: ConfigInterface['POSTING_KEY'];
+    jsonId?: ConfigInterface['JSON_ID'];
+    hiveEngineApi?: ConfigInterface['HIVE_ENGINE_API'];
+    hiveEngineId?: ConfigInterface['HIVE_ENGINE_ID'];
+    appName?: ConfigInterface['APP_NAME'];
+    username?: ConfigInterface['USERNAME'];
+    payloadIdentifier?: ConfigInterface['PAYLOAD_IDENTIFIER'];
+    lastBlockNumber?: ConfigInterface['LAST_BLOCK_NUMBER'];
+    blockCheckInterval?: ConfigInterface['BLOCK_CHECK_INTERVAL'];
+    blocksBehindWarning?: ConfigInterface['BLOCKS_BEHIND_WARNING'];
+    resumeFromState?: ConfigInterface['RESUME_FROM_STATE'];
+    catchUpBatchSize?: ConfigInterface['CATCH_UP_BATCH_SIZE'];
+    catchUpDelayMs?: ConfigInterface['CATCH_UP_DELAY_MS'];
+    apiNodes?: ConfigInterface['API_NODES'];
+    debugMode?: ConfigInterface['DEBUG_MODE'];
+}
+
+type ConfigAliasKey = keyof Omit<ConfigInput, keyof ConfigInterface>;
+
+const CONFIG_KEYS: Array<keyof ConfigInterface> = [
+    'ACTIVE_KEY',
+    'POSTING_KEY',
+    'JSON_ID',
+    'HIVE_ENGINE_API',
+    'HIVE_ENGINE_ID',
+    'APP_NAME',
+    'USERNAME',
+    'PAYLOAD_IDENTIFIER',
+    'LAST_BLOCK_NUMBER',
+    'BLOCK_CHECK_INTERVAL',
+    'BLOCKS_BEHIND_WARNING',
+    'RESUME_FROM_STATE',
+    'CATCH_UP_BATCH_SIZE',
+    'CATCH_UP_DELAY_MS',
+    'API_NODES',
+    'DEBUG_MODE',
+];
+
+export const CONFIG_KEY_ALIASES: Record<ConfigAliasKey, keyof ConfigInterface> = {
+    activeKey: 'ACTIVE_KEY',
+    postingKey: 'POSTING_KEY',
+    jsonId: 'JSON_ID',
+    hiveEngineApi: 'HIVE_ENGINE_API',
+    hiveEngineId: 'HIVE_ENGINE_ID',
+    appName: 'APP_NAME',
+    username: 'USERNAME',
+    payloadIdentifier: 'PAYLOAD_IDENTIFIER',
+    lastBlockNumber: 'LAST_BLOCK_NUMBER',
+    blockCheckInterval: 'BLOCK_CHECK_INTERVAL',
+    blocksBehindWarning: 'BLOCKS_BEHIND_WARNING',
+    resumeFromState: 'RESUME_FROM_STATE',
+    catchUpBatchSize: 'CATCH_UP_BATCH_SIZE',
+    catchUpDelayMs: 'CATCH_UP_DELAY_MS',
+    apiNodes: 'API_NODES',
+    debugMode: 'DEBUG_MODE',
+};
+
 export const Config: ConfigInterface = {
     ACTIVE_KEY: process.env.ACTIVE_KEY,
     POSTING_KEY: process.env.POSTING_KEY,
@@ -44,3 +103,42 @@ export const Config: ConfigInterface = {
 
     DEBUG_MODE: true,
 };
+
+export function normalizeConfigInput(config: ConfigInput = {}): Partial<ConfigInterface> {
+    const normalized: Partial<ConfigInterface> = {};
+    const normalizedRecord = normalized as Record<keyof ConfigInterface, ConfigInterface[keyof ConfigInterface]>;
+    const canonicalConfig = config as Partial<ConfigInterface>;
+
+    for (const key of CONFIG_KEYS) {
+        const value = canonicalConfig[key];
+        if (value !== undefined) {
+            normalizedRecord[key] = value;
+        }
+    }
+
+    const aliasEntries = Object.entries(CONFIG_KEY_ALIASES) as Array<[ConfigAliasKey, keyof ConfigInterface]>;
+
+    for (const [aliasKey, canonicalKey] of aliasEntries) {
+        if (normalized[canonicalKey] !== undefined) {
+            continue;
+        }
+
+        const aliasValue = config[aliasKey];
+        if (aliasValue !== undefined) {
+            normalizedRecord[canonicalKey] = aliasValue as ConfigInterface[typeof canonicalKey];
+        }
+    }
+
+    return normalized;
+}
+
+export function createConfig(config: ConfigInput = {}): ConfigInterface {
+    const normalized = normalizeConfigInput(config);
+    const apiNodes = Array.isArray(normalized.API_NODES) ? [...normalized.API_NODES] : [...Config.API_NODES];
+
+    return {
+        ...Config,
+        ...normalized,
+        API_NODES: apiNodes,
+    };
+}
