@@ -21,6 +21,8 @@ ss.onCustomJson((op, { sender, isSignedWithActiveKey }, blockNumber, blockId, pr
 });
 ```
 
+`new Streamer()` automatically registers the SQLite adapter and starts the built-in Express API server on port `5001` when `NODE_ENV !== 'test'`.
+
 ## Configuration
 
 The `Streamer` object can accept an object of configuration values which are all optional. However, some operations like transferring Hive Engine tokens or other operations on the blockchain that are not READ ONLY, will require the active key and/or posting keys supplied as well as a username.
@@ -39,6 +41,10 @@ The `API_NODES` are the Hive API endpoints used for failover. If you want to ena
 const options = {
   ACTIVE_KEY: '',
   POSTING_KEY: '',
+  JSON_ID: 'hivestream',
+  HIVE_ENGINE_API: 'https://api.hive-engine.com/rpc',
+  HIVE_ENGINE_ID: 'ssc-mainnet-hive',
+  PAYLOAD_IDENTIFIER: 'hive_stream',
   APP_NAME: 'hive-stream',
   USERNAME: '',
   LAST_BLOCK_NUMBER: 0,
@@ -48,7 +54,7 @@ const options = {
   CATCH_UP_BATCH_SIZE: 50,
   CATCH_UP_DELAY_MS: 0,
   API_NODES: ['https://api.hive.blog', 'https://api.openhive.network', 'https://rpc.ausbit.dev'],
-  DEBUG_MODE: false
+  DEBUG_MODE: true
 }
 
 const ss = new Streamer(options);
@@ -66,15 +72,16 @@ ss.setConfig({
 ## Streamer
 
 The following subscription methods are read only methods, they allow you to react to certain Hive and Hive Engine events on the blockchain. You do not need to pass in any keys to use these methods as they're purely read only.
+These event subscriptions and contract actions are separate paths: subscriptions fire for matching operations, while contracts only run when a payload wrapper exists under `PAYLOAD_IDENTIFIER`.
 
 **The following actions DO require calling the `start` method first to watch the blockchain**
 
 #### Watch for transfers
 
 ```javascript
-ss.onTransfer((op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
-
-})
+ss.onTransfer('myaccount', (op, { sender, amount, asset, memo }, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+  // Fires only when op.to === 'myaccount'
+});
 ```
 
 #### Watch for escrow operations
@@ -107,7 +114,14 @@ ss.onCustomJson((op, { sender, isSignedWithActiveKey }, blockNumber, blockId, pr
 ```javascript
 ss.onCustomJsonId((op, { sender, isSignedWithActiveKey }, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
   
-})
+}, 'your-custom-json-id');
+```
+
+#### Watch for Hive Engine custom JSON operations
+```javascript
+ss.onHiveEngine((contractName, contractAction, contractPayload, sender, op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+  
+});
 ```
 
 #### Watch for post operations
@@ -220,7 +234,8 @@ downvote(votePercentage = '100.0', username, permlink) {
 
 ## Contracts
 
-Hive Stream allows you to register contract definitions that execute when a transfer memo or custom JSON operation matches. The payload lives under the `PAYLOAD_IDENTIFIER` (default: `hive_stream`).
+Hive Stream allows you to register contract definitions that execute when a transfer memo or custom JSON operation includes a contract wrapper. The payload lives under the `PAYLOAD_IDENTIFIER` key (default: `hive_stream`).
+Regular event handlers like `onTransfer` and `onCustomJson` still run for matching operations even when no contract wrapper is present.
 
 The payload shape is:
 

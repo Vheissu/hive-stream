@@ -9,6 +9,8 @@ Hive Stream is a Node.js library for streaming Hive blockchain activity and rout
 
 This document focuses on the contract system and how to build robust contracts using the new `defineContract`/`action` API.
 
+By default, `new Streamer()` registers the SQLite adapter and starts the built-in Express API server on port `5001` when `NODE_ENV !== 'test'`.
+
 ---
 
 ## Concepts
@@ -23,7 +25,6 @@ Contracts are registered with the `Streamer` and called when a payload matches `
 
 ### Actions
 An **action** is a handler function plus metadata such as:
-- the trigger (`custom_json`, `transfer`, or `time`)
 - the trigger (`custom_json`, `transfer`, `time`, `escrow_transfer`, `escrow_approve`, `escrow_dispute`, `escrow_release`, or `recurrent_transfer`)
 - an optional Zod schema to validate payloads
 - whether it requires an active key signature
@@ -32,6 +33,8 @@ An **action** is a handler function plus metadata such as:
 Hive Stream extracts payloads from:
 - **custom_json**: `op[1].json`
 - **transfer memo**: `op[1].memo`
+- **recurrent transfer memo**: `op[1].memo`
+- **escrow metadata**: `op[1].json_meta`
 
 It expects a wrapper object that looks like:
 
@@ -47,6 +50,19 @@ It expects a wrapper object that looks like:
 ```
 
 The wrapper key `hive_stream` is the default `PAYLOAD_IDENTIFIER`. You can change it in config.
+
+Relevant configuration defaults:
+
+- `PAYLOAD_IDENTIFIER`: `hive_stream`
+- `JSON_ID`: `hivestream`
+- `HIVE_ENGINE_ID`: `ssc-mainnet-hive`
+- `HIVE_ENGINE_API`: `https://api.hive-engine.com/rpc`
+
+### Event Handlers vs Contracts
+Streamer event handlers (`onTransfer`, `onCustomJson`, `onCustomJsonId`, etc.) and contract actions are different execution paths.
+
+- Event handlers fire for matching blockchain operations.
+- Contract actions only run when a valid wrapper exists under `PAYLOAD_IDENTIFIER` and the `contract` + `action` values match a registered contract action.
 
 ---
 

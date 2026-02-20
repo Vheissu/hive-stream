@@ -1,13 +1,13 @@
 42189228
 
-hive_keychain.requestCustomJson('beggars', 'hivedice', 'active', JSON.stringify({ hiveContract: { name: 'hivedice', action: 'roll', payload: { roll: 22, direction: 'lesserThan'} } }), 'Test', function(response) {
+hive_keychain.requestCustomJson('beggars', 'hivestream', 'active', JSON.stringify({ hive_stream: { contract: 'hivedice', action: 'roll', payload: { roll: 22, direction: 'lesserThan'} } }), 'Test', function(response) {
 	console.log(response);
 });
 
 42203941
 Transfer memo payload
 
-{"hiveContract":{"id":"testdice", "name":"hivedice","action":"roll","payload":{"roll":95,"direction":"greaterThan"}}}
+{"hive_stream":{"contract":"hivedice","action":"roll","payload":{"roll":95,"direction":"greaterThan"}}}
 
 42208330
 Transfer memo, amount higher than max
