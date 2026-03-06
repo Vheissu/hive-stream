@@ -145,6 +145,87 @@ describe('Hive chain features', () => {
             expect(nonMatching).not.toHaveBeenCalled();
         });
 
+        test('onHiveEngine still fires when tx verification lookup fails', async () => {
+            const handler = jest.fn();
+            const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+            const getTransactionInfo = jest.spyOn(streamer['hive'], 'getTransactionInfo')
+                .mockRejectedValue(new Error('temporary hive engine outage'));
+
+            streamer.onHiveEngine(handler);
+
+            await streamer.processOperation([
+                'custom_json',
+                {
+                    id: 'ssc-mainnet-hive',
+                    json: JSON.stringify({
+                        contractName: 'tokens',
+                        contractAction: 'transfer',
+                        contractPayload: {
+                            symbol: 'TEST',
+                            to: 'target',
+                            quantity: '1.000',
+                            memo: 'memo'
+                        }
+                    }),
+                    required_auths: ['alice'],
+                    required_posting_auths: []
+                }
+            ], 20, 'block-20', 'block-19', 'trx-20', new Date('2025-01-01T00:00:00.000Z'));
+
+            expect(getTransactionInfo).toHaveBeenCalledWith('trx-20');
+            expect(handler).toHaveBeenCalledWith(
+                'tokens',
+                'transfer',
+                {
+                    symbol: 'TEST',
+                    to: 'target',
+                    quantity: '1.000',
+                    memo: 'memo'
+                },
+                'alice',
+                expect.objectContaining({ id: 'ssc-mainnet-hive' }),
+                20,
+                'block-20',
+                'block-19',
+                'trx-20',
+                expect.any(Date)
+            );
+
+            consoleError.mockRestore();
+        });
+
+        test('onHiveEngine does not fire when tx verification reports contract errors', async () => {
+            const handler = jest.fn();
+            jest.spyOn(streamer['hive'], 'getTransactionInfo').mockResolvedValue({
+                logs: JSON.stringify({
+                    errors: ['boom']
+                })
+            } as any);
+
+            streamer.onHiveEngine(handler);
+
+            await streamer.processOperation([
+                'custom_json',
+                {
+                    id: 'ssc-mainnet-hive',
+                    json: JSON.stringify({
+                        contractName: 'tokens',
+                        contractAction: 'transfer',
+                        contractPayload: {
+                            symbol: 'TEST',
+                            to: 'target',
+                            quantity: '1.000',
+                            memo: 'memo'
+                        }
+                    }),
+                    required_auths: ['alice'],
+                    required_posting_auths: []
+                }
+            ], 21, 'block-21', 'block-20', 'trx-21', new Date('2025-01-01T00:00:00.000Z'));
+
+            expect(handler).not.toHaveBeenCalled();
+        });
+
         test('processTransfer forwards block metadata into adapter', async () => {
             const adapter = createMockAdapter();
             const processTransferSpy = jest.spyOn(adapter, 'processTransfer');

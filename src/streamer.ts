@@ -789,29 +789,31 @@ export class Streamer {
             if (id === this.config.HIVE_ENGINE_ID && this.customJsonHiveEngineSubscriptions.length > 0) {
                 const enginePayload = json || {};
                 const { contractName, contractAction, contractPayload } = enginePayload;
+                let hasVerificationErrors = false;
 
                 try {
                     const txInfo = await this.hive.getTransactionInfo(trxId);
                     const logs = txInfo && txInfo.logs ? Utils.jsonParse(txInfo.logs) : null;
-
-                    if (txInfo && logs && typeof logs.errors === 'undefined') {
-                        await Promise.all(this.customJsonHiveEngineSubscriptions.map(async (sub: any) => {
-                            sub.callback(
-                                contractName,
-                                contractAction,
-                                contractPayload,
-                                sender,
-                                operationData,
-                                blockNumber,
-                                blockId,
-                                prevBlockId,
-                                trxId,
-                                blockTime
-                            );
-                        }));
-                    }
+                    hasVerificationErrors = Boolean(txInfo && logs && typeof logs.errors !== 'undefined');
                 } catch (e) {
                     console.error(e);
+                }
+
+                if (!hasVerificationErrors) {
+                    await Promise.all(this.customJsonHiveEngineSubscriptions.map(async (sub: any) => {
+                        sub.callback(
+                            contractName,
+                            contractAction,
+                            contractPayload,
+                            sender,
+                            operationData,
+                            blockNumber,
+                            blockId,
+                            prevBlockId,
+                            trxId,
+                            blockTime
+                        );
+                    }));
                 }
             }
         }
