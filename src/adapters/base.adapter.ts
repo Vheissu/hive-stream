@@ -74,6 +74,10 @@ export class AdapterBase {
         throw new Error('Query method not implemented in adapter');
     }
 
+    public async addEvent(date: string | Date, contract: string, action: string, payload: any, data: any): Promise<boolean> {
+        return true;
+    }
+
     public async getEvents(): Promise<any[]> {
         return [];
     }

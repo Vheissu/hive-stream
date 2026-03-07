@@ -458,7 +458,19 @@ export const HIVE_STREAM_METADATA: Readonly<HiveStreamMetadata> = deepFreeze({
             'createRpsContract',
             'createPollContract',
             'createTipJarContract',
-            'createExchangeContract'
+            'createExchangeContract',
+            'createAuctionHouseContract',
+            'createSubscriptionContract',
+            'createCrowdfundContract',
+            'createBountyBoardContract',
+            'createInvoiceContract',
+            'createSavingsContract',
+            'createBookingContract',
+            'createGiftCardContract',
+            'createGroupBuyContract',
+            'createSweepstakesContract',
+            'createDcaBotContract',
+            'createMultisigTreasuryContract'
         ]
     },
     timeAction: {

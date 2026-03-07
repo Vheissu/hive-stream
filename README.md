@@ -327,6 +327,18 @@ The library includes several built-in contract examples in the `src/contracts` f
 - `createPollContract` - A poll/voting contract
 - `createTipJarContract` - A tip jar + message board contract
 - `createExchangeContract` - A basic exchange with deposits, withdrawals, balances, and order matching (SQL adapter required)
+- `createAuctionHouseContract` - Auctions with reserve prices, buy-now support, and timed settlement
+- `createSubscriptionContract` - Subscription plans with transfer and recurrent-transfer renewals
+- `createCrowdfundContract` - Crowdfunding campaigns with milestones, finalization, and refund tracking
+- `createBountyBoardContract` - Funded bounties, submissions, and award selection
+- `createInvoiceContract` - Invoices with partial payments, recurring payments, and overdue sweeps
+- `createSavingsContract` - Savings goals with recurring contributions and withdrawal requests
+- `createBookingContract` - Reservable listings with paid booking windows and confirmations
+- `createGiftCardContract` - Gift card issuance, redemption, and cancellation flows
+- `createGroupBuyContract` - Threshold-based pooled purchases and participant commitments
+- `createSweepstakesContract` - Paid-entry sweepstakes with deterministic winner draws
+- `createDcaBotContract` - Time-based DCA bot scheduling and execution request events
+- `createMultisigTreasuryContract` - Multisig vaults, proposal approvals, and execution readiness tracking
 
 These can be imported and used as examples for building your own contracts:
 

@@ -302,6 +302,18 @@ export const TipJar = defineContract({
 - `createPollContract` - Polls and votes
 - `createTipJarContract` - Tip jar + message log
 - `createExchangeContract` - Deposits/withdrawals/orders/matching (SQL)
+- `createAuctionHouseContract` - Auctions with bids, reserve prices, and settlement
+- `createSubscriptionContract` - Subscription plans with transfer and recurrent renewals
+- `createCrowdfundContract` - Crowdfunding campaigns with milestones and refund flows
+- `createBountyBoardContract` - Funded bounties, submissions, and award tracking
+- `createInvoiceContract` - Invoices with partial/recurrent payments and overdue sweeps
+- `createSavingsContract` - Savings goals with recurring contributions and withdrawals
+- `createBookingContract` - Booking listings, reservations, confirmations, and cancellations
+- `createGiftCardContract` - Gift card issuance, redemption, and cancellation
+- `createGroupBuyContract` - Group buys with commitments, finalization, and withdrawals
+- `createSweepstakesContract` - Paid-entry sweepstakes with deterministic draws
+- `createDcaBotContract` - Time-driven DCA execution scheduling
+- `createMultisigTreasuryContract` - Multisig vaults with approval queues and ready-to-execute proposals
 
 ### Example Snippets
 
