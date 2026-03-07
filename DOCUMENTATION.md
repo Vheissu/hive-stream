@@ -9,7 +9,7 @@ Hive Stream is a Node.js library for streaming Hive blockchain activity and rout
 
 This document focuses on the contract system and how to build robust contracts using the new `defineContract`/`action` API.
 
-By default, `new Streamer()` registers the SQLite adapter and starts the built-in Express API server on port `5001` when `NODE_ENV !== 'test'`.
+`new Streamer()` is side-effect free. The default SQLite adapter is initialized lazily, and the built-in Express API only starts when you call `startApiServer()` or enable it through config before `start()`.
 
 ---
 
@@ -378,7 +378,24 @@ createExchangeContract({
 
 ### API Endpoints
 
-If you run the built-in API server, the following endpoints are available:
+If you want the built-in API server to start alongside block streaming, configure:
+
+```ts
+const streamer = new Streamer({
+    apiEnabled: true,
+    apiPort: 5001
+});
+
+await streamer.start();
+```
+
+You can also run the API independently:
+
+```ts
+await streamer.startApiServer();
+```
+
+When the built-in API server is running, the following endpoints are available:
 
 - `GET /exchange/balances` (optional query `?account=alice`)
 - `GET /exchange/orders` (query `account`, `base`, `quote`, `status`)

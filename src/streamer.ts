@@ -60,9 +60,14 @@ export class Streamer {
     private blockTime: Date;
     private latestBlockchainTime: Date;
     private disableAllProcessing = false;
+    private isStarted = false;
 
     private contracts: ContractDefinition[] = [];
-    private adapter;
+    private adapter: AdapterBase;
+    private adapterInitializationPromise: Promise<void> | null = null;
+    private adapterInitialized = false;
+    private initializedContracts = new Set<string>();
+    private apiServer: Api | null = null;
     private actions: TimeAction[] = [];
 
     // Performance optimization properties
@@ -104,42 +109,130 @@ export class Streamer {
         this.activeKey = this.config.ACTIVE_KEY;
 
         this.hive = new hivejs(this.config.HIVE_ENGINE_API);
-
         this.client = new Client(this.config.API_NODES);
-
-        if (process?.env?.NODE_ENV !== 'test') {
-            this._initializeAdapter(new SqliteAdapter());
-            new Api(this);
-        }
-        
-        // Start subscription cleanup interval
-        this.subscriptionCleanupInterval = setInterval(() => {
-            this.cleanupSubscriptions();
-        }, 60000); // Cleanup every minute
+        this.adapter = new SqliteAdapter();
     }
 
-    private _initializeAdapter(adapter: AdapterBase) {
-        this.adapter = adapter;
-
-        if (this?.adapter?.create) {
-            this.adapter.create();
+    private async ensureAdapterReady(): Promise<void> {
+        if (this.adapterInitialized) {
+            return;
         }
+
+        if (!this.adapter) {
+            throw new Error('No adapter registered');
+        }
+
+        if (!this.adapterInitializationPromise) {
+            this.adapterInitializationPromise = Promise.resolve(this.adapter.create?.())
+                .then(() => {
+                    this.adapterInitialized = true;
+                })
+                .catch((error) => {
+                    this.adapterInitializationPromise = null;
+                    this.adapterInitialized = false;
+                    throw error;
+                });
+        }
+
+        await this.adapterInitializationPromise;
+    }
+
+    private getLifecycleContext() {
+        return {
+            streamer: this,
+            adapter: this.adapter,
+            config: this.config
+        };
+    }
+
+    private async initializeContract(contract: ContractDefinition): Promise<void> {
+        if (this.initializedContracts.has(contract.name)) {
+            return;
+        }
+
+        await this.ensureAdapterReady();
+
+        if (contract.hooks?.create) {
+            await contract.hooks.create(this.getLifecycleContext());
+        }
+
+        this.initializedContracts.add(contract.name);
+    }
+
+    private async initializeContracts(): Promise<void> {
+        for (const contract of this.contracts) {
+            await this.initializeContract(contract);
+        }
+    }
+
+    private async destroyContractLifecycle(contract: ContractDefinition): Promise<void> {
+        if (!this.initializedContracts.has(contract.name)) {
+            return;
+        }
+
+        if (contract.hooks?.destroy) {
+            await contract.hooks.destroy(this.getLifecycleContext());
+        }
+
+        this.initializedContracts.delete(contract.name);
+    }
+
+    private async destroyContracts(): Promise<void> {
+        for (const contract of [...this.contracts]) {
+            await this.destroyContractLifecycle(contract);
+        }
+    }
+
+    private startSubscriptionCleanupInterval(): void {
+        if (this.subscriptionCleanupInterval) {
+            return;
+        }
+
+        this.subscriptionCleanupInterval = setInterval(() => {
+            this.cleanupSubscriptions();
+        }, 60000);
+    }
+
+    private clearRuntimeTimers(): void {
+        if (this.blockNumberTimeout) {
+            clearTimeout(this.blockNumberTimeout);
+            this.blockNumberTimeout = null;
+        }
+
+        if (this.latestBlockTimer) {
+            clearInterval(this.latestBlockTimer);
+            this.latestBlockTimer = null;
+        }
+
+        if (this.subscriptionCleanupInterval) {
+            clearInterval(this.subscriptionCleanupInterval);
+            this.subscriptionCleanupInterval = null;
+        }
+
+        this.isPollingBlock = false;
     }
 
     public async registerAdapter(adapter: AdapterBase) {
-        if (this.adapter && this.adapter.destroy) {
+        if (!adapter) {
+            throw new Error('Adapter must be provided');
+        }
+
+        await this.destroyContracts();
+
+        if (this.adapterInitialized && this.adapter?.destroy) {
             try {
                 await this.adapter.destroy();
             } catch (error) {
                 console.warn('[Streamer] Error destroying existing adapter:', error);
             }
         }
-        
-        this.adapter = adapter;
 
-        if (this?.adapter?.create) {
-            await this.adapter.create();
-        }
+        this.adapter = adapter;
+        this.adapterInitialized = false;
+        this.adapterInitializationPromise = null;
+
+        await this.ensureAdapterReady();
+        await this.initializeContracts();
     }
 
     public getAdapter(): AdapterBase {
@@ -153,6 +246,8 @@ export class Streamer {
         if (!action || !(action instanceof TimeAction)) {
             throw new Error('Invalid action: must be an instance of TimeAction');
         }
+
+        await this.ensureAdapterReady();
 
         const loadedActions: TimeAction[] = await this.adapter.loadActions() as TimeAction[];
 
@@ -282,7 +377,7 @@ export class Streamer {
      */
     private async saveActionsToDisk(): Promise<void> {
         try {
-            if (this.adapter?.saveState) {
+            if (this.adapterInitialized && this.adapter?.saveState) {
                 await this.adapter.saveState({
                     lastBlockNumber: this.lastBlockNumber,
                     actions: this.actions.map(a => a.toJSON())
@@ -332,16 +427,7 @@ export class Streamer {
             throw new Error(`Contract '${contract.name}' must define actions`);
         }
 
-        const lifecycleContext = {
-            streamer: this,
-            adapter: this.adapter,
-            config: this.config
-        };
-
-        if (contract.hooks?.create) {
-            await contract.hooks.create(lifecycleContext);
-        }
-
+        await this.initializeContract(contract);
         this.contracts.push(contract);
         this.contractCache.set(contract.name, contract);
     }
@@ -351,15 +437,7 @@ export class Streamer {
 
         if (contractIndex >= 0) {
             const contract = this.contracts[contractIndex];
-
-            if (contract?.hooks?.destroy) {
-                await contract.hooks.destroy({
-                    streamer: this,
-                    adapter: this.adapter,
-                    config: this.config
-                });
-            }
-
+            await this.destroyContractLifecycle(contract);
             this.contracts.splice(contractIndex, 1);
             this.contractCache.delete(name);
         }
@@ -373,12 +451,35 @@ export class Streamer {
      * @param config
      */
     public setConfig(config: ConfigInput) {
-        Object.assign(this.config, normalizeConfigInput(config));
+        const normalized = normalizeConfigInput(config);
+        const shouldRecreateClient = normalized.API_NODES !== undefined;
+        const shouldRecreateHiveEngine = normalized.HIVE_ENGINE_API !== undefined;
+        const shouldSyncApiServer = normalized.API_ENABLED !== undefined || normalized.API_PORT !== undefined;
+
+        Object.assign(this.config, normalized);
 
         // Set keys and username incase they have changed
         this.username = this.config.USERNAME;
         this.postingKey = this.config.POSTING_KEY;
         this.activeKey = this.config.ACTIVE_KEY;
+
+        if (shouldRecreateClient) {
+            this.client = new Client(this.config.API_NODES);
+        }
+
+        if (shouldRecreateHiveEngine) {
+            this.hive = new hivejs(this.config.HIVE_ENGINE_API);
+        }
+
+        if (shouldSyncApiServer && (this.apiServer || this.isStarted)) {
+            const syncApiServer = this.config.API_ENABLED
+                ? this.startApiServer(this.config.API_PORT)
+                : this.stopApiServer();
+
+            syncApiServer.catch((error) => {
+                console.error('[Streamer] Failed to sync API server after config update:', error);
+            });
+        }
 
         return this;
     }
@@ -390,11 +491,18 @@ export class Streamer {
      *
      */
     public async start(): Promise<Streamer> {
+        if (this.isStarted) {
+            return this;
+        }
+
         if (this.config.DEBUG_MODE) {
             console.log('Starting to stream the Hive blockchain');
         }
 
         this.disableAllProcessing = false;
+        await this.ensureAdapterReady();
+        await this.initializeContracts();
+        this.startSubscriptionCleanupInterval();
 
         const state = await this.adapter.loadState();
 
@@ -408,10 +516,15 @@ export class Streamer {
             this.lastBlockNumber = this.config.LAST_BLOCK_NUMBER;
         }
 
+        if (this.config.API_ENABLED) {
+            await this.startApiServer(this.config.API_PORT);
+        }
+
         // Kicks off the blockchain streaming and operation parsing
         this.getBlock();
 
         this.latestBlockTimer = setInterval(() => { this.getLatestBlock(); }, this.config.BLOCK_CHECK_INTERVAL);
+        this.isStarted = true;
 
         return this;
     }
@@ -423,24 +536,50 @@ export class Streamer {
      */
     public async stop(): Promise<void> {
         this.disableAllProcessing = true;
+        this.isStarted = false;
+        this.clearRuntimeTimers();
 
-        if (this.blockNumberTimeout) {
-            clearTimeout(this.blockNumberTimeout);
-        }
+        await this.stopApiServer();
+        await this.destroyContracts();
 
-        if (this.latestBlockTimer) {
-            clearInterval(this.latestBlockTimer);
-        }
-        
-        if (this.subscriptionCleanupInterval) {
-            clearInterval(this.subscriptionCleanupInterval);
-        }
-
-        if (this?.adapter?.destroy) {
+        if (this.adapterInitialized && this?.adapter?.destroy) {
             await this.adapter.destroy();
         }
 
-        await sleep(800);
+        this.adapterInitialized = false;
+        this.adapterInitializationPromise = null;
+
+        await sleep(25);
+    }
+
+    public async startApiServer(port: number = this.config.API_PORT): Promise<Api> {
+        await this.ensureAdapterReady();
+
+        if (this.apiServer?.server && this.apiServer.port === port) {
+            return this.apiServer;
+        }
+
+        if (this.apiServer) {
+            await this.stopApiServer();
+        }
+
+        this.apiServer = new Api(this, { port });
+        await this.apiServer.start();
+        return this.apiServer;
+    }
+
+    public async stopApiServer(): Promise<void> {
+        if (!this.apiServer) {
+            return;
+        }
+
+        const apiServer = this.apiServer;
+        this.apiServer = null;
+        await apiServer.stop();
+    }
+
+    public getApiServer(): Api | null {
+        return this.apiServer;
     }
 
     private async getLatestBlock() {
@@ -569,50 +708,34 @@ export class Streamer {
             this.adapter.processBlock(block);
         }
 
-        // Process transactions with improved concurrency
+        // Hive operations are order-sensitive, so process them sequentially.
         const transactions = block.transactions as any[];
         const transactionIds = block.transaction_ids;
-        
-        // Create operation processing promises for better concurrency
-        const operationPromises: Promise<void>[] = [];
-        
+
         for (let i = 0; i < transactions.length; i++) {
             const transaction = transactions[i];
             const operations = transaction.operations;
-            
-            // Process operations in batch for better performance
+
             for (let opIndex = 0; opIndex < operations.length; opIndex++) {
                 const op = operations[opIndex];
-                
-                // Create promise for each operation (but don't await yet)
-                const operationPromise = this.processOperation(
-                    op as [string, any],
-                    blockNumber,
-                    block.block_id,
-                    block.previous,
-                    transactionIds[i],
-                    blockTime
-                ).catch(error => {
+
+                try {
+                    await this.processOperation(
+                        op as [string, any],
+                        blockNumber,
+                        block.block_id,
+                        block.previous,
+                        transactionIds[i],
+                        blockTime
+                    );
+                } catch (error) {
                     console.error('[Streamer] Operation processing error:', error, {
                         blockNumber,
                         transactionIndex: i,
                         operationIndex: opIndex
                     });
-                });
-                
-                operationPromises.push(operationPromise);
-                
-                // Process in batches to avoid overwhelming the system
-                if (operationPromises.length >= 50) {
-                    await Promise.all(operationPromises);
-                    operationPromises.length = 0; // Clear array
                 }
             }
-        }
-        
-        // Process any remaining operations
-        if (operationPromises.length > 0) {
-            await Promise.all(operationPromises);
         }
 
         this.lastBlockNumber = blockNumber;
@@ -1154,8 +1277,11 @@ export class Streamer {
     }
 
     public async saveStateToDisk(): Promise<void> {
-        if (this.adapter?.saveState) {
-            await this.adapter.saveState({lastBlockNumber: this.lastBlockNumber, actions: this.actions});
+        if (this.adapterInitialized && this.adapter?.saveState) {
+            await this.adapter.saveState({
+                lastBlockNumber: this.lastBlockNumber,
+                actions: this.actions.map(action => action.toJSON())
+            });
         }
     }
 

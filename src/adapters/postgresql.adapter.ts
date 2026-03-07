@@ -544,6 +544,14 @@ export class PostgreSQLAdapter extends AdapterBase {
         }
     }
 
+    public async runInTransaction<T>(work: (adapter: AdapterBase) => Promise<T>): Promise<T> {
+        return this.db.transaction(async (trx) => {
+            const transactionAdapter = Object.create(this) as PostgreSQLAdapter;
+            transactionAdapter.db = trx as unknown as Knex;
+            return work(transactionAdapter);
+        });
+    }
+
     public async getExchangeBalances(account?: string) {
         try {
             const query = this.db('exchange_balances')

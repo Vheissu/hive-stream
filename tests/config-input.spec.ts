@@ -15,6 +15,8 @@ describe('Config input aliases', () => {
             catchUpBatchSize: 10,
             catchUpDelayMs: 25,
             apiNodes: ['https://api.hive.blog'],
+            apiEnabled: true,
+            apiPort: 5050,
             debugMode: false
         });
 
@@ -29,6 +31,8 @@ describe('Config input aliases', () => {
         expect(normalized.CATCH_UP_BATCH_SIZE).toBe(10);
         expect(normalized.CATCH_UP_DELAY_MS).toBe(25);
         expect(normalized.API_NODES).toEqual(['https://api.hive.blog']);
+        expect(normalized.API_ENABLED).toBe(true);
+        expect(normalized.API_PORT).toBe(5050);
         expect(normalized.DEBUG_MODE).toBe(false);
     });
 
@@ -44,10 +48,14 @@ describe('Config input aliases', () => {
     test('createConfig merges aliases with defaults', () => {
         const config = createConfig({
             jsonId: 'custom-json-id',
+            apiEnabled: true,
+            apiPort: 5050,
             debugMode: false
         });
 
         expect(config.JSON_ID).toBe('custom-json-id');
+        expect(config.API_ENABLED).toBe(true);
+        expect(config.API_PORT).toBe(5050);
         expect(config.DEBUG_MODE).toBe(false);
         expect(Array.isArray(config.API_NODES)).toBe(true);
     });
@@ -57,10 +65,14 @@ describe('Config input aliases', () => {
             username: 'builder-user',
             postingKey: 'posting-key',
             activeKey: 'active-key',
-            jsonId: 'custom-id'
+            jsonId: 'custom-id',
+            apiEnabled: true,
+            apiPort: 5050
         });
 
         expect(sut['config'].JSON_ID).toBe('custom-id');
+        expect(sut['config'].API_ENABLED).toBe(true);
+        expect(sut['config'].API_PORT).toBe(5050);
         expect(sut['username']).toBe('builder-user');
         expect(sut['postingKey']).toBe('posting-key');
         expect(sut['activeKey']).toBe('active-key');
@@ -76,10 +88,14 @@ describe('Config input aliases', () => {
             postingKey: 'updated-posting',
             activeKey: 'updated-active',
             blockCheckInterval: 333,
+            apiEnabled: true,
+            apiPort: 5051,
             debugMode: false
         });
 
         expect(sut['config'].BLOCK_CHECK_INTERVAL).toBe(333);
+        expect(sut['config'].API_ENABLED).toBe(true);
+        expect(sut['config'].API_PORT).toBe(5051);
         expect(sut['config'].DEBUG_MODE).toBe(false);
         expect(sut['username']).toBe('updated-user');
         expect(sut['postingKey']).toBe('updated-posting');

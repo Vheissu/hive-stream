@@ -21,7 +21,7 @@ ss.onCustomJson((op, { sender, isSignedWithActiveKey }, blockNumber, blockId, pr
 });
 ```
 
-`new Streamer()` automatically registers the SQLite adapter and starts the built-in Express API server on port `5001` when `NODE_ENV !== 'test'`.
+`new Streamer()` is now side-effect free. The default SQLite adapter is created lazily on first use, and the built-in Express API is opt-in via `apiEnabled: true` on `start()` or an explicit `startApiServer()` call.
 
 ## Builder/Tooling Metadata
 
@@ -48,7 +48,7 @@ To resume automatically from stored state, keep `resumeFromState` enabled (defau
 
 For faster catch-up, `catchUpBatchSize` controls how many blocks are processed per polling cycle, and `catchUpDelayMs` controls the delay between catch-up batches (set to `0` for fastest catch-up).
 
-The `apiNodes` are the Hive API endpoints used for failover. If you want to enable debug mode, set `debugMode` to `true`. The configuration values and their defaults can be found in `src/config.ts`.
+The `apiNodes` are the Hive API endpoints used for failover. Set `apiEnabled` to `true` if you want `start()` to boot the built-in API server, or call `startApiServer()` manually. If you want verbose logs, set `debugMode` to `true`. The configuration values and their defaults can be found in `src/config.ts`.
 
 CamelCase config keys are recommended for readability. Legacy uppercase keys are still supported for backwards compatibility.
 
@@ -69,10 +69,18 @@ const options = {
   catchUpBatchSize: 50,
   catchUpDelayMs: 0,
   apiNodes: ['https://api.hive.blog', 'https://api.openhive.network', 'https://rpc.ausbit.dev'],
-  debugMode: true
+  apiEnabled: false,
+  apiPort: 5001,
+  debugMode: false
 }
 
 const ss = new Streamer(options);
+```
+
+If you want the built-in API without starting block streaming yet:
+
+```javascript
+await ss.startApiServer();
 ```
 
 The configuration itself can also be overloaded using the `setConfig` method which allows you to pass one or more of the above configuration options, useful in situations where multiple keys might be used for issuing.

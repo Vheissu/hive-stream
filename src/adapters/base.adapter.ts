@@ -66,6 +66,10 @@ export class AdapterBase {
         return data;
     }
 
+    public async runInTransaction<T>(work: (adapter: AdapterBase) => Promise<T>): Promise<T> {
+        return work(this);
+    }
+
     public async query(sql: string, params?: any[]): Promise<any[]> {
         throw new Error('Query method not implemented in adapter');
     }

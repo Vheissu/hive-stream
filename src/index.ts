@@ -3,7 +3,11 @@ export * from './streamer';
 export * from './utils';
 export * from './actions';
 export * from './metadata';
+export * from './hive-rates';
+export * from './exchanges/exchange';
+export * from './exchanges/coingecko';
 export * from './contracts/contract';
+export * from './api';
 
 export * from './adapters/base.adapter';
 export * from './adapters/sqlite.adapter';
@@ -22,3 +26,20 @@ export { createExchangeContract } from './contracts/exchange.contract';
 
 // Types
 export * from './types/hive-stream';
+export {
+    RatesError,
+    NetworkError,
+    ValidationError
+} from './types/rates';
+export type {
+    ExchangeRates,
+    HiveRates as HiveRatesMap,
+    CryptoRates,
+    ExchangeResponse,
+    FiatResponse,
+    RateConfig,
+    ExchangeInterface,
+    CurrencyPair,
+    SupportedCrypto,
+    SupportedFiat
+} from './types/rates';

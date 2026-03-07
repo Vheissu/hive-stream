@@ -21,9 +21,13 @@ describe('metadata exports', () => {
         expect(map.get('PAYLOAD_IDENTIFIER')).toBe(Config.PAYLOAD_IDENTIFIER);
         expect(map.get('HIVE_ENGINE_ID')).toBe(Config.HIVE_ENGINE_ID);
         expect(map.get('BLOCK_CHECK_INTERVAL')).toBe(Config.BLOCK_CHECK_INTERVAL);
+        expect(map.get('API_ENABLED')).toBe(Config.API_ENABLED);
+        expect(map.get('API_PORT')).toBe(Config.API_PORT);
         expect(builderMap.get('JSON_ID')).toBe('jsonId');
         expect(builderMap.get('PAYLOAD_IDENTIFIER')).toBe('payloadIdentifier');
         expect(builderMap.get('BLOCK_CHECK_INTERVAL')).toBe('blockCheckInterval');
+        expect(builderMap.get('API_ENABLED')).toBe('apiEnabled');
+        expect(builderMap.get('API_PORT')).toBe('apiPort');
     });
 
     test('includes expected subscription metadata', () => {

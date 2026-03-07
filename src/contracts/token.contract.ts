@@ -116,6 +116,14 @@ export function createTokenContract(options: TokenContractOptions = {}) {
         }
     };
 
+    const withTransaction = async <T>(work: (adapter: any) => Promise<T>): Promise<T> => {
+        if (typeof state.adapter?.runInTransaction === 'function') {
+            return state.adapter.runInTransaction(work);
+        }
+
+        return work(state.adapter);
+    };
+
     const createToken = async (payload: { symbol: string; name: string; url?: string; precision?: number; maxSupply: string }, ctx: any) => {
         try {
             const { symbol, name: tokenName, url = '', precision = 3, maxSupply } = payload;
@@ -141,26 +149,28 @@ export function createTokenContract(options: TokenContractOptions = {}) {
                 throw new Error('URL must be 256 characters or less');
             }
 
-            const existingToken = await state.adapter.query('SELECT symbol FROM tokens WHERE symbol = ?', [symbol]);
+            await withTransaction(async (adapter) => {
+                const existingToken = await adapter.query('SELECT symbol FROM tokens WHERE symbol = ?', [symbol]);
 
-            if (existingToken && existingToken.length > 0) {
-                throw new Error(`Token with symbol ${symbol} already exists`);
-            }
-
-            await state.adapter.query(`
-                INSERT INTO tokens (symbol, name, url, precision, max_supply, current_supply, creator, created_at)
-                VALUES (?, ?, ?, ?, ?, '0', ?, ?)
-            `, [symbol, tokenName, url, precision, maxSupply, ctx.sender, new Date()]);
-
-            await state.adapter.addEvent(new Date(), name, 'createToken', payload, {
-                action: 'token_created',
-                data: {
-                    symbol,
-                    name: tokenName,
-                    creator: ctx.sender,
-                    maxSupply,
-                    precision
+                if (existingToken && existingToken.length > 0) {
+                    throw new Error(`Token with symbol ${symbol} already exists`);
                 }
+
+                await adapter.query(`
+                    INSERT INTO tokens (symbol, name, url, precision, max_supply, current_supply, creator, created_at)
+                    VALUES (?, ?, ?, ?, ?, '0', ?, ?)
+                `, [symbol, tokenName, url, precision, maxSupply, ctx.sender, new Date()]);
+
+                await adapter.addEvent(new Date(), name, 'createToken', payload, {
+                    action: 'token_created',
+                    data: {
+                        symbol,
+                        name: tokenName,
+                        creator: ctx.sender,
+                        maxSupply,
+                        precision
+                    }
+                });
             });
 
             console.log(`[TokenContract] Token ${symbol} created by ${ctx.sender}`);
@@ -174,66 +184,68 @@ export function createTokenContract(options: TokenContractOptions = {}) {
         try {
             const { symbol, to, amount, memo = '' } = payload;
 
-            const token = await state.adapter.query('SELECT * FROM tokens WHERE symbol = ?', [symbol]);
-
-            if (!token || token.length === 0) {
-                throw new Error(`Token ${symbol} does not exist`);
-            }
-
-            const tokenData = token[0];
-
-            if (tokenData.creator !== ctx.sender) {
-                throw new Error('Only the token creator can issue new tokens');
-            }
-
             const amountBN = new BigNumber(amount);
             if (amountBN.isNaN() || amountBN.lte(0)) {
                 throw new Error('Amount must be a positive number');
             }
 
-            const currentSupplyBN = new BigNumber(tokenData.current_supply);
-            const maxSupplyBN = new BigNumber(tokenData.max_supply);
-            const newSupplyBN = currentSupplyBN.plus(amountBN);
+            await withTransaction(async (adapter) => {
+                const token = await adapter.query('SELECT * FROM tokens WHERE symbol = ?', [symbol]);
 
-            if (newSupplyBN.gt(maxSupplyBN)) {
-                throw new Error('Cannot issue tokens: would exceed maximum supply');
-            }
-
-            await state.adapter.query(`
-                UPDATE tokens SET current_supply = ? WHERE symbol = ?
-            `, [newSupplyBN.toString(), symbol]);
-
-            const existingBalance = await state.adapter.query(
-                'SELECT balance FROM token_balances WHERE account = ? AND symbol = ?',
-                [to, symbol]
-            );
-
-            if (existingBalance && existingBalance.length > 0) {
-                const balanceBN = new BigNumber(existingBalance[0].balance);
-                const newBalanceBN = balanceBN.plus(amountBN);
-                await state.adapter.query(
-                    'UPDATE token_balances SET balance = ? WHERE account = ? AND symbol = ?',
-                    [newBalanceBN.toString(), to, symbol]
-                );
-            } else {
-                await state.adapter.query(
-                    'INSERT INTO token_balances (account, symbol, balance) VALUES (?, ?, ?)',
-                    [to, symbol, amountBN.toString()]
-                );
-            }
-
-            await state.adapter.query(`
-                INSERT INTO token_transfers (from_account, to_account, amount, symbol, memo, block_number, transaction_id, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `, ['null', to, amount, symbol, memo, ctx.block.number, ctx.transaction.id, new Date()]);
-
-            await state.adapter.addEvent(new Date(), name, 'issueTokens', payload, {
-                action: 'tokens_issued',
-                data: {
-                    to,
-                    amount,
-                    symbol
+                if (!token || token.length === 0) {
+                    throw new Error(`Token ${symbol} does not exist`);
                 }
+
+                const tokenData = token[0];
+
+                if (tokenData.creator !== ctx.sender) {
+                    throw new Error('Only the token creator can issue new tokens');
+                }
+
+                const currentSupplyBN = new BigNumber(tokenData.current_supply);
+                const maxSupplyBN = new BigNumber(tokenData.max_supply);
+                const newSupplyBN = currentSupplyBN.plus(amountBN);
+
+                if (newSupplyBN.gt(maxSupplyBN)) {
+                    throw new Error('Cannot issue tokens: would exceed maximum supply');
+                }
+
+                await adapter.query(`
+                    UPDATE tokens SET current_supply = ? WHERE symbol = ?
+                `, [newSupplyBN.toString(), symbol]);
+
+                const existingBalance = await adapter.query(
+                    'SELECT balance FROM token_balances WHERE account = ? AND symbol = ?',
+                    [to, symbol]
+                );
+
+                if (existingBalance && existingBalance.length > 0) {
+                    const balanceBN = new BigNumber(existingBalance[0].balance);
+                    const newBalanceBN = balanceBN.plus(amountBN);
+                    await adapter.query(
+                        'UPDATE token_balances SET balance = ? WHERE account = ? AND symbol = ?',
+                        [newBalanceBN.toString(), to, symbol]
+                    );
+                } else {
+                    await adapter.query(
+                        'INSERT INTO token_balances (account, symbol, balance) VALUES (?, ?, ?)',
+                        [to, symbol, amountBN.toString()]
+                    );
+                }
+
+                await adapter.query(`
+                    INSERT INTO token_transfers (from_account, to_account, amount, symbol, memo, block_number, transaction_id, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                `, ['null', to, amount, symbol, memo, ctx.block.number, ctx.transaction.id, new Date()]);
+
+                await adapter.addEvent(new Date(), name, 'issueTokens', payload, {
+                    action: 'tokens_issued',
+                    data: {
+                        to,
+                        amount,
+                        symbol
+                    }
+                });
             });
 
             console.log(`[TokenContract] Issued ${amount} ${symbol} to ${to}`);
@@ -262,58 +274,60 @@ export function createTokenContract(options: TokenContractOptions = {}) {
                 throw new Error('Amount must be a positive number');
             }
 
-            const senderBalance = await state.adapter.query(
-                'SELECT balance FROM token_balances WHERE account = ? AND symbol = ?',
-                [ctx.sender, symbol]
-            );
-
-            if (!senderBalance || senderBalance.length === 0) {
-                throw new Error(`Account ${ctx.sender} does not have any ${symbol} tokens`);
-            }
-
-            const senderBalanceBN = new BigNumber(senderBalance[0].balance);
-            if (senderBalanceBN.lt(amountBN)) {
-                throw new Error('Insufficient balance');
-            }
-
-            const newSenderBalanceBN = senderBalanceBN.minus(amountBN);
-            await state.adapter.query(
-                'UPDATE token_balances SET balance = ? WHERE account = ? AND symbol = ?',
-                [newSenderBalanceBN.toString(), ctx.sender, symbol]
-            );
-
-            const receiverBalance = await state.adapter.query(
-                'SELECT balance FROM token_balances WHERE account = ? AND symbol = ?',
-                [to, symbol]
-            );
-
-            if (receiverBalance && receiverBalance.length > 0) {
-                const receiverBalanceBN = new BigNumber(receiverBalance[0].balance);
-                const newReceiverBalanceBN = receiverBalanceBN.plus(amountBN);
-                await state.adapter.query(
-                    'UPDATE token_balances SET balance = ? WHERE account = ? AND symbol = ?',
-                    [newReceiverBalanceBN.toString(), to, symbol]
+            await withTransaction(async (adapter) => {
+                const senderBalance = await adapter.query(
+                    'SELECT balance FROM token_balances WHERE account = ? AND symbol = ?',
+                    [ctx.sender, symbol]
                 );
-            } else {
-                await state.adapter.query(
-                    'INSERT INTO token_balances (account, symbol, balance) VALUES (?, ?, ?)',
-                    [to, symbol, amountBN.toString()]
-                );
-            }
 
-            await state.adapter.query(`
-                INSERT INTO token_transfers (from_account, to_account, amount, symbol, memo, block_number, transaction_id, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `, [ctx.sender, to, amount, symbol, memo, ctx.block.number, ctx.transaction.id, new Date()]);
-
-            await state.adapter.addEvent(new Date(), name, 'transferTokens', payload, {
-                action: 'tokens_transferred',
-                data: {
-                    from: ctx.sender,
-                    to,
-                    amount,
-                    symbol
+                if (!senderBalance || senderBalance.length === 0) {
+                    throw new Error(`Account ${ctx.sender} does not have any ${symbol} tokens`);
                 }
+
+                const senderBalanceBN = new BigNumber(senderBalance[0].balance);
+                if (senderBalanceBN.lt(amountBN)) {
+                    throw new Error('Insufficient balance');
+                }
+
+                const newSenderBalanceBN = senderBalanceBN.minus(amountBN);
+                await adapter.query(
+                    'UPDATE token_balances SET balance = ? WHERE account = ? AND symbol = ?',
+                    [newSenderBalanceBN.toString(), ctx.sender, symbol]
+                );
+
+                const receiverBalance = await adapter.query(
+                    'SELECT balance FROM token_balances WHERE account = ? AND symbol = ?',
+                    [to, symbol]
+                );
+
+                if (receiverBalance && receiverBalance.length > 0) {
+                    const receiverBalanceBN = new BigNumber(receiverBalance[0].balance);
+                    const newReceiverBalanceBN = receiverBalanceBN.plus(amountBN);
+                    await adapter.query(
+                        'UPDATE token_balances SET balance = ? WHERE account = ? AND symbol = ?',
+                        [newReceiverBalanceBN.toString(), to, symbol]
+                    );
+                } else {
+                    await adapter.query(
+                        'INSERT INTO token_balances (account, symbol, balance) VALUES (?, ?, ?)',
+                        [to, symbol, amountBN.toString()]
+                    );
+                }
+
+                await adapter.query(`
+                    INSERT INTO token_transfers (from_account, to_account, amount, symbol, memo, block_number, transaction_id, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                `, [ctx.sender, to, amount, symbol, memo, ctx.block.number, ctx.transaction.id, new Date()]);
+
+                await adapter.addEvent(new Date(), name, 'transferTokens', payload, {
+                    action: 'tokens_transferred',
+                    data: {
+                        from: ctx.sender,
+                        to,
+                        amount,
+                        symbol
+                    }
+                });
             });
 
             console.log(`[TokenContract] Transferred ${amount} ${symbol} from ${ctx.sender} to ${to}`);

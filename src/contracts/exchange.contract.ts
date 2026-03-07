@@ -184,14 +184,22 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
         `);
     };
 
-    const getBalanceRow = async (accountName: string, asset: string) => {
-        const rows = await state.adapter.query(
+    const withTransaction = async <T>(work: (adapter: any) => Promise<T>): Promise<T> => {
+        if (typeof state.adapter?.runInTransaction === 'function') {
+            return state.adapter.runInTransaction(work);
+        }
+
+        return work(state.adapter);
+    };
+
+    const getBalanceRow = async (accountName: string, asset: string, adapter: any = state.adapter) => {
+        const rows = await adapter.query(
             'SELECT available, locked FROM exchange_balances WHERE account = ? AND asset = ?',
             [accountName, asset]
         );
 
         if (!rows || rows.length === 0) {
-            await state.adapter.query(
+            await adapter.query(
                 'INSERT INTO exchange_balances (account, asset, available, locked) VALUES (?, ?, ?, ?)',
                 [accountName, asset, '0', '0']
             );
@@ -204,15 +212,15 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
         };
     };
 
-    const setBalanceRow = async (accountName: string, asset: string, available: BigNumber, locked: BigNumber) => {
-        await state.adapter.query(
+    const setBalanceRow = async (accountName: string, asset: string, available: BigNumber, locked: BigNumber, adapter: any = state.adapter) => {
+        await adapter.query(
             'UPDATE exchange_balances SET available = ?, locked = ? WHERE account = ? AND asset = ?',
             [formatAmount(available, getAssetPrecision(asset)), formatAmount(locked, getAssetPrecision(asset)), accountName, asset]
         );
     };
 
-    const ensurePairActive = async (base: string, quote: string) => {
-        const rows = await state.adapter.query(
+    const ensurePairActive = async (base: string, quote: string, adapter: any = state.adapter) => {
+        const rows = await adapter.query(
             'SELECT active FROM exchange_pairs WHERE base_asset = ? AND quote_asset = ?',
             [base, quote]
         );
@@ -227,27 +235,29 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
             throw new Error('Base and quote assets must differ');
         }
 
-        const existing = await state.adapter.query(
-            'SELECT base_asset FROM exchange_pairs WHERE base_asset = ? AND quote_asset = ?',
-            [payload.base, payload.quote]
-        );
+        await withTransaction(async (adapter) => {
+            const existing = await adapter.query(
+                'SELECT base_asset FROM exchange_pairs WHERE base_asset = ? AND quote_asset = ?',
+                [payload.base, payload.quote]
+            );
 
-        if (existing && existing.length > 0) {
-            throw new Error(`Pair ${payload.base}/${payload.quote} already exists`);
-        }
-
-        await state.adapter.query(
-            'INSERT INTO exchange_pairs (base_asset, quote_asset, active) VALUES (?, ?, 1)',
-            [payload.base, payload.quote]
-        );
-
-        await state.adapter.addEvent(new Date(), name, 'createPair', payload, {
-            action: 'pair_created',
-            data: {
-                base: payload.base,
-                quote: payload.quote,
-                createdBy: ctx.sender
+            if (existing && existing.length > 0) {
+                throw new Error(`Pair ${payload.base}/${payload.quote} already exists`);
             }
+
+            await adapter.query(
+                'INSERT INTO exchange_pairs (base_asset, quote_asset, active) VALUES (?, ?, 1)',
+                [payload.base, payload.quote]
+            );
+
+            await adapter.addEvent(new Date(), name, 'createPair', payload, {
+                action: 'pair_created',
+                data: {
+                    base: payload.base,
+                    quote: payload.quote,
+                    createdBy: ctx.sender
+                }
+            });
         });
     };
 
@@ -261,23 +271,25 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
             throw new Error('Invalid deposit amount');
         }
 
-        const balance = await getBalanceRow(ctx.sender, ctx.transfer.asset);
-        const nextAvailable = balance.available.plus(amount);
+        await withTransaction(async (adapter) => {
+            const balance = await getBalanceRow(ctx.sender, ctx.transfer.asset, adapter);
+            const nextAvailable = balance.available.plus(amount);
 
-        await setBalanceRow(ctx.sender, ctx.transfer.asset, nextAvailable, balance.locked);
+            await setBalanceRow(ctx.sender, ctx.transfer.asset, nextAvailable, balance.locked, adapter);
 
-        await state.adapter.query(
-            'INSERT INTO exchange_deposits (account, asset, amount, block_number, transaction_id, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-            [ctx.sender, ctx.transfer.asset, ctx.transfer.amount, ctx.block.number, ctx.transaction.id, new Date()]
-        );
+            await adapter.query(
+                'INSERT INTO exchange_deposits (account, asset, amount, block_number, transaction_id, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+                [ctx.sender, ctx.transfer.asset, ctx.transfer.amount, ctx.block.number, ctx.transaction.id, new Date()]
+            );
 
-        await state.adapter.addEvent(new Date(), name, 'deposit', { asset: ctx.transfer.asset, amount: ctx.transfer.amount }, {
-            action: 'deposit',
-            data: {
-                account: ctx.sender,
-                asset: ctx.transfer.asset,
-                amount: ctx.transfer.amount
-            }
+            await adapter.addEvent(new Date(), name, 'deposit', { asset: ctx.transfer.asset, amount: ctx.transfer.amount }, {
+                action: 'deposit',
+                data: {
+                    account: ctx.sender,
+                    asset: ctx.transfer.asset,
+                    amount: ctx.transfer.amount
+                }
+            });
         });
     };
 
@@ -292,13 +304,20 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
             throw new Error('Insufficient available balance');
         }
 
-        const nextAvailable = balance.available.minus(amount);
-        await setBalanceRow(ctx.sender, payload.asset, nextAvailable, balance.locked);
+        const withdrawalId = await withTransaction(async (adapter) => {
+            const currentBalance = await getBalanceRow(ctx.sender, payload.asset, adapter);
+            if (currentBalance.available.lt(amount)) {
+                throw new Error('Insufficient available balance');
+            }
 
-        const withdrawalId = await state.adapter.query(
-            'INSERT INTO exchange_withdrawals (account, asset, amount, status, block_number, transaction_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [ctx.sender, payload.asset, payload.amount, 'pending', ctx.block.number, ctx.transaction.id, new Date()]
-        );
+            const nextAvailable = currentBalance.available.minus(amount);
+            await setBalanceRow(ctx.sender, payload.asset, nextAvailable, currentBalance.locked, adapter);
+
+            return adapter.query(
+                'INSERT INTO exchange_withdrawals (account, asset, amount, status, block_number, transaction_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [ctx.sender, payload.asset, payload.amount, 'pending', ctx.block.number, ctx.transaction.id, new Date()]
+            );
+        });
 
         try {
             const to = payload.to || ctx.sender;
@@ -308,18 +327,18 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
                 ['completed', withdrawalId?.insertId ?? withdrawalId?.lastID ?? null]
             );
         } catch (error) {
-            await setBalanceRow(ctx.sender, payload.asset, balance.available, balance.locked);
-            await state.adapter.query(
-                'UPDATE exchange_withdrawals SET status = ? WHERE id = ?',
-                ['failed', withdrawalId?.insertId ?? withdrawalId?.lastID ?? null]
-            );
+            await withTransaction(async (adapter) => {
+                await setBalanceRow(ctx.sender, payload.asset, balance.available, balance.locked, adapter);
+                await adapter.query(
+                    'UPDATE exchange_withdrawals SET status = ? WHERE id = ?',
+                    ['failed', withdrawalId?.insertId ?? withdrawalId?.lastID ?? null]
+                );
+            });
             throw error;
         }
     };
 
     const placeOrder = async (payload: { side: 'buy' | 'sell'; base: string; quote: string; price: string; amount: string }, ctx: any) => {
-        await ensurePairActive(payload.base, payload.quote);
-
         const price = new BigNumber(payload.price);
         const amount = new BigNumber(payload.amount);
         if (price.isNaN() || price.lte(0) || amount.isNaN() || amount.lte(0)) {
@@ -328,96 +347,102 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
 
         const orderId = uuidv4();
 
-        if (payload.side === 'buy') {
-            const cost = price.multipliedBy(amount);
-            const balance = await getBalanceRow(ctx.sender, payload.quote);
-            if (balance.available.lt(cost)) {
-                throw new Error('Insufficient quote balance');
+        await withTransaction(async (adapter) => {
+            await ensurePairActive(payload.base, payload.quote, adapter);
+
+            if (payload.side === 'buy') {
+                const cost = price.multipliedBy(amount);
+                const balance = await getBalanceRow(ctx.sender, payload.quote, adapter);
+                if (balance.available.lt(cost)) {
+                    throw new Error('Insufficient quote balance');
+                }
+
+                await setBalanceRow(ctx.sender, payload.quote, balance.available.minus(cost), balance.locked.plus(cost), adapter);
+            } else {
+                const balance = await getBalanceRow(ctx.sender, payload.base, adapter);
+                if (balance.available.lt(amount)) {
+                    throw new Error('Insufficient base balance');
+                }
+
+                await setBalanceRow(ctx.sender, payload.base, balance.available.minus(amount), balance.locked.plus(amount), adapter);
             }
 
-            await setBalanceRow(ctx.sender, payload.quote, balance.available.minus(cost), balance.locked.plus(cost));
-        } else {
-            const balance = await getBalanceRow(ctx.sender, payload.base);
-            if (balance.available.lt(amount)) {
-                throw new Error('Insufficient base balance');
-            }
+            await adapter.query(
+                'INSERT INTO exchange_orders (id, account, side, base_asset, quote_asset, price, amount, remaining, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [
+                    orderId,
+                    ctx.sender,
+                    payload.side,
+                    payload.base,
+                    payload.quote,
+                    formatAmount(price, quotePrecision),
+                    formatAmount(amount, basePrecision),
+                    formatAmount(amount, basePrecision),
+                    'open',
+                    new Date()
+                ]
+            );
 
-            await setBalanceRow(ctx.sender, payload.base, balance.available.minus(amount), balance.locked.plus(amount));
-        }
-
-        await state.adapter.query(
-            'INSERT INTO exchange_orders (id, account, side, base_asset, quote_asset, price, amount, remaining, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [
-                orderId,
-                ctx.sender,
-                payload.side,
-                payload.base,
-                payload.quote,
-                formatAmount(price, quotePrecision),
-                formatAmount(amount, basePrecision),
-                formatAmount(amount, basePrecision),
-                'open',
-                new Date()
-            ]
-        );
-
-        await state.adapter.addEvent(new Date(), name, 'placeOrder', payload, {
-            action: 'order_opened',
-            data: {
-                orderId,
-                account: ctx.sender,
-                side: payload.side,
-                base: payload.base,
-                quote: payload.quote,
-                price: price.toFixed(),
-                amount: amount.toFixed()
-            }
+            await adapter.addEvent(new Date(), name, 'placeOrder', payload, {
+                action: 'order_opened',
+                data: {
+                    orderId,
+                    account: ctx.sender,
+                    side: payload.side,
+                    base: payload.base,
+                    quote: payload.quote,
+                    price: price.toFixed(),
+                    amount: amount.toFixed()
+                }
+            });
         });
 
     };
 
     const cancelOrder = async (payload: { orderId: string }, ctx: any) => {
-        const rows = await state.adapter.query(
-            'SELECT * FROM exchange_orders WHERE id = ?',
-            [payload.orderId]
-        );
+        await withTransaction(async (adapter) => {
+            const rows = await adapter.query(
+                'SELECT * FROM exchange_orders WHERE id = ?',
+                [payload.orderId]
+            );
 
-        if (!rows || rows.length === 0) {
-            throw new Error('Order not found');
-        }
-
-        const order = rows[0];
-        if (order.account !== ctx.sender) {
-            throw new Error('Not authorized to cancel this order');
-        }
-
-        if (order.status !== 'open' && order.status !== 'partial') {
-            throw new Error('Order cannot be canceled');
-        }
-
-        const remaining = new BigNumber(order.remaining);
-
-        if (order.side === 'buy') {
-            const price = new BigNumber(order.price);
-            const refund = price.multipliedBy(remaining);
-            const balance = await getBalanceRow(order.account, order.quote_asset);
-            await setBalanceRow(order.account, order.quote_asset, balance.available.plus(refund), balance.locked.minus(refund));
-        } else {
-            const balance = await getBalanceRow(order.account, order.base_asset);
-            await setBalanceRow(order.account, order.base_asset, balance.available.plus(remaining), balance.locked.minus(remaining));
-        }
-
-        await state.adapter.query(
-            'UPDATE exchange_orders SET status = ?, remaining = ? WHERE id = ?',
-            ['canceled', '0', payload.orderId]
-        );
-
-        await state.adapter.addEvent(new Date(), name, 'cancelOrder', payload, {
-            action: 'order_canceled',
-            data: {
-                orderId: payload.orderId,
-                account: ctx.sender
+            if (!rows || rows.length === 0) {
+                throw new Error('Order not found');
             }
+
+            const order = rows[0];
+            if (order.account !== ctx.sender) {
+                throw new Error('Not authorized to cancel this order');
+            }
+
+            if (order.status !== 'open' && order.status !== 'partial') {
+                throw new Error('Order cannot be canceled');
+            }
+
+            const remaining = new BigNumber(order.remaining);
+
+            if (order.side === 'buy') {
+                const price = new BigNumber(order.price);
+                const refund = price.multipliedBy(remaining);
+                const balance = await getBalanceRow(order.account, order.quote_asset, adapter);
+                await setBalanceRow(order.account, order.quote_asset, balance.available.plus(refund), balance.locked.minus(refund), adapter);
+            } else {
+                const balance = await getBalanceRow(order.account, order.base_asset, adapter);
+                await setBalanceRow(order.account, order.base_asset, balance.available.plus(remaining), balance.locked.minus(remaining), adapter);
+            }
+
+            await adapter.query(
+                'UPDATE exchange_orders SET status = ?, remaining = ? WHERE id = ?',
+                ['canceled', '0', payload.orderId]
+            );
+
+            await adapter.addEvent(new Date(), name, 'cancelOrder', payload, {
+                action: 'order_canceled',
+                data: {
+                    orderId: payload.orderId,
+                    account: ctx.sender
+                }
+            });
         });
     };
 
@@ -516,102 +541,108 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
                 const buyerFeeBase = calculateFee(tradeAmount, buyerFeeBps);
                 const sellerFeeQuote = calculateFee(tradeQuote, sellerFeeBps);
 
-                // Update buyer balances
-                const buyerBase = await getBalanceRow(buy.account, buy.base_asset);
-                const buyerQuote = await getBalanceRow(buy.account, buy.quote_asset);
-                const nextBuyRemaining = buyRemaining.minus(tradeAmount);
-                const nextBuyLocked = buyPrice.multipliedBy(nextBuyRemaining);
-                const buyerQuoteAvailable = buyerQuote.available.plus(buyerQuote.locked.minus(nextBuyLocked));
-                await setBalanceRow(
-                    buy.account,
-                    buy.base_asset,
-                    buyerBase.available.plus(tradeAmount.minus(buyerFeeBase)),
-                    buyerBase.locked
-                );
-                await setBalanceRow(
-                    buy.account,
-                    buy.quote_asset,
-                    buyerQuoteAvailable,
-                    nextBuyLocked
-                );
-
-                // Update seller balances
-                const sellerBase = await getBalanceRow(sell.account, sell.base_asset);
-                const sellerQuote = await getBalanceRow(sell.account, sell.quote_asset);
-                const nextSellRemaining = sellRemaining.minus(tradeAmount);
-                const nextSellLocked = nextSellRemaining;
-                await setBalanceRow(
-                    sell.account,
-                    sell.base_asset,
-                    sellerBase.available,
-                    nextSellLocked
-                );
-                await setBalanceRow(
-                    sell.account,
-                    sell.quote_asset,
-                    sellerQuote.available.plus(tradeQuote.minus(sellerFeeQuote)),
-                    sellerQuote.locked
-                );
-
-                if (buyerFeeBase.gt(0)) {
-                    const feeBaseBalance = await getBalanceRow(feeAccount, buy.base_asset);
+                await withTransaction(async (adapter) => {
+                    const buyerBase = await getBalanceRow(buy.account, buy.base_asset, adapter);
+                    const buyerQuote = await getBalanceRow(buy.account, buy.quote_asset, adapter);
+                    const nextBuyRemaining = buyRemaining.minus(tradeAmount);
+                    const nextBuyLocked = buyPrice.multipliedBy(nextBuyRemaining);
+                    const buyerQuoteAvailable = buyerQuote.available.plus(buyerQuote.locked.minus(nextBuyLocked));
                     await setBalanceRow(
-                        feeAccount,
-                        buy.base_asset,
-                        feeBaseBalance.available.plus(buyerFeeBase),
-                        feeBaseBalance.locked
-                    );
-                }
-
-                if (sellerFeeQuote.gt(0)) {
-                    const feeQuoteBalance = await getBalanceRow(feeAccount, sell.quote_asset);
-                    await setBalanceRow(
-                        feeAccount,
-                        sell.quote_asset,
-                        feeQuoteBalance.available.plus(sellerFeeQuote),
-                        feeQuoteBalance.locked
-                    );
-                }
-
-                await state.adapter.query(
-                    'UPDATE exchange_orders SET remaining = ?, status = ? WHERE id = ?',
-                    [formatAmount(nextBuyRemaining, basePrecision), nextBuyRemaining.eq(0) ? 'filled' : 'partial', buy.id]
-                );
-
-                await state.adapter.query(
-                    'UPDATE exchange_orders SET remaining = ?, status = ? WHERE id = ?',
-                    [formatAmount(nextSellRemaining, basePrecision), nextSellRemaining.eq(0) ? 'filled' : 'partial', sell.id]
-                );
-
-                await state.adapter.query(
-                    'INSERT INTO exchange_trades (buy_order_id, sell_order_id, price, amount, base_asset, quote_asset, buyer, seller, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [
-                        buy.id,
-                        sell.id,
-                        formatAmount(tradePrice, quotePrecision),
-                        formatAmount(tradeAmount, basePrecision),
-                        buy.base_asset,
-                        buy.quote_asset,
                         buy.account,
-                        sell.account,
-                        new Date()
-                    ]
-                );
+                        buy.base_asset,
+                        buyerBase.available.plus(tradeAmount.minus(buyerFeeBase)),
+                        buyerBase.locked,
+                        adapter
+                    );
+                    await setBalanceRow(
+                        buy.account,
+                        buy.quote_asset,
+                        buyerQuoteAvailable,
+                        nextBuyLocked,
+                        adapter
+                    );
 
-                await state.adapter.addEvent(new Date(), name, 'matchOrders', { base: pair.base_asset, quote: pair.quote_asset }, {
-                    action: 'trade',
-                    data: {
-                        buyOrderId: buy.id,
-                        sellOrderId: sell.id,
-                        price: tradePrice.toFixed(),
-                        amount: tradeAmount.toFixed(),
-                        buyer: buy.account,
-                        seller: sell.account,
-                        buyerFeeBase: buyerFeeBase.toFixed(),
-                        sellerFeeQuote: sellerFeeQuote.toFixed(),
-                        maker: buyIsMaker ? buy.account : sell.account,
-                        taker: buyIsMaker ? sell.account : buy.account
+                    const sellerBase = await getBalanceRow(sell.account, sell.base_asset, adapter);
+                    const sellerQuote = await getBalanceRow(sell.account, sell.quote_asset, adapter);
+                    const nextSellRemaining = sellRemaining.minus(tradeAmount);
+                    const nextSellLocked = nextSellRemaining;
+                    await setBalanceRow(
+                        sell.account,
+                        sell.base_asset,
+                        sellerBase.available,
+                        nextSellLocked,
+                        adapter
+                    );
+                    await setBalanceRow(
+                        sell.account,
+                        sell.quote_asset,
+                        sellerQuote.available.plus(tradeQuote.minus(sellerFeeQuote)),
+                        sellerQuote.locked,
+                        adapter
+                    );
+
+                    if (buyerFeeBase.gt(0)) {
+                        const feeBaseBalance = await getBalanceRow(feeAccount, buy.base_asset, adapter);
+                        await setBalanceRow(
+                            feeAccount,
+                            buy.base_asset,
+                            feeBaseBalance.available.plus(buyerFeeBase),
+                            feeBaseBalance.locked,
+                            adapter
+                        );
                     }
+
+                    if (sellerFeeQuote.gt(0)) {
+                        const feeQuoteBalance = await getBalanceRow(feeAccount, sell.quote_asset, adapter);
+                        await setBalanceRow(
+                            feeAccount,
+                            sell.quote_asset,
+                            feeQuoteBalance.available.plus(sellerFeeQuote),
+                            feeQuoteBalance.locked,
+                            adapter
+                        );
+                    }
+
+                    await adapter.query(
+                        'UPDATE exchange_orders SET remaining = ?, status = ? WHERE id = ?',
+                        [formatAmount(nextBuyRemaining, basePrecision), nextBuyRemaining.eq(0) ? 'filled' : 'partial', buy.id]
+                    );
+
+                    await adapter.query(
+                        'UPDATE exchange_orders SET remaining = ?, status = ? WHERE id = ?',
+                        [formatAmount(nextSellRemaining, basePrecision), nextSellRemaining.eq(0) ? 'filled' : 'partial', sell.id]
+                    );
+
+                    await adapter.query(
+                        'INSERT INTO exchange_trades (buy_order_id, sell_order_id, price, amount, base_asset, quote_asset, buyer, seller, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                        [
+                            buy.id,
+                            sell.id,
+                            formatAmount(tradePrice, quotePrecision),
+                            formatAmount(tradeAmount, basePrecision),
+                            buy.base_asset,
+                            buy.quote_asset,
+                            buy.account,
+                            sell.account,
+                            new Date()
+                        ]
+                    );
+
+                    await adapter.addEvent(new Date(), name, 'matchOrders', { base: pair.base_asset, quote: pair.quote_asset }, {
+                        action: 'trade',
+                        data: {
+                            buyOrderId: buy.id,
+                            sellOrderId: sell.id,
+                            price: tradePrice.toFixed(),
+                            amount: tradeAmount.toFixed(),
+                            buyer: buy.account,
+                            seller: sell.account,
+                            buyerFeeBase: buyerFeeBase.toFixed(),
+                            sellerFeeQuote: sellerFeeQuote.toFixed(),
+                            maker: buyIsMaker ? buy.account : sell.account,
+                            taker: buyIsMaker ? sell.account : buy.account
+                        }
+                    });
                 });
 
                 matched += 1;
@@ -629,23 +660,25 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
             throw new Error('Invalid transfer amount');
         }
 
-        const senderBalance = await getBalanceRow(ctx.sender, payload.asset);
-        if (senderBalance.available.lt(amount)) {
-            throw new Error('Insufficient available balance');
-        }
-
-        const recipientBalance = await getBalanceRow(payload.to, payload.asset);
-        await setBalanceRow(ctx.sender, payload.asset, senderBalance.available.minus(amount), senderBalance.locked);
-        await setBalanceRow(payload.to, payload.asset, recipientBalance.available.plus(amount), recipientBalance.locked);
-
-        await state.adapter.addEvent(new Date(), name, 'transfer', payload, {
-            action: 'internal_transfer',
-            data: {
-                from: ctx.sender,
-                to: payload.to,
-                asset: payload.asset,
-                amount: payload.amount
+        await withTransaction(async (adapter) => {
+            const senderBalance = await getBalanceRow(ctx.sender, payload.asset, adapter);
+            if (senderBalance.available.lt(amount)) {
+                throw new Error('Insufficient available balance');
             }
+
+            const recipientBalance = await getBalanceRow(payload.to, payload.asset, adapter);
+            await setBalanceRow(ctx.sender, payload.asset, senderBalance.available.minus(amount), senderBalance.locked, adapter);
+            await setBalanceRow(payload.to, payload.asset, recipientBalance.available.plus(amount), recipientBalance.locked, adapter);
+
+            await adapter.addEvent(new Date(), name, 'transfer', payload, {
+                action: 'internal_transfer',
+                data: {
+                    from: ctx.sender,
+                    to: payload.to,
+                    asset: payload.asset,
+                    amount: payload.amount
+                }
+            });
         });
     };
 

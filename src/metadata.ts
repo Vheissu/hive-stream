@@ -210,6 +210,20 @@ export const HIVE_STREAM_METADATA: Readonly<HiveStreamMetadata> = deepFreeze({
                 description: 'Ordered Hive API node list used for failover.'
             },
             {
+                key: 'API_ENABLED',
+                builderKey: 'apiEnabled',
+                type: 'boolean',
+                defaultValue: Config.API_ENABLED,
+                description: 'Enable the built-in HTTP API server when the streamer starts.'
+            },
+            {
+                key: 'API_PORT',
+                builderKey: 'apiPort',
+                type: 'number',
+                defaultValue: Config.API_PORT,
+                description: 'Port used by the built-in HTTP API server.'
+            },
+            {
                 key: 'DEBUG_MODE',
                 builderKey: 'debugMode',
                 type: 'boolean',

@@ -157,6 +157,14 @@ export class NFTContract {
         }
     }
 
+    private async withTransaction<T>(work: (adapter: any) => Promise<T>): Promise<T> {
+        if (typeof this.adapter?.runInTransaction === 'function') {
+            return this.adapter.runInTransaction(work);
+        }
+
+        return work(this.adapter);
+    }
+
     private async createCollection(payload: {
         symbol: string;
         name: string;
@@ -169,6 +177,7 @@ export class NFTContract {
     }, { sender }) {
         try {
             const { symbol, name, description = '', maxSupply, royalty = 0, baseUri = '', allowUpdates = true, updateableByOwner = false } = payload;
+            const normalizedMaxSupply = maxSupply ?? null;
 
             if (!symbol.match(/^[A-Z0-9]{1,20}$/)) {
                 throw new Error('Symbol must be 1-20 uppercase alphanumeric characters');
@@ -194,29 +203,31 @@ export class NFTContract {
                 throw new Error('Base URI must be 500 characters or less');
             }
 
-            const existingCollection = await this.adapter.query(
-                'SELECT symbol FROM nft_collections WHERE symbol = ?',
-                [symbol]
-            );
+            await this.withTransaction(async (adapter) => {
+                const existingCollection = await adapter.query(
+                    'SELECT symbol FROM nft_collections WHERE symbol = ?',
+                    [symbol]
+                );
 
-            if (existingCollection && existingCollection.length > 0) {
-                throw new Error(`Collection with symbol ${symbol} already exists`);
-            }
-
-            await this.adapter.query(`
-                INSERT INTO nft_collections (symbol, name, description, creator, max_supply, royalty, base_uri, allow_updates, updateable_by_owner, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `, [symbol, name, description, sender, maxSupply, royalty, baseUri, allowUpdates, updateableByOwner, new Date()]);
-
-            await this.adapter.addEvent(new Date(), CONTRACT_NAME, 'createCollection', payload, {
-                action: 'collection_created',
-                data: {
-                    symbol,
-                    name,
-                    creator: sender,
-                    maxSupply,
-                    royalty
+                if (existingCollection && existingCollection.length > 0) {
+                    throw new Error(`Collection with symbol ${symbol} already exists`);
                 }
+
+                await adapter.query(`
+                    INSERT INTO nft_collections (symbol, name, description, creator, max_supply, royalty, base_uri, allow_updates, updateable_by_owner, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `, [symbol, name, description, sender, normalizedMaxSupply, royalty, baseUri, allowUpdates, updateableByOwner, new Date()]);
+
+                await adapter.addEvent(new Date(), CONTRACT_NAME, 'createCollection', payload, {
+                    action: 'collection_created',
+                    data: {
+                        symbol,
+                        name,
+                        creator: sender,
+                        maxSupply,
+                        royalty
+                    }
+                });
             });
 
             console.log(`[NFTContract] Collection ${symbol} created by ${sender}`);
@@ -268,38 +279,40 @@ export class NFTContract {
                 throw new Error('Collection has reached maximum supply');
             }
 
-            const existingToken = await this.adapter.query(
-                'SELECT token_id FROM nft_tokens WHERE token_id = ? AND collection_symbol = ?',
-                [tokenId, collectionSymbol]
-            );
+            await this.withTransaction(async (adapter) => {
+                const existingToken = await adapter.query(
+                    'SELECT token_id FROM nft_tokens WHERE token_id = ? AND collection_symbol = ?',
+                    [tokenId, collectionSymbol]
+                );
 
-            if (existingToken && existingToken.length > 0) {
-                throw new Error(`Token ${tokenId} already exists in collection ${collectionSymbol}`);
-            }
-
-            await this.adapter.query(`
-                INSERT INTO nft_tokens (token_id, collection_symbol, owner, metadata, attributes, minted_at, minted_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            `, [tokenId, collectionSymbol, to, metadata, attributes, new Date(), sender]);
-
-            await this.adapter.query(
-                'UPDATE nft_collections SET current_supply = current_supply + 1 WHERE symbol = ?',
-                [collectionSymbol]
-            );
-
-            await this.adapter.query(`
-                INSERT INTO nft_transfers (token_id, collection_symbol, from_account, to_account, transfer_type, block_number, transaction_id, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `, [tokenId, collectionSymbol, 'null', to, 'mint', this.blockNumber, this.transactionId, new Date()]);
-
-            await this.adapter.addEvent(new Date(), CONTRACT_NAME, 'mintNFT', payload, {
-                action: 'nft_minted',
-                data: {
-                    tokenId,
-                    collectionSymbol,
-                    to,
-                    mintedBy: sender
+                if (existingToken && existingToken.length > 0) {
+                    throw new Error(`Token ${tokenId} already exists in collection ${collectionSymbol}`);
                 }
+
+                await adapter.query(`
+                    INSERT INTO nft_tokens (token_id, collection_symbol, owner, metadata, attributes, minted_at, minted_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                `, [tokenId, collectionSymbol, to, metadata, attributes, new Date(), sender]);
+
+                await adapter.query(
+                    'UPDATE nft_collections SET current_supply = current_supply + 1 WHERE symbol = ?',
+                    [collectionSymbol]
+                );
+
+                await adapter.query(`
+                    INSERT INTO nft_transfers (token_id, collection_symbol, from_account, to_account, transfer_type, block_number, transaction_id, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                `, [tokenId, collectionSymbol, 'null', to, 'mint', this.blockNumber, this.transactionId, new Date()]);
+
+                await adapter.addEvent(new Date(), CONTRACT_NAME, 'mintNFT', payload, {
+                    action: 'nft_minted',
+                    data: {
+                        tokenId,
+                        collectionSymbol,
+                        to,
+                        mintedBy: sender
+                    }
+                });
             });
 
             console.log(`[NFTContract] NFT ${tokenId} minted in collection ${collectionSymbol} to ${to}`);
@@ -383,20 +396,22 @@ export class NFTContract {
 
             updateValues.push(tokenId, collectionSymbol);
 
-            await this.adapter.query(
-                `UPDATE nft_tokens SET ${updateFields.join(', ')} WHERE token_id = ? AND collection_symbol = ?`,
-                updateValues
-            );
+            await this.withTransaction(async (adapter) => {
+                await adapter.query(
+                    `UPDATE nft_tokens SET ${updateFields.join(', ')} WHERE token_id = ? AND collection_symbol = ?`,
+                    updateValues
+                );
 
-            await this.adapter.addEvent(new Date(), CONTRACT_NAME, 'updateNFT', payload, {
-                action: 'nft_updated',
-                data: {
-                    tokenId,
-                    collectionSymbol,
-                    updatedBy: sender,
-                    metadata: metadata !== undefined ? metadata : 'unchanged',
-                    attributes: attributes !== undefined ? attributes : 'unchanged'
-                }
+                await adapter.addEvent(new Date(), CONTRACT_NAME, 'updateNFT', payload, {
+                    action: 'nft_updated',
+                    data: {
+                        tokenId,
+                        collectionSymbol,
+                        updatedBy: sender,
+                        metadata: metadata !== undefined ? metadata : 'unchanged',
+                        attributes: attributes !== undefined ? attributes : 'unchanged'
+                    }
+                });
             });
 
             console.log(`[NFTContract] NFT ${tokenId} updated by ${sender}`);
@@ -434,36 +449,38 @@ export class NFTContract {
                 throw new Error('Cannot transfer to the same address');
             }
 
-            const activeListings = await this.adapter.query(
-                'SELECT id FROM nft_listings WHERE token_id = ? AND collection_symbol = ? AND seller = ? AND active = TRUE',
-                [tokenId, collectionSymbol, sender]
-            );
-
-            if (activeListings && activeListings.length > 0) {
-                await this.adapter.query(
-                    'UPDATE nft_listings SET active = FALSE WHERE token_id = ? AND collection_symbol = ? AND seller = ?',
+            await this.withTransaction(async (adapter) => {
+                const activeListings = await adapter.query(
+                    'SELECT id FROM nft_listings WHERE token_id = ? AND collection_symbol = ? AND seller = ? AND active = TRUE',
                     [tokenId, collectionSymbol, sender]
                 );
-            }
 
-            await this.adapter.query(
-                'UPDATE nft_tokens SET owner = ? WHERE token_id = ? AND collection_symbol = ?',
-                [to, tokenId, collectionSymbol]
-            );
-
-            await this.adapter.query(`
-                INSERT INTO nft_transfers (token_id, collection_symbol, from_account, to_account, transfer_type, block_number, transaction_id, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `, [tokenId, collectionSymbol, sender, to, 'transfer', this.blockNumber, this.transactionId, new Date()]);
-
-            await this.adapter.addEvent(new Date(), CONTRACT_NAME, 'transferNFT', payload, {
-                action: 'nft_transferred',
-                data: {
-                    tokenId,
-                    collectionSymbol,
-                    from: sender,
-                    to
+                if (activeListings && activeListings.length > 0) {
+                    await adapter.query(
+                        'UPDATE nft_listings SET active = FALSE WHERE token_id = ? AND collection_symbol = ? AND seller = ?',
+                        [tokenId, collectionSymbol, sender]
+                    );
                 }
+
+                await adapter.query(
+                    'UPDATE nft_tokens SET owner = ? WHERE token_id = ? AND collection_symbol = ?',
+                    [to, tokenId, collectionSymbol]
+                );
+
+                await adapter.query(`
+                    INSERT INTO nft_transfers (token_id, collection_symbol, from_account, to_account, transfer_type, block_number, transaction_id, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                `, [tokenId, collectionSymbol, sender, to, 'transfer', this.blockNumber, this.transactionId, new Date()]);
+
+                await adapter.addEvent(new Date(), CONTRACT_NAME, 'transferNFT', payload, {
+                    action: 'nft_transferred',
+                    data: {
+                        tokenId,
+                        collectionSymbol,
+                        from: sender,
+                        to
+                    }
+                });
             });
 
             console.log(`[NFTContract] NFT ${tokenId} transferred from ${sender} to ${to}`);
@@ -496,33 +513,35 @@ export class NFTContract {
                 throw new Error('Only the token owner can burn the NFT');
             }
 
-            await this.adapter.query(
-                'UPDATE nft_listings SET active = FALSE WHERE token_id = ? AND collection_symbol = ?',
-                [tokenId, collectionSymbol]
-            );
+            await this.withTransaction(async (adapter) => {
+                await adapter.query(
+                    'UPDATE nft_listings SET active = FALSE WHERE token_id = ? AND collection_symbol = ?',
+                    [tokenId, collectionSymbol]
+                );
 
-            await this.adapter.query(
-                'UPDATE nft_tokens SET burned = TRUE WHERE token_id = ? AND collection_symbol = ?',
-                [tokenId, collectionSymbol]
-            );
+                await adapter.query(
+                    'UPDATE nft_tokens SET burned = TRUE WHERE token_id = ? AND collection_symbol = ?',
+                    [tokenId, collectionSymbol]
+                );
 
-            await this.adapter.query(
-                'UPDATE nft_collections SET current_supply = current_supply - 1 WHERE symbol = ?',
-                [collectionSymbol]
-            );
+                await adapter.query(
+                    'UPDATE nft_collections SET current_supply = current_supply - 1 WHERE symbol = ?',
+                    [collectionSymbol]
+                );
 
-            await this.adapter.query(`
-                INSERT INTO nft_transfers (token_id, collection_symbol, from_account, to_account, transfer_type, block_number, transaction_id, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `, [tokenId, collectionSymbol, sender, 'null', 'burn', this.blockNumber, this.transactionId, new Date()]);
+                await adapter.query(`
+                    INSERT INTO nft_transfers (token_id, collection_symbol, from_account, to_account, transfer_type, block_number, transaction_id, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                `, [tokenId, collectionSymbol, sender, 'null', 'burn', this.blockNumber, this.transactionId, new Date()]);
 
-            await this.adapter.addEvent(new Date(), CONTRACT_NAME, 'burnNFT', payload, {
-                action: 'nft_burned',
-                data: {
-                    tokenId,
-                    collectionSymbol,
-                    burnedBy: sender
-                }
+                await adapter.addEvent(new Date(), CONTRACT_NAME, 'burnNFT', payload, {
+                    action: 'nft_burned',
+                    data: {
+                        tokenId,
+                        collectionSymbol,
+                        burnedBy: sender
+                    }
+                });
             });
 
             console.log(`[NFTContract] NFT ${tokenId} burned by ${sender}`);
@@ -566,25 +585,27 @@ export class NFTContract {
                 throw new Error('Currency must be HIVE or HBD');
             }
 
-            await this.adapter.query(
-                'UPDATE nft_listings SET active = FALSE WHERE token_id = ? AND collection_symbol = ? AND seller = ?',
-                [tokenId, collectionSymbol, sender]
-            );
+            await this.withTransaction(async (adapter) => {
+                await adapter.query(
+                    'UPDATE nft_listings SET active = FALSE WHERE token_id = ? AND collection_symbol = ? AND seller = ?',
+                    [tokenId, collectionSymbol, sender]
+                );
 
-            await this.adapter.query(`
-                INSERT INTO nft_listings (token_id, collection_symbol, seller, price, currency, listed_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-            `, [tokenId, collectionSymbol, sender, price, currency, new Date()]);
+                await adapter.query(`
+                    INSERT INTO nft_listings (token_id, collection_symbol, seller, price, currency, listed_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                `, [tokenId, collectionSymbol, sender, price, currency, new Date()]);
 
-            await this.adapter.addEvent(new Date(), CONTRACT_NAME, 'listNFT', payload, {
-                action: 'nft_listed',
-                data: {
-                    tokenId,
-                    collectionSymbol,
-                    seller: sender,
-                    price,
-                    currency
-                }
+                await adapter.addEvent(new Date(), CONTRACT_NAME, 'listNFT', payload, {
+                    action: 'nft_listed',
+                    data: {
+                        tokenId,
+                        collectionSymbol,
+                        seller: sender,
+                        price,
+                        currency
+                    }
+                });
             });
 
             console.log(`[NFTContract] NFT ${tokenId} listed by ${sender} for ${price} ${currency}`);
@@ -611,18 +632,20 @@ export class NFTContract {
                 throw new Error(`No active listing found for token ${tokenId}`);
             }
 
-            await this.adapter.query(
-                'UPDATE nft_listings SET active = FALSE WHERE token_id = ? AND collection_symbol = ? AND seller = ?',
-                [tokenId, collectionSymbol, sender]
-            );
+            await this.withTransaction(async (adapter) => {
+                await adapter.query(
+                    'UPDATE nft_listings SET active = FALSE WHERE token_id = ? AND collection_symbol = ? AND seller = ?',
+                    [tokenId, collectionSymbol, sender]
+                );
 
-            await this.adapter.addEvent(new Date(), CONTRACT_NAME, 'unlistNFT', payload, {
-                action: 'nft_unlisted',
-                data: {
-                    tokenId,
-                    collectionSymbol,
-                    seller: sender
-                }
+                await adapter.addEvent(new Date(), CONTRACT_NAME, 'unlistNFT', payload, {
+                    action: 'nft_unlisted',
+                    data: {
+                        tokenId,
+                        collectionSymbol,
+                        seller: sender
+                    }
+                });
             });
 
             console.log(`[NFTContract] NFT ${tokenId} unlisted by ${sender}`);
@@ -683,33 +706,35 @@ export class NFTContract {
                 }
             }
 
-            await this.adapter.query(
-                'UPDATE nft_tokens SET owner = ? WHERE token_id = ? AND collection_symbol = ?',
-                [sender, tokenId, collectionSymbol]
-            );
+            await this.withTransaction(async (adapter) => {
+                await adapter.query(
+                    'UPDATE nft_tokens SET owner = ? WHERE token_id = ? AND collection_symbol = ?',
+                    [sender, tokenId, collectionSymbol]
+                );
 
-            await this.adapter.query(
-                'UPDATE nft_listings SET active = FALSE WHERE token_id = ? AND collection_symbol = ?',
-                [tokenId, collectionSymbol]
-            );
+                await adapter.query(
+                    'UPDATE nft_listings SET active = FALSE WHERE token_id = ? AND collection_symbol = ?',
+                    [tokenId, collectionSymbol]
+                );
 
-            await this.adapter.query(`
-                INSERT INTO nft_transfers (token_id, collection_symbol, from_account, to_account, transfer_type, price, currency, block_number, transaction_id, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `, [tokenId, collectionSymbol, listingData.seller, sender, 'sale', amount, asset, this.blockNumber, this.transactionId, new Date()]);
+                await adapter.query(`
+                    INSERT INTO nft_transfers (token_id, collection_symbol, from_account, to_account, transfer_type, price, currency, block_number, transaction_id, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `, [tokenId, collectionSymbol, listingData.seller, sender, 'sale', amount, asset, this.blockNumber, this.transactionId, new Date()]);
 
-            await this.adapter.addEvent(new Date(), CONTRACT_NAME, 'buyNFT', payload, {
-                action: 'nft_sold',
-                data: {
-                    tokenId,
-                    collectionSymbol,
-                    seller: listingData.seller,
-                    buyer: sender,
-                    price: amount,
-                    currency: asset,
-                    royaltyAmount: royaltyAmount.toFixed(3),
-                    sellerAmount: sellerAmount.toFixed(3)
-                }
+                await adapter.addEvent(new Date(), CONTRACT_NAME, 'buyNFT', payload, {
+                    action: 'nft_sold',
+                    data: {
+                        tokenId,
+                        collectionSymbol,
+                        seller: listingData.seller,
+                        buyer: sender,
+                        price: amount,
+                        currency: asset,
+                        royaltyAmount: royaltyAmount.toFixed(3),
+                        sellerAmount: sellerAmount.toFixed(3)
+                    }
+                });
             });
 
             console.log(`[NFTContract] NFT ${tokenId} sold to ${sender} for ${amount} ${asset}`);

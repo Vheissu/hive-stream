@@ -599,6 +599,14 @@ export class SqliteAdapter extends AdapterBase {
         }
     }
 
+    public async runInTransaction<T>(work: (adapter: AdapterBase) => Promise<T>): Promise<T> {
+        return this.db.transaction(async (trx) => {
+            const transactionAdapter = Object.create(this) as SqliteAdapter;
+            transactionAdapter.db = trx as unknown as Knex;
+            return work(transactionAdapter);
+        });
+    }
+
     public async query(sql: string, params?: any[]): Promise<any[]> {
         try {
             const result = await this.db.raw(sql, params);

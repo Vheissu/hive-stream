@@ -14,6 +14,8 @@ export interface ConfigInterface {
     CATCH_UP_BATCH_SIZE: number;
     CATCH_UP_DELAY_MS: number;
     API_NODES: string[];
+    API_ENABLED: boolean;
+    API_PORT: number;
     DEBUG_MODE: boolean;
 }
 
@@ -33,6 +35,8 @@ export interface ConfigInput extends Partial<ConfigInterface> {
     catchUpBatchSize?: ConfigInterface['CATCH_UP_BATCH_SIZE'];
     catchUpDelayMs?: ConfigInterface['CATCH_UP_DELAY_MS'];
     apiNodes?: ConfigInterface['API_NODES'];
+    apiEnabled?: ConfigInterface['API_ENABLED'];
+    apiPort?: ConfigInterface['API_PORT'];
     debugMode?: ConfigInterface['DEBUG_MODE'];
 }
 
@@ -54,6 +58,8 @@ const CONFIG_KEYS: Array<keyof ConfigInterface> = [
     'CATCH_UP_BATCH_SIZE',
     'CATCH_UP_DELAY_MS',
     'API_NODES',
+    'API_ENABLED',
+    'API_PORT',
     'DEBUG_MODE',
 ];
 
@@ -73,6 +79,8 @@ export const CONFIG_KEY_ALIASES: Record<ConfigAliasKey, keyof ConfigInterface> =
     catchUpBatchSize: 'CATCH_UP_BATCH_SIZE',
     catchUpDelayMs: 'CATCH_UP_DELAY_MS',
     apiNodes: 'API_NODES',
+    apiEnabled: 'API_ENABLED',
+    apiPort: 'API_PORT',
     debugMode: 'DEBUG_MODE',
 };
 
@@ -100,8 +108,10 @@ export const Config: ConfigInterface = {
     CATCH_UP_DELAY_MS: 0,
 
     API_NODES: ['https://api.hive.blog', 'https://api.openhive.network', 'https://rpc.ausbit.dev'],
+    API_ENABLED: false,
+    API_PORT: 5001,
 
-    DEBUG_MODE: true,
+    DEBUG_MODE: false,
 };
 
 export function normalizeConfigInput(config: ConfigInput = {}): Partial<ConfigInterface> {
