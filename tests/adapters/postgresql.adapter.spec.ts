@@ -85,6 +85,47 @@ describe('PostgreSQL Adapter', () => {
         expect(mockKnex.raw).toHaveBeenCalledWith('SELECT * FROM test WHERE id = $1', [1]);
     });
 
+    test('query normalizes SQLite-flavoured DDL before executing it', async () => {
+        const mockKnex = {
+            raw: jest.fn().mockResolvedValue({ rows: [] })
+        };
+        (sut as any).db = mockKnex;
+
+        await sut.query(`
+            CREATE TABLE demo (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at DATETIME NOT NULL
+            )
+        `);
+
+        expect(mockKnex.raw).toHaveBeenCalledWith(
+            expect.stringContaining('id SERIAL PRIMARY KEY'),
+            undefined
+        );
+        expect(mockKnex.raw).toHaveBeenCalledWith(
+            expect.stringContaining('created_at TIMESTAMP NOT NULL'),
+            undefined
+        );
+    });
+
+    test('query normalizes REAL usage for PostgreSQL precision compatibility', async () => {
+        const mockKnex = {
+            raw: jest.fn().mockResolvedValue({ rows: [] })
+        };
+        (sut as any).db = mockKnex;
+
+        await sut.query(`
+            SELECT *
+            FROM exchange_orders
+            ORDER BY CAST(price AS REAL) DESC
+        `);
+
+        expect(mockKnex.raw).toHaveBeenCalledWith(
+            expect.stringContaining('CAST(price AS DOUBLE PRECISION) DESC'),
+            undefined
+        );
+    });
+
     test('loadState handles missing state gracefully', async () => {
         // Mock the query to return no results
         const mockQuery = jest.fn().mockReturnValue({

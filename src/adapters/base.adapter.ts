@@ -4,6 +4,9 @@ import { SignedBlock } from '@hiveio/dhive';
 export class AdapterBase {
     protected client: any = null;
     protected db: any = null;
+    public readonly capabilities = {
+        sql: false
+    };
 
     constructor() {
         this.client = null;

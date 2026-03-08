@@ -2,6 +2,7 @@ import BigNumber from 'bignumber.js';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
+import { ensureSqlAdapter } from './helpers';
 
 const DEFAULT_NAME = 'exchange';
 const DEFAULT_ACCOUNT = 'beggars';
@@ -304,6 +305,7 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
             throw new Error('Insufficient available balance');
         }
 
+        const createdAt = new Date();
         const withdrawalId = await withTransaction(async (adapter) => {
             const currentBalance = await getBalanceRow(ctx.sender, payload.asset, adapter);
             if (currentBalance.available.lt(amount)) {
@@ -313,10 +315,21 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
             const nextAvailable = currentBalance.available.minus(amount);
             await setBalanceRow(ctx.sender, payload.asset, nextAvailable, currentBalance.locked, adapter);
 
-            return adapter.query(
+            await adapter.query(
                 'INSERT INTO exchange_withdrawals (account, asset, amount, status, block_number, transaction_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                [ctx.sender, payload.asset, payload.amount, 'pending', ctx.block.number, ctx.transaction.id, new Date()]
+                [ctx.sender, payload.asset, payload.amount, 'pending', ctx.block.number, ctx.transaction.id, createdAt]
             );
+
+            const insertedRows = await adapter.query(
+                'SELECT id FROM exchange_withdrawals WHERE transaction_id = ? AND account = ? ORDER BY id DESC LIMIT 1',
+                [ctx.transaction.id, ctx.sender]
+            );
+
+            if (!insertedRows.length) {
+                throw new Error('Failed to locate newly created withdrawal');
+            }
+
+            return insertedRows[0].id;
         });
 
         try {
@@ -324,14 +337,14 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
             await state.streamer.transferHiveTokens(account, to, payload.amount, payload.asset, 'Exchange withdrawal');
             await state.adapter.query(
                 'UPDATE exchange_withdrawals SET status = ? WHERE id = ?',
-                ['completed', withdrawalId?.insertId ?? withdrawalId?.lastID ?? null]
+                ['completed', withdrawalId]
             );
         } catch (error) {
             await withTransaction(async (adapter) => {
                 await setBalanceRow(ctx.sender, payload.asset, balance.available, balance.locked, adapter);
                 await adapter.query(
                     'UPDATE exchange_withdrawals SET status = ? WHERE id = ?',
-                    ['failed', withdrawalId?.insertId ?? withdrawalId?.lastID ?? null]
+                    ['failed', withdrawalId]
                 );
             });
             throw error;
@@ -686,14 +699,10 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
         name,
         hooks: {
             create: async ({ adapter, streamer }) => {
+                ensureSqlAdapter(adapter);
                 state.adapter = adapter;
                 state.streamer = streamer;
-
-                try {
-                    await initializeTables();
-                } catch (error) {
-                    throw new Error('ExchangeContract requires a SQL-capable adapter');
-                }
+                await initializeTables();
             }
         },
         actions: {

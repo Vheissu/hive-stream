@@ -3,6 +3,9 @@ import { AdapterBase } from '../../src/adapters/base.adapter';
 export class MockAdapter extends AdapterBase {
     public queries: string[] = [];
     public events: any[] = [];
+    public override readonly capabilities = {
+        sql: true
+    };
     private queryResults: any[][] = [];
     private currentQueryIndex = 0;
     private testContext: any = {};

@@ -2,6 +2,7 @@ import BigNumber from 'bignumber.js';
 import { Streamer } from '../streamer';
 import { Utils } from '../utils';
 import { action, defineContract } from './contract';
+import { ensureSqlAdapter } from './helpers';
 
 const CONTRACT_NAME = 'hivenft';
 
@@ -62,6 +63,7 @@ export class NFTContract {
 
     public async create() {
         this.adapter = this._instance.getAdapter();
+        ensureSqlAdapter(this.adapter);
         await this.initializeNFTTables();
     }
 
@@ -77,84 +79,79 @@ export class NFTContract {
     }
 
     private async initializeNFTTables() {
-        try {
-            await this.adapter.query(`
-                CREATE TABLE IF NOT EXISTS nft_collections (
-                    symbol TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    description TEXT,
-                    creator TEXT NOT NULL,
-                    max_supply INTEGER,
-                    current_supply INTEGER NOT NULL DEFAULT 0,
-                    royalty REAL DEFAULT 0,
-                    base_uri TEXT,
-                    allow_updates BOOLEAN DEFAULT TRUE,
-                    updateable_by_owner BOOLEAN DEFAULT FALSE,
-                    created_at DATETIME NOT NULL
-                )
-            `);
+        await this.adapter.query(`
+            CREATE TABLE IF NOT EXISTS nft_collections (
+                symbol TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                creator TEXT NOT NULL,
+                max_supply INTEGER,
+                current_supply INTEGER NOT NULL DEFAULT 0,
+                royalty REAL DEFAULT 0,
+                base_uri TEXT,
+                allow_updates BOOLEAN DEFAULT TRUE,
+                updateable_by_owner BOOLEAN DEFAULT FALSE,
+                created_at DATETIME NOT NULL
+            )
+        `);
 
-            await this.adapter.query(`
-                CREATE TABLE IF NOT EXISTS nft_tokens (
-                    token_id TEXT NOT NULL,
-                    collection_symbol TEXT NOT NULL,
-                    owner TEXT NOT NULL,
-                    metadata TEXT,
-                    attributes TEXT,
-                    minted_at DATETIME NOT NULL,
-                    minted_by TEXT NOT NULL,
-                    burned BOOLEAN DEFAULT FALSE,
-                    PRIMARY KEY (token_id, collection_symbol),
-                    FOREIGN KEY (collection_symbol) REFERENCES nft_collections(symbol)
-                )
-            `);
+        await this.adapter.query(`
+            CREATE TABLE IF NOT EXISTS nft_tokens (
+                token_id TEXT NOT NULL,
+                collection_symbol TEXT NOT NULL,
+                owner TEXT NOT NULL,
+                metadata TEXT,
+                attributes TEXT,
+                minted_at DATETIME NOT NULL,
+                minted_by TEXT NOT NULL,
+                burned BOOLEAN DEFAULT FALSE,
+                PRIMARY KEY (token_id, collection_symbol),
+                FOREIGN KEY (collection_symbol) REFERENCES nft_collections(symbol)
+            )
+        `);
 
-            await this.adapter.query(`
-                CREATE TABLE IF NOT EXISTS nft_listings (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    token_id TEXT NOT NULL,
-                    collection_symbol TEXT NOT NULL,
-                    seller TEXT NOT NULL,
-                    price TEXT NOT NULL,
-                    currency TEXT NOT NULL DEFAULT 'HIVE',
-                    listed_at DATETIME NOT NULL,
-                    active BOOLEAN DEFAULT TRUE,
-                    FOREIGN KEY (token_id, collection_symbol) REFERENCES nft_tokens(token_id, collection_symbol)
-                )
-            `);
+        await this.adapter.query(`
+            CREATE TABLE IF NOT EXISTS nft_listings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                token_id TEXT NOT NULL,
+                collection_symbol TEXT NOT NULL,
+                seller TEXT NOT NULL,
+                price TEXT NOT NULL,
+                currency TEXT NOT NULL DEFAULT 'HIVE',
+                listed_at DATETIME NOT NULL,
+                active BOOLEAN DEFAULT TRUE,
+                FOREIGN KEY (token_id, collection_symbol) REFERENCES nft_tokens(token_id, collection_symbol)
+            )
+        `);
 
-            await this.adapter.query(`
-                CREATE TABLE IF NOT EXISTS nft_transfers (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    token_id TEXT NOT NULL,
-                    collection_symbol TEXT NOT NULL,
-                    from_account TEXT NOT NULL,
-                    to_account TEXT NOT NULL,
-                    transfer_type TEXT NOT NULL,
-                    price TEXT,
-                    currency TEXT,
-                    block_number INTEGER NOT NULL,
-                    transaction_id TEXT NOT NULL,
-                    timestamp DATETIME NOT NULL,
-                    FOREIGN KEY (token_id, collection_symbol) REFERENCES nft_tokens(token_id, collection_symbol)
-                )
-            `);
+        await this.adapter.query(`
+            CREATE TABLE IF NOT EXISTS nft_transfers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                token_id TEXT NOT NULL,
+                collection_symbol TEXT NOT NULL,
+                from_account TEXT NOT NULL,
+                to_account TEXT NOT NULL,
+                transfer_type TEXT NOT NULL,
+                price TEXT,
+                currency TEXT,
+                block_number INTEGER NOT NULL,
+                transaction_id TEXT NOT NULL,
+                timestamp DATETIME NOT NULL,
+                FOREIGN KEY (token_id, collection_symbol) REFERENCES nft_tokens(token_id, collection_symbol)
+            )
+        `);
 
-            await this.adapter.query(`
-                CREATE INDEX IF NOT EXISTS idx_nft_tokens_owner ON nft_tokens(owner);
-            `);
+        await this.adapter.query(`
+            CREATE INDEX IF NOT EXISTS idx_nft_tokens_owner ON nft_tokens(owner);
+        `);
 
-            await this.adapter.query(`
-                CREATE INDEX IF NOT EXISTS idx_nft_tokens_collection ON nft_tokens(collection_symbol);
-            `);
+        await this.adapter.query(`
+            CREATE INDEX IF NOT EXISTS idx_nft_tokens_collection ON nft_tokens(collection_symbol);
+        `);
 
-            await this.adapter.query(`
-                CREATE INDEX IF NOT EXISTS idx_nft_listings_active ON nft_listings(active, collection_symbol);
-            `);
-
-        } catch (error) {
-            console.error('[NFTContract] Error initializing tables:', error);
-        }
+        await this.adapter.query(`
+            CREATE INDEX IF NOT EXISTS idx_nft_listings_active ON nft_listings(active, collection_symbol);
+        `);
     }
 
     private async withTransaction<T>(work: (adapter: any) => Promise<T>): Promise<T> {

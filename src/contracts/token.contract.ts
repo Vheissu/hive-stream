@@ -1,6 +1,7 @@
 import BigNumber from 'bignumber.js';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
+import { ensureSqlAdapter } from './helpers';
 
 const DEFAULT_NAME = 'hivetoken';
 
@@ -73,47 +74,43 @@ export function createTokenContract(options: TokenContractOptions = {}) {
     });
 
     const initializeTokenTables = async () => {
-        try {
-            await state.adapter.query(`
-                CREATE TABLE IF NOT EXISTS tokens (
-                    symbol TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    url TEXT,
-                    precision INTEGER NOT NULL DEFAULT 3,
-                    max_supply TEXT NOT NULL,
-                    current_supply TEXT NOT NULL DEFAULT '0',
-                    creator TEXT NOT NULL,
-                    created_at DATETIME NOT NULL
-                )
-            `);
+        await state.adapter.query(`
+            CREATE TABLE IF NOT EXISTS tokens (
+                symbol TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                url TEXT,
+                precision INTEGER NOT NULL DEFAULT 3,
+                max_supply TEXT NOT NULL,
+                current_supply TEXT NOT NULL DEFAULT '0',
+                creator TEXT NOT NULL,
+                created_at DATETIME NOT NULL
+            )
+        `);
 
-            await state.adapter.query(`
-                CREATE TABLE IF NOT EXISTS token_balances (
-                    account TEXT NOT NULL,
-                    symbol TEXT NOT NULL,
-                    balance TEXT NOT NULL DEFAULT '0',
-                    PRIMARY KEY (account, symbol),
-                    FOREIGN KEY (symbol) REFERENCES tokens(symbol)
-                )
-            `);
+        await state.adapter.query(`
+            CREATE TABLE IF NOT EXISTS token_balances (
+                account TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                balance TEXT NOT NULL DEFAULT '0',
+                PRIMARY KEY (account, symbol),
+                FOREIGN KEY (symbol) REFERENCES tokens(symbol)
+            )
+        `);
 
-            await state.adapter.query(`
-                CREATE TABLE IF NOT EXISTS token_transfers (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    from_account TEXT NOT NULL,
-                    to_account TEXT NOT NULL,
-                    amount TEXT NOT NULL,
-                    symbol TEXT NOT NULL,
-                    memo TEXT,
-                    block_number INTEGER NOT NULL,
-                    transaction_id TEXT NOT NULL,
-                    timestamp DATETIME NOT NULL,
-                    FOREIGN KEY (symbol) REFERENCES tokens(symbol)
-                )
-            `);
-        } catch (error) {
-            console.error('[TokenContract] Error initializing tables:', error);
-        }
+        await state.adapter.query(`
+            CREATE TABLE IF NOT EXISTS token_transfers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                from_account TEXT NOT NULL,
+                to_account TEXT NOT NULL,
+                amount TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                memo TEXT,
+                block_number INTEGER NOT NULL,
+                transaction_id TEXT NOT NULL,
+                timestamp DATETIME NOT NULL,
+                FOREIGN KEY (symbol) REFERENCES tokens(symbol)
+            )
+        `);
     };
 
     const withTransaction = async <T>(work: (adapter: any) => Promise<T>): Promise<T> => {
@@ -397,6 +394,7 @@ export function createTokenContract(options: TokenContractOptions = {}) {
         name,
         hooks: {
             create: async ({ streamer, adapter }) => {
+                ensureSqlAdapter(adapter);
                 state.streamer = streamer;
                 state.adapter = adapter;
                 await initializeTokenTables();

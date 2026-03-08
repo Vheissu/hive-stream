@@ -341,6 +341,8 @@ Quick-start snippets live in `examples/contracts/`:
 - `examples/contracts/tipjar.ts`
 - `examples/contracts/exchange.ts`
 
+Most built-in contracts use SQL tables internally, so they require a SQL-capable adapter such as SQLite or PostgreSQL. MongoDB remains supported for streamer persistence and custom contracts that do not rely on raw SQL queries.
+
 ---
 
 ## Exchange Contract Guide

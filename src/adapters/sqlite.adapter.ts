@@ -7,6 +7,9 @@ import path from 'path';
 
 export class SqliteAdapter extends AdapterBase {
     public declare db: Knex;
+    public override readonly capabilities = {
+        sql: true
+    };
     private dbPath: string;
     
     constructor(dbPath?: string) {

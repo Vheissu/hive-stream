@@ -13,7 +13,15 @@ export function createContractState<T extends Record<string, any> = Record<strin
     };
 }
 
+export function ensureSqlAdapter(adapter: any): void {
+    if (!adapter?.capabilities?.sql) {
+        throw new Error('This contract requires a SQL-capable adapter (SQLite or PostgreSQL).');
+    }
+}
+
 export async function initializeTables(adapter: any, statements: string[]): Promise<void> {
+    ensureSqlAdapter(adapter);
+
     for (const statement of statements) {
         await adapter.query(statement);
     }

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { action, defineContract } from './contract';
+import { ensureSqlAdapter } from './helpers';
 
 const DEFAULT_NAME = 'polls';
 
@@ -111,6 +112,7 @@ export function createPollContract(options: PollContractOptions = {}) {
         name,
         hooks: {
             create: async ({ adapter }) => {
+                ensureSqlAdapter(adapter);
                 state.adapter = adapter;
                 await initializeTables();
             }

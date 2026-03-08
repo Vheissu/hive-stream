@@ -920,16 +920,8 @@ describe('NFTContract', () => {
             const originalQuery = mockAdapter.query;
             mockAdapter.query = jest.fn().mockRejectedValue(new Error('Database error'));
 
-            const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-            
-            await nftContract.create();
+            await expect(nftContract.create()).rejects.toThrow('Database error');
 
-            // Wait for async operations to complete
-            await new Promise(resolve => setTimeout(resolve, 10));
-
-            expect(consoleSpy).toHaveBeenCalledWith('[NFTContract] Error initializing tables:', expect.any(Error));
-            
-            consoleSpy.mockRestore();
             mockAdapter.query = originalQuery;
         });
 

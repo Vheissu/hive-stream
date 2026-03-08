@@ -16,6 +16,9 @@ export interface PostgreSQLConfig {
 
 export class PostgreSQLAdapter extends AdapterBase {
     public declare db: Knex;
+    public override readonly capabilities = {
+        sql: true
+    };
     private config: PostgreSQLConfig;
     
     constructor(config: PostgreSQLConfig) {
@@ -62,13 +65,13 @@ export class PostgreSQLAdapter extends AdapterBase {
 
     public async create(): Promise<boolean> {
         try {
-            await this.db.schema.createTableIfNotExists('params', table => {
+            await this.ensureTable('params', table => {
                 table.integer('id').primary();
                 table.bigInteger('lastBlockNumber');
                 table.text('actions');
             });
 
-            await this.db.schema.createTableIfNotExists('transfers', table => {
+            await this.ensureTable('transfers', table => {
                 table.text('id').primary();
                 table.text('blockId');
                 table.bigInteger('blockNumber');
@@ -78,15 +81,13 @@ export class PostgreSQLAdapter extends AdapterBase {
                 table.text('contractAction');
                 table.text('contractPayload');
                 table.timestamp('created_at').defaultTo(this.db.fn.now());
-                
-                // Add indexes for common queries
-                table.index(['sender']);
-                table.index(['contractName']);
-                table.index(['blockNumber']);
-                table.index(['blockId']);
             });
+            await this.createIndexIfNotExists('transfers_sender_index', 'transfers', ['sender']);
+            await this.createIndexIfNotExists('transfers_contract_name_index', 'transfers', ['contractName']);
+            await this.createIndexIfNotExists('transfers_block_number_index', 'transfers', ['blockNumber']);
+            await this.createIndexIfNotExists('transfers_block_id_index', 'transfers', ['blockId']);
 
-            await this.db.schema.createTableIfNotExists('customJson', table => {
+            await this.ensureTable('customJson', table => {
                 table.text('id').primary();
                 table.text('blockId');
                 table.bigInteger('blockNumber');
@@ -96,33 +97,45 @@ export class PostgreSQLAdapter extends AdapterBase {
                 table.text('contractAction');
                 table.text('contractPayload');
                 table.timestamp('created_at').defaultTo(this.db.fn.now());
-                
-                // Add indexes for common queries
-                table.index(['sender']);
-                table.index(['contractName']);
-                table.index(['blockNumber']);
-                table.index(['blockId']);
             });
+            await this.createIndexIfNotExists('custom_json_sender_index', 'customJson', ['sender']);
+            await this.createIndexIfNotExists('custom_json_contract_name_index', 'customJson', ['contractName']);
+            await this.createIndexIfNotExists('custom_json_block_number_index', 'customJson', ['blockNumber']);
+            await this.createIndexIfNotExists('custom_json_block_id_index', 'customJson', ['blockId']);
 
-            await this.db.schema.createTableIfNotExists('events', table => {
+            await this.ensureTable('events', table => {
                 table.increments('id').primary();
                 table.timestamp('date').defaultTo(this.db.fn.now());
                 table.text('contract');
                 table.text('action');
                 table.text('payload');
                 table.text('data');
-                
-                // Add indexes for common queries
-                table.index(['contract']);
-                table.index(['action']);
-                table.index(['date']);
             });
+            await this.createIndexIfNotExists('events_contract_index', 'events', ['contract']);
+            await this.createIndexIfNotExists('events_action_index', 'events', ['action']);
+            await this.createIndexIfNotExists('events_date_index', 'events', ['date']);
 
             return true;
         } catch (error) {
             console.error('[PostgreSQLAdapter] Error creating tables:', error);
             throw error;
         }
+    }
+
+    private async ensureTable(name: string, callback: (table: Knex.CreateTableBuilder) => void): Promise<void> {
+        const exists = await this.db.schema.hasTable(name);
+
+        if (!exists) {
+            await this.db.schema.createTable(name, callback);
+        }
+    }
+
+    private async createIndexIfNotExists(indexName: string, tableName: string, columns: string[]): Promise<void> {
+        const quotedColumns = columns.map(column => `"${column}"`).join(', ');
+
+        await this.db.raw(
+            `CREATE INDEX IF NOT EXISTS "${indexName}" ON "${tableName}" (${quotedColumns})`
+        );
     }
 
     public async loadActions(): Promise<TimeAction[]> {
@@ -661,12 +674,24 @@ export class PostgreSQLAdapter extends AdapterBase {
 
     public async query(sql: string, params?: any[]): Promise<any[]> {
         try {
-            const result = await this.db.raw(sql, params);
+            const result = await this.db.raw(this.normalizeSql(sql), params);
             // PostgreSQL returns results in result.rows
             return result.rows || [];
         } catch (error) {
             console.error('[PostgreSQLAdapter] Error executing raw query:', error);
             throw error;
         }
+    }
+
+    private normalizeSql(sql: string): string {
+        if (!sql) {
+            return sql;
+        }
+
+        return sql
+            .replace(/\bDATETIME\b/gi, 'TIMESTAMP')
+            .replace(/\bREAL\b/gi, 'DOUBLE PRECISION')
+            .replace(/\bINTEGER\s+PRIMARY\s+KEY\s+AUTOINCREMENT\b/gi, 'SERIAL PRIMARY KEY')
+            .replace(/\bAUTOINCREMENT\b/gi, '');
     }
 }

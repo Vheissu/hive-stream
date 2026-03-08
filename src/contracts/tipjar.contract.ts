@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { action, defineContract } from './contract';
+import { ensureSqlAdapter } from './helpers';
 
 const DEFAULT_NAME = 'tipjar';
 
@@ -58,6 +59,7 @@ export function createTipJarContract(options: TipJarContractOptions = {}) {
         name,
         hooks: {
             create: async ({ adapter }) => {
+                ensureSqlAdapter(adapter);
                 state.adapter = adapter;
                 await initializeTables();
             }

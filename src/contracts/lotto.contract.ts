@@ -79,7 +79,7 @@ export function createLottoContract(options: LottoContractOptions = {}) {
     };
 
     const getPreviousUserTicketsForCurrentDrawType = async (type: string, accountName: string): Promise<number> => {
-        const lotto = await state.adapter.find(COLLECTION_LOTTERY, { status: 'active', type });
+        const lotto = (await state.adapter.find(COLLECTION_LOTTERY, { status: 'active', type })) || [];
 
         if (!lotto[0] || !lotto[0].entries) {
             return 0;
@@ -127,7 +127,7 @@ export function createLottoContract(options: LottoContractOptions = {}) {
                 return;
             }
 
-            const lotto = await state.adapter.find(COLLECTION_LOTTERY, { status: 'active', type: payload.type });
+            const lotto = (await state.adapter.find(COLLECTION_LOTTERY, { status: 'active', type: payload.type })) || [];
 
             if (lotto.length) {
                 const draw = lotto[0];
@@ -178,7 +178,7 @@ export function createLottoContract(options: LottoContractOptions = {}) {
     };
 
     const drawHourlyLottery = async (_payload: any, ctx: any): Promise<void> => {
-        const lotto = await state.adapter.find(COLLECTION_LOTTERY, { status: 'active', type: 'hourly' });
+        const lotto = (await state.adapter.find(COLLECTION_LOTTERY, { status: 'active', type: 'hourly' })) || [];
 
         if (lotto.length) {
             const draw = lotto[0];
@@ -236,7 +236,7 @@ export function createLottoContract(options: LottoContractOptions = {}) {
     };
 
     const drawDailyLottery = async (_payload: any, ctx: any): Promise<void> => {
-        const lotto = await state.adapter.find(COLLECTION_LOTTERY, { status: 'active', type: 'daily' });
+        const lotto = (await state.adapter.find(COLLECTION_LOTTERY, { status: 'active', type: 'daily' })) || [];
 
         if (lotto.length) {
             const draw = lotto[0];

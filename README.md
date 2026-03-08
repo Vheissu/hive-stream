@@ -363,6 +363,8 @@ These can be imported and used as examples for building your own contracts:
 import { createDiceContract, createCoinflipContract, createLottoContract } from 'hive-stream';
 ```
 
+Most built-in contracts in `src/contracts` persist SQL tables internally, so they require a SQL-capable adapter such as SQLite or PostgreSQL. MongoDB remains supported for streamer persistence and custom contracts that do not depend on raw SQL queries.
+
 ### Example Snippets
 
 Sample snippets for the newest contracts live in `examples/contracts/`:
@@ -446,6 +448,8 @@ const streamer = new Streamer(config);
 const adapter = new MongodbAdapter('mongodb://localhost:27017', 'hive_stream');
 await streamer.registerAdapter(adapter);
 ```
+
+MongoDB supports block state, transfers, custom JSON persistence, and custom contracts that manage their own state without SQL. Built-in SQL-backed contracts should use SQLite or PostgreSQL.
 
 ### PostgreSQL Adapter
 ```javascript
