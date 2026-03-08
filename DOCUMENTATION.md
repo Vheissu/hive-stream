@@ -314,6 +314,23 @@ export const TipJar = defineContract({
 - `createSweepstakesContract` - Paid-entry sweepstakes with deterministic draws
 - `createDcaBotContract` - Time-driven DCA execution scheduling
 - `createMultisigTreasuryContract` - Multisig vaults with approval queues and ready-to-execute proposals
+- `createRevenueSplitContract` - Revenue splitting with internal balances and withdrawals
+- `createPaywallContract` - Paid access windows and expiries for gated resources
+- `createDomainRegistryContract` - Namespace-based domain registrations, renewals, and transfers
+- `createRentalContract` - Escrow-backed rentals using `escrow_transfer`
+- `createLaunchpadContract` - Fixed-price launchpad sales with allocations and claims
+- `createPredictionMarketContract` - Prediction markets with paid positions and claims
+- `createQuestPassContract` - Seasonal pass sales, point accrual, and tier claims
+- `createCharityMatchContract` - Donation matching campaigns with sponsor-defined caps
+- `createReferralContract` - Affiliate programs, conversion attribution, and payout balances
+- `createInsurancePoolContract` - Insurance pools with premiums, active policies, claims, and reserve accounting
+- `createOracleBountyContract` - Oracle feeds with funded report rounds, medians, and reward withdrawals
+- `createGrantRoundsContract` - Matching grant rounds with project submissions, donations, and grant withdrawals
+- `createPayrollContract` - Recurring payroll budgets with scheduled runs and recipient balances
+- `createProposalTimelockContract` - Timelock approval queues for delayed governance-style actions
+- `createBundleMarketplaceContract` - Bundle storefronts with inventory, purchases, and fulfillment tracking
+- `createTicketingContract` - Event ticket sales with check-ins, refunds, and capacity limits
+- `createFanClubContract` - Paid clubs with member renewals, points, and perk redemptions
 
 ### Example Snippets
 

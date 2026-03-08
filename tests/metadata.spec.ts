@@ -64,4 +64,19 @@ describe('metadata exports', () => {
             'recurrent_transfer'
         ]);
     });
+
+    test('keeps helper exports aligned with the expanded contract catalog', () => {
+        expect(HIVE_STREAM_METADATA.contracts.helperExports).toEqual(
+            expect.arrayContaining([
+                'createInsurancePoolContract',
+                'createOracleBountyContract',
+                'createGrantRoundsContract',
+                'createPayrollContract',
+                'createProposalTimelockContract',
+                'createBundleMarketplaceContract',
+                'createTicketingContract',
+                'createFanClubContract'
+            ])
+        );
+    });
 });

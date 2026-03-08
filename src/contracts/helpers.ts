@@ -41,6 +41,14 @@ export function requireTransferContext(ctx: ContractContext) {
     return ctx.transfer;
 }
 
+export function requireEscrowContext(ctx: ContractContext) {
+    if (!ctx.escrow) {
+        throw new Error('Escrow context required');
+    }
+
+    return ctx.escrow;
+}
+
 export function getIncomingPayment(ctx: ContractContext) {
     if (ctx.transfer) {
         return {
@@ -70,6 +78,27 @@ export function getIncomingPayment(ctx: ContractContext) {
     }
 
     throw new Error('Payment context required');
+}
+
+export function getEscrowPayment(ctx: ContractContext) {
+    const escrow = requireEscrowContext(ctx);
+    const candidates = [escrow.hiveAmount, escrow.hbdAmount].filter((value): value is string => Boolean(value));
+
+    for (const candidate of candidates) {
+        const parts = candidate.split(' ');
+        const amount = parts[0] || '0';
+        const asset = parts[1] || '';
+
+        if (toBigNumber(amount).gt(0)) {
+            return {
+                rawAmount: candidate,
+                amount,
+                asset
+            };
+        }
+    }
+
+    throw new Error('Escrow payment amount required');
 }
 
 export function parseDateValue(value?: string | Date | null): Date | null {

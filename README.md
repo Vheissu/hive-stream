@@ -339,6 +339,23 @@ The library includes several built-in contract examples in the `src/contracts` f
 - `createSweepstakesContract` - Paid-entry sweepstakes with deterministic winner draws
 - `createDcaBotContract` - Time-based DCA bot scheduling and execution request events
 - `createMultisigTreasuryContract` - Multisig vaults, proposal approvals, and execution readiness tracking
+- `createRevenueSplitContract` - Revenue share ledgers and withdrawal requests for collaborators
+- `createPaywallContract` - Paid access control for gated resources and memberships
+- `createDomainRegistryContract` - App-level namespaces with registrations, renewals, transfers, and expiries
+- `createRentalContract` - Escrow-backed rental agreements for items, passes, or assets
+- `createLaunchpadContract` - Launchpad sales with allocations, finalization, and claim flows
+- `createPredictionMarketContract` - Prediction markets with positions, resolution, and winner claims
+- `createQuestPassContract` - Seasonal passes with progress tracking and reward claims
+- `createCharityMatchContract` - Donation campaigns with matched totals and closing summaries
+- `createReferralContract` - Affiliate programs with codes, funded budgets, and payout balances
+- `createInsurancePoolContract` - Insurance pools with premium-backed policies, claims, and reserve management
+- `createOracleBountyContract` - Oracle bounty feeds with report rounds, median finalization, and reporter rewards
+- `createGrantRoundsContract` - Matching grant rounds with project submissions, donations, and post-close allocations
+- `createPayrollContract` - Recurring team payrolls with funded budgets, scheduled runs, and recipient withdrawals
+- `createProposalTimelockContract` - Timelocked governance queues with approvals, delays, and execution requests
+- `createBundleMarketplaceContract` - Fixed-price bundle storefronts with inventory tracking and fulfillment states
+- `createTicketingContract` - Event ticketing with purchases, check-ins, refunds, and capacity enforcement
+- `createFanClubContract` - Paid fan clubs with member renewals, engagement points, and perk redemptions
 
 These can be imported and used as examples for building your own contracts:
 

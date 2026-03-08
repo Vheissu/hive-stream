@@ -35,6 +35,23 @@ export { createGroupBuyContract } from './contracts/groupbuy.contract';
 export { createSweepstakesContract } from './contracts/sweepstakes.contract';
 export { createDcaBotContract } from './contracts/dcabot.contract';
 export { createMultisigTreasuryContract } from './contracts/multisigtreasury.contract';
+export { createRevenueSplitContract } from './contracts/revenuesplit.contract';
+export { createPaywallContract } from './contracts/paywall.contract';
+export { createDomainRegistryContract } from './contracts/domainregistry.contract';
+export { createRentalContract } from './contracts/rental.contract';
+export { createLaunchpadContract } from './contracts/launchpad.contract';
+export { createPredictionMarketContract } from './contracts/predictionmarket.contract';
+export { createQuestPassContract } from './contracts/questpass.contract';
+export { createCharityMatchContract } from './contracts/charitymatch.contract';
+export { createReferralContract } from './contracts/referral.contract';
+export { createInsurancePoolContract } from './contracts/insurancepool.contract';
+export { createOracleBountyContract } from './contracts/oraclebounty.contract';
+export { createGrantRoundsContract } from './contracts/grantrounds.contract';
+export { createPayrollContract } from './contracts/payroll.contract';
+export { createProposalTimelockContract } from './contracts/proposaltimelock.contract';
+export { createBundleMarketplaceContract } from './contracts/bundlemarketplace.contract';
+export { createTicketingContract } from './contracts/ticketing.contract';
+export { createFanClubContract } from './contracts/fanclub.contract';
 
 // Types
 export * from './types/hive-stream';
