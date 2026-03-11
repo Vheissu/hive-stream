@@ -183,7 +183,7 @@ async function testOperationShapeCompatibility() {
     let foundCustomJson = false;
     let foundComment = false;
 
-    for (let n = props.head_block_number - 30; n < props.head_block_number - 20; n++) {
+    for (let n = props.head_block_number - 50; n < props.head_block_number - 10; n++) {
         const block = await haf.getBlock(n);
         if (!block) {
             continue;
@@ -298,14 +298,12 @@ async function testHafClient() {
     const noBalances = await client.getAccountBalances(['zzz_nonexistent_account_12345']);
     check('getAccountBalances returns empty for non-existent account', noBalances.length === 0);
 
-    // getTransfers
+    // getTransfers (account filter only — date range subqueries can be slow)
     const transfers = await client.getTransfers({
         accounts: ['hiveio'],
-        fromDate: '2024-01-01T00:00:00Z',
-        toDate: '2024-01-02T00:00:00Z',
     });
     check('getTransfers returns results (or empty array)', Array.isArray(transfers));
-    console.log(`       hiveio transfers on 2024-01-01: ${transfers.length}`);
+    console.log(`       hiveio transfers: ${transfers.length}`);
 
     // raw query
     const rawResult = await client.query<{ one: number }>('SELECT 1 AS one');

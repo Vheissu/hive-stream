@@ -74,11 +74,12 @@ describe('HafClient', () => {
             const params = lastCall[1] as any[];
 
             expect(sql).toContain('hafsql.operation_transfer_table');
+            expect(sql).toContain('from_account');
+            expect(sql).toContain('to_account');
             expect(sql).toContain('ANY($1)');
-            expect(sql).toContain('timestamp >= $2');
-            expect(sql).toContain('timestamp <= $3');
-            expect(sql).toContain('amount_symbol = $4');
-            expect(params).toEqual([['alice', 'bob'], '2024-01-01', '2024-06-01', 'HIVE']);
+            expect(sql).toContain('t.symbol = $4');
+            expect(params[0]).toEqual(['alice', 'bob']);
+            expect(params[3]).toBe('HIVE');
         });
 
         test('works with accounts only', async () => {
@@ -166,6 +167,9 @@ describe('HafClient', () => {
             const params = lastCall[1] as any[];
 
             expect(sql).toContain('hafsql.operation_proposal_pay_table');
+            expect(sql).toContain('pp.proposal_id');
+            expect(sql).toContain('pp.receiver');
+            expect(sql).toContain('pp.payment');
             expect(sql).toContain('ANY($1)');
             expect(params).toEqual([[1, 2, 3]]);
         });

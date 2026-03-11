@@ -78,25 +78,25 @@ export class HafClient {
         let paramIndex = 1;
 
         if (options.accounts.length > 0) {
-            conditions.push(`(t."from" = ANY($${paramIndex}) OR t."to" = ANY($${paramIndex}))`);
+            conditions.push(`(t.from_account = ANY($${paramIndex}) OR t.to_account = ANY($${paramIndex}))`);
             params.push(options.accounts);
             paramIndex++;
         }
 
         if (options.fromDate) {
-            conditions.push(`t.timestamp >= $${paramIndex}`);
+            conditions.push(`t.id >= (SELECT MIN(ov.id) FROM hafbe_bal.operations_view ov JOIN hafbe_bal.blocks_view bv ON ov.block_num = bv.num WHERE bv.created_at >= $${paramIndex})`);
             params.push(options.fromDate instanceof Date ? options.fromDate.toISOString() : options.fromDate);
             paramIndex++;
         }
 
         if (options.toDate) {
-            conditions.push(`t.timestamp <= $${paramIndex}`);
+            conditions.push(`t.id <= (SELECT MAX(ov.id) FROM hafbe_bal.operations_view ov JOIN hafbe_bal.blocks_view bv ON ov.block_num = bv.num WHERE bv.created_at <= $${paramIndex})`);
             params.push(options.toDate instanceof Date ? options.toDate.toISOString() : options.toDate);
             paramIndex++;
         }
 
         if (options.symbol) {
-            conditions.push(`t.amount_symbol = $${paramIndex}`);
+            conditions.push(`t.symbol = $${paramIndex}`);
             params.push(options.symbol);
             paramIndex++;
         }
@@ -104,10 +104,10 @@ export class HafClient {
         const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
         const sql = `
-            SELECT t."from", t."to", t.amount, t.amount_symbol, t.memo, t.timestamp
+            SELECT t.from_account AS "from", t.to_account AS "to", t.amount, t.symbol, t.memo
             FROM hafsql.operation_transfer_table t
             ${whereClause}
-            ORDER BY t.timestamp DESC
+            ORDER BY t.id DESC
         `;
 
         return this.query(sql, params);
@@ -153,10 +153,10 @@ export class HafClient {
 
     public async getProposalPayouts(proposalIds: number[]): Promise<any[]> {
         const sql = `
-            SELECT pp.proposal_id, pp.receiver, pp.amount, pp.amount_symbol, pp.timestamp
+            SELECT pp.proposal_id, pp.receiver, pp.payer, pp.payment, pp.symbol
             FROM hafsql.operation_proposal_pay_table pp
             WHERE pp.proposal_id = ANY($1)
-            ORDER BY pp.timestamp DESC
+            ORDER BY pp.id DESC
         `;
 
         return this.query(sql, [proposalIds]);

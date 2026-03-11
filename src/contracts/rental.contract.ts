@@ -144,12 +144,13 @@ export function createRentalContract(options: RentalContractOptions = {}) {
         }
 
         const endsAt = parseDateValue(payload.endsAt);
-        if (!endsAt || endsAt <= new Date()) {
+        const blockTime = new Date(ctx.block.time);
+        if (!endsAt || endsAt <= blockTime) {
             throw new Error('Rental end time must be in the future');
         }
 
         if (listing.max_duration_days) {
-            const maxEnd = new Date(Date.now() + Number(listing.max_duration_days) * 24 * 60 * 60 * 1000);
+            const maxEnd = new Date(blockTime.getTime() + Number(listing.max_duration_days) * 24 * 60 * 60 * 1000);
             if (endsAt > maxEnd) {
                 throw new Error('Requested rental exceeds the maximum duration');
             }

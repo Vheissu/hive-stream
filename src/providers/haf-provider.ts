@@ -150,6 +150,63 @@ export class HafProvider implements BlockProvider {
         };
     }
 
+    /**
+     * NAI asset code to symbol name mapping.
+     */
+    private static readonly NAI_MAP: Record<string, string> = {
+        '@@000000013': 'HIVE',
+        '@@000000021': 'HBD',
+        '@@000000037': 'VESTS',
+    };
+
+    /**
+     * Converts a HAF structured amount object to a dhive-style string.
+     * HAF: { nai: "@@000000021", amount: "100000", precision: 3 }
+     * dhive: "100.000 HBD"
+     */
+    private static formatAmount(amount: any): string {
+        if (typeof amount === 'string') {
+            return amount;
+        }
+
+        if (amount && typeof amount === 'object' && amount.nai && amount.amount !== undefined) {
+            const symbol = HafProvider.NAI_MAP[amount.nai] || amount.nai;
+            const precision = amount.precision || 0;
+            const raw = String(amount.amount);
+
+            if (precision === 0) {
+                return `${raw} ${symbol}`;
+            }
+
+            const padded = raw.padStart(precision + 1, '0');
+            const whole = padded.slice(0, -precision);
+            const decimal = padded.slice(-precision);
+            return `${whole}.${decimal} ${symbol}`;
+        }
+
+        return String(amount);
+    }
+
+    /**
+     * Walks an operation body and converts any structured amount fields
+     * to dhive-style string format for downstream compatibility.
+     */
+    private static normalizeAmountFields(body: any): void {
+        if (!body || typeof body !== 'object') {
+            return;
+        }
+
+        const amountKeys = ['amount', 'fee', 'hbd_amount', 'hive_amount', 'steem_amount', 'sbd_amount',
+            'reward_hive', 'reward_hbd', 'reward_vests', 'vesting_shares', 'delegatee_vesting_shares',
+            'max_accepted_payout', 'min_hive_amount', 'min_hbd_amount'];
+
+        for (const key of amountKeys) {
+            if (body[key] && typeof body[key] === 'object' && body[key].nai) {
+                body[key] = HafProvider.formatAmount(body[key]);
+            }
+        }
+    }
+
     private bytesToHex(buf: any): string {
         if (Buffer.isBuffer(buf)) {
             return buf.toString('hex');
@@ -173,10 +230,11 @@ export class HafProvider implements BlockProvider {
         const blockRow = blockResult.rows[0];
 
         // Fetch operations for this block (operations_view has no trx_hash)
+        // Filter out virtual ops (trx_in_block = -1) to match dhive RPC behavior
         const opsResult = await this.client.query(
             `SELECT op_type_id, body, trx_in_block
              FROM hafbe_bal.operations_view
-             WHERE block_num = $1
+             WHERE block_num = $1 AND trx_in_block >= 0
              ORDER BY trx_in_block, op_pos`,
             [blockNumber]
         );
@@ -210,6 +268,9 @@ export class HafProvider implements BlockProvider {
 
             const opName = HAF_OP_TYPES[op.op_type_id] ?? `unknown_op_${op.op_type_id}`;
             const opBody = op.body?.value ?? op.body;
+
+            // Normalize HAF structured amounts to dhive-style strings
+            HafProvider.normalizeAmountFields(opBody);
 
             transactionMap.get(trxIndex)!.operations.push([opName, opBody]);
         }

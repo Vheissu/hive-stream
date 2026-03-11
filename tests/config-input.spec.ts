@@ -103,4 +103,27 @@ describe('Config input aliases', () => {
 
         await sut.stop();
     });
+
+    test('blockProvider in ConfigInput is passed to Streamer', async () => {
+        const mockProvider = {
+            getDynamicGlobalProperties: jest.fn(),
+            getBlock: jest.fn(),
+        };
+
+        const sut = new Streamer({ blockProvider: mockProvider as any });
+
+        expect(sut.getBlockProvider()).toBe(mockProvider);
+        await sut.stop();
+    });
+
+    test('blockProvider is not included in normalized config keys', () => {
+        const normalized = normalizeConfigInput({
+            jsonId: 'test',
+            blockProvider: { getDynamicGlobalProperties: jest.fn(), getBlock: jest.fn() } as any,
+        });
+
+        // blockProvider should not appear in the normalized config
+        // since it's extracted separately in the Streamer constructor
+        expect((normalized as any).blockProvider).toBeUndefined();
+    });
 });

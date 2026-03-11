@@ -197,4 +197,173 @@ describe('HafProvider', () => {
             expect(HAF_OP_TYPES[49]).toBe('recurrent_transfer');
         });
     });
+
+    describe('amount normalization', () => {
+        beforeEach(async () => {
+            mockQuery.mockResolvedValueOnce({ rows: [] }); // statement_timeout
+            await provider.create();
+        });
+
+        test('converts HAF structured amount to dhive-style string', async () => {
+            mockQuery.mockResolvedValueOnce({
+                rows: [{ num: 200, hash: 'aaa', prev: 'bbb', created_at: '2024-01-01T00:00:00' }],
+            });
+            mockQuery.mockResolvedValueOnce({
+                rows: [{
+                    op_type_id: 2,
+                    body: {
+                        value: {
+                            from: 'alice',
+                            to: 'bob',
+                            memo: 'test',
+                            amount: { nai: '@@000000021', amount: '100000', precision: 3 }
+                        }
+                    },
+                    trx_in_block: 0,
+                }],
+            });
+            mockQuery.mockResolvedValueOnce({
+                rows: [{ trx_in_block: 0, trx_hash: 'trx-abc' }],
+            });
+
+            const block = await provider.getBlock(200);
+            const transferOp = block!.transactions[0].operations[0];
+
+            expect(transferOp[0]).toBe('transfer');
+            expect(transferOp[1].amount).toBe('100.000 HBD');
+            expect(transferOp[1].from).toBe('alice');
+            expect(transferOp[1].to).toBe('bob');
+        });
+
+        test('converts HIVE amount correctly', async () => {
+            mockQuery.mockResolvedValueOnce({
+                rows: [{ num: 201, hash: 'ccc', prev: 'ddd', created_at: '2024-01-01T00:00:00' }],
+            });
+            mockQuery.mockResolvedValueOnce({
+                rows: [{
+                    op_type_id: 2,
+                    body: {
+                        value: {
+                            from: 'alice',
+                            to: 'bob',
+                            memo: '',
+                            amount: { nai: '@@000000013', amount: '5000', precision: 3 }
+                        }
+                    },
+                    trx_in_block: 0,
+                }],
+            });
+            mockQuery.mockResolvedValueOnce({
+                rows: [{ trx_in_block: 0, trx_hash: 'trx-def' }],
+            });
+
+            const block = await provider.getBlock(201);
+            const transferOp = block!.transactions[0].operations[0];
+
+            expect(transferOp[1].amount).toBe('5.000 HIVE');
+        });
+
+        test('converts VESTS amount correctly', async () => {
+            mockQuery.mockResolvedValueOnce({
+                rows: [{ num: 202, hash: 'eee', prev: 'fff', created_at: '2024-01-01T00:00:00' }],
+            });
+            mockQuery.mockResolvedValueOnce({
+                rows: [{
+                    op_type_id: 4, // withdraw_vesting
+                    body: {
+                        value: {
+                            account: 'alice',
+                            vesting_shares: { nai: '@@000000037', amount: '1000000000', precision: 6 }
+                        }
+                    },
+                    trx_in_block: 0,
+                }],
+            });
+            mockQuery.mockResolvedValueOnce({
+                rows: [{ trx_in_block: 0, trx_hash: 'trx-ghi' }],
+            });
+
+            const block = await provider.getBlock(202);
+            const op = block!.transactions[0].operations[0];
+
+            expect(op[0]).toBe('withdraw_vesting');
+            expect(op[1].vesting_shares).toBe('1000.000000 VESTS');
+        });
+
+        test('leaves string amounts unchanged', async () => {
+            mockQuery.mockResolvedValueOnce({
+                rows: [{ num: 203, hash: 'ggg', prev: 'hhh', created_at: '2024-01-01T00:00:00' }],
+            });
+            mockQuery.mockResolvedValueOnce({
+                rows: [{
+                    op_type_id: 2,
+                    body: {
+                        value: {
+                            from: 'alice',
+                            to: 'bob',
+                            memo: '',
+                            amount: '1.000 HIVE'
+                        }
+                    },
+                    trx_in_block: 0,
+                }],
+            });
+            mockQuery.mockResolvedValueOnce({
+                rows: [{ trx_in_block: 0, trx_hash: 'trx-jkl' }],
+            });
+
+            const block = await provider.getBlock(203);
+            const transferOp = block!.transactions[0].operations[0];
+
+            expect(transferOp[1].amount).toBe('1.000 HIVE');
+        });
+    });
+
+    describe('virtual ops filtering', () => {
+        beforeEach(async () => {
+            mockQuery.mockResolvedValueOnce({ rows: [] }); // statement_timeout
+            await provider.create();
+        });
+
+        test('filters out virtual ops (trx_in_block = -1)', async () => {
+            mockQuery.mockResolvedValueOnce({
+                rows: [{ num: 300, hash: 'vvv', prev: 'www', created_at: '2024-01-01T00:00:00' }],
+            });
+            // The SQL WHERE clause filters trx_in_block >= 0,
+            // so virtual ops should never appear in the result set
+            mockQuery.mockResolvedValueOnce({
+                rows: [
+                    { op_type_id: 18, body: { value: { id: 'test', json: '{}', required_auths: [], required_posting_auths: ['alice'] } }, trx_in_block: 0 },
+                ],
+            });
+            mockQuery.mockResolvedValueOnce({
+                rows: [{ trx_in_block: 0, trx_hash: 'trx-real' }],
+            });
+
+            const block = await provider.getBlock(300);
+
+            expect(block!.transactions).toHaveLength(1);
+            expect(block!.transactions[0].operations[0][0]).toBe('custom_json');
+
+            // Verify the SQL included the filter
+            const opsCall = mockQuery.mock.calls.find((call: any[]) =>
+                typeof call[0] === 'string' && call[0].includes('operations_view')
+            );
+            expect(opsCall?.[0]).toContain('trx_in_block >= 0');
+        });
+    });
+
+    describe('reconnect after destroy', () => {
+        test('create() works after destroy()', async () => {
+            mockQuery.mockResolvedValueOnce({ rows: [] }); // statement_timeout
+            await provider.create();
+            await provider.destroy();
+
+            // After destroy, create should build a fresh pg client
+            mockQuery.mockResolvedValueOnce({ rows: [] }); // statement_timeout for new connection
+            await provider.create();
+
+            expect(mockConnect).toHaveBeenCalledTimes(2);
+        });
+    });
 });
