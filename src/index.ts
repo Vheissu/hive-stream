@@ -9,6 +9,11 @@ export * from './exchanges/coingecko';
 export * from './contracts/contract';
 export * from './api';
 
+export * from './providers/block-provider';
+export * from './providers/hive-provider';
+export * from './providers/haf-provider';
+export * from './providers/haf-client';
+
 export * from './adapters/base.adapter';
 export * from './adapters/sqlite.adapter';
 export * from './adapters/mongodb.adapter';

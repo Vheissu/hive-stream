@@ -65,6 +65,14 @@ describe('metadata exports', () => {
         ]);
     });
 
+    test('includes provider metadata with 3 entries', () => {
+        expect(HIVE_STREAM_METADATA.providers).toBeDefined();
+        expect(HIVE_STREAM_METADATA.providers).toHaveLength(3);
+
+        const names = HIVE_STREAM_METADATA.providers.map((p) => p.exportName);
+        expect(names).toEqual(['HiveProvider', 'HafProvider', 'HafClient']);
+    });
+
     test('keeps helper exports aligned with the expanded contract catalog', () => {
         expect(HIVE_STREAM_METADATA.contracts.helperExports).toEqual(
             expect.arrayContaining([

@@ -7,4 +7,10 @@ describe('package root exports', () => {
         expect(HiveStream.CoinGeckoExchange).toBeDefined();
         expect(HiveStream.Api).toBeDefined();
     });
+
+    test('exposes HiveProvider, HafProvider, and HafClient', () => {
+        expect(HiveStream.HiveProvider).toBeDefined();
+        expect(HiveStream.HafProvider).toBeDefined();
+        expect(HiveStream.HafClient).toBeDefined();
+    });
 });

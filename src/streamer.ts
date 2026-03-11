@@ -6,6 +6,8 @@ import { TimeAction } from './actions';
 import { Client } from '@hiveio/dhive';
 import { Utils } from './utils';
 import { ConfigInput, ConfigInterface, createConfig, normalizeConfigInput } from './config';
+import { BlockProvider } from './providers/block-provider';
+import { HiveProvider } from './providers/hive-provider';
 import { 
     ContractDefinition,
     ContractPayload,
@@ -63,6 +65,7 @@ export class Streamer {
     private isStarted = false;
 
     private contracts: ContractDefinition[] = [];
+    private blockProvider: BlockProvider;
     private adapter: AdapterBase;
     private adapterInitializationPromise: Promise<void> | null = null;
     private adapterInitialized = false;
@@ -111,6 +114,12 @@ export class Streamer {
         this.hive = new hivejs(this.config.HIVE_ENGINE_API);
         this.client = new Client(this.config.API_NODES);
         this.adapter = new SqliteAdapter();
+
+        if (userConfig.blockProvider) {
+            this.blockProvider = userConfig.blockProvider;
+        } else {
+            this.blockProvider = new HiveProvider({ apiNodes: this.config.API_NODES });
+        }
     }
 
     private async ensureAdapterReady(): Promise<void> {
@@ -465,6 +474,10 @@ export class Streamer {
 
         if (shouldRecreateClient) {
             this.client = new Client(this.config.API_NODES);
+
+            if (this.blockProvider instanceof HiveProvider) {
+                this.blockProvider.updateClient(this.config.API_NODES);
+            }
         }
 
         if (shouldRecreateHiveEngine) {
@@ -501,6 +514,7 @@ export class Streamer {
 
         this.disableAllProcessing = false;
         await this.ensureAdapterReady();
+        await this.blockProvider.create?.();
         await this.initializeContracts();
         this.startSubscriptionCleanupInterval();
 
@@ -546,6 +560,8 @@ export class Streamer {
             await this.adapter.destroy();
         }
 
+        await this.blockProvider.destroy?.();
+
         this.adapterInitialized = false;
         this.adapterInitializationPromise = null;
 
@@ -582,9 +598,19 @@ export class Streamer {
         return this.apiServer;
     }
 
+    public async registerBlockProvider(provider: BlockProvider): Promise<void> {
+        await this.blockProvider.destroy?.();
+        this.blockProvider = provider;
+        await this.blockProvider.create?.();
+    }
+
+    public getBlockProvider(): BlockProvider {
+        return this.blockProvider;
+    }
+
     private async getLatestBlock() {
         try {
-            const props = await this.client.database.getDynamicGlobalProperties();
+            const props = await this.blockProvider.getDynamicGlobalProperties();
 
             if (props) {
                 this.latestBlockchainTime = new Date(`${props.time}Z`);
@@ -604,8 +630,8 @@ export class Streamer {
         let nextDelay = this.config.BLOCK_CHECK_INTERVAL;
 
         try {
-            // Load global properties from the Hive API
-            const props = await this.client.database.getDynamicGlobalProperties();
+            // Load global properties from the block provider
+            const props = await this.blockProvider.getDynamicGlobalProperties();
 
             // We have no props, so try loading them again.
             if (!props) {
@@ -669,8 +695,8 @@ export class Streamer {
         let block = this.blockCache.get(blockNumber);
         
         if (!block) {
-            // Load the block itself from the Hive API
-            block = await this.client.database.getBlock(blockNumber);
+            // Load the block from the active block provider
+            block = await this.blockProvider.getBlock(blockNumber);
             
             // Cache the block for potential reuse
             if (block) {

@@ -2,6 +2,8 @@ import { TimeAction } from '../src/actions';
 import { Streamer } from '../src/streamer';
 import { action as contractAction, defineContract } from '../src/contracts/contract';
 import { createMockAdapter } from './helpers/mock-adapter';
+import { HiveProvider } from '../src/providers/hive-provider';
+import { BlockProvider } from '../src/providers/block-provider';
 
 describe('Streamer', () => {
     let sut: Streamer;
@@ -306,6 +308,64 @@ describe('Streamer', () => {
         sut.stop();
     });
 
+    describe('Block Providers', () => {
+        test('default Streamer uses HiveProvider', () => {
+            const provider = sut.getBlockProvider();
+
+            expect(provider).toBeInstanceOf(HiveProvider);
+        });
+
+        test('custom provider passed via config is used', () => {
+            const mockProvider: BlockProvider = {
+                getDynamicGlobalProperties: jest.fn().mockResolvedValue({ head_block_number: 1, time: '' }),
+                getBlock: jest.fn().mockResolvedValue(null),
+            };
+
+            const streamer = new Streamer({ blockProvider: mockProvider });
+
+            expect(streamer.getBlockProvider()).toBe(mockProvider);
+        });
+
+        test('registerBlockProvider replaces existing provider', async () => {
+            const mockProvider: BlockProvider = {
+                getDynamicGlobalProperties: jest.fn().mockResolvedValue({ head_block_number: 1, time: '' }),
+                getBlock: jest.fn().mockResolvedValue(null),
+                create: jest.fn().mockResolvedValue(undefined),
+                destroy: jest.fn().mockResolvedValue(undefined),
+            };
+
+            const oldProvider = sut.getBlockProvider();
+            await sut.registerBlockProvider(mockProvider);
+
+            expect(sut.getBlockProvider()).toBe(mockProvider);
+            expect(sut.getBlockProvider()).not.toBe(oldProvider);
+            expect(mockProvider.create).toHaveBeenCalled();
+        });
+
+        test('provider create() called on start, destroy() called on stop', async () => {
+            const mockProvider: BlockProvider = {
+                getDynamicGlobalProperties: jest.fn().mockResolvedValue({ head_block_number: 1, time: '' }),
+                getBlock: jest.fn().mockResolvedValue(null),
+                create: jest.fn().mockResolvedValue(undefined),
+                destroy: jest.fn().mockResolvedValue(undefined),
+            };
+
+            const streamer = new Streamer({ blockProvider: mockProvider });
+            await streamer.registerAdapter(createMockAdapter());
+
+            jest.spyOn(streamer as any, 'getBlock').mockImplementation(() => true);
+            jest.spyOn(streamer as any, 'getLatestBlock').mockImplementation(() => true);
+
+            await streamer.start();
+
+            expect(mockProvider.create).toHaveBeenCalled();
+
+            await streamer.stop();
+
+            expect(mockProvider.destroy).toHaveBeenCalled();
+        });
+    });
+
     test('getBlock should process multiple blocks per batch when behind', async () => {
         const adapter = createMockAdapter();
         await sut.registerAdapter(adapter);
@@ -321,14 +381,12 @@ describe('Streamer', () => {
             transactions: []
         };
 
-        sut['client'] = {
-            database: {
-                getDynamicGlobalProperties: jest.fn().mockResolvedValue({
-                    head_block_number: 20,
-                    time: '2023-01-01T00:00:00'
-                }),
-                getBlock: jest.fn().mockResolvedValue(mockBlock)
-            }
+        sut['blockProvider'] = {
+            getDynamicGlobalProperties: jest.fn().mockResolvedValue({
+                head_block_number: 20,
+                time: '2023-01-01T00:00:00'
+            }),
+            getBlock: jest.fn().mockResolvedValue(mockBlock)
         } as any;
 
         const loadBlockSpy = jest.spyOn(sut as any, 'loadBlock');

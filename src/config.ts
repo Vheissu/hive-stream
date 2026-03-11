@@ -19,7 +19,10 @@ export interface ConfigInterface {
     DEBUG_MODE: boolean;
 }
 
+import { BlockProvider } from './providers/block-provider';
+
 export interface ConfigInput extends Partial<ConfigInterface> {
+    blockProvider?: BlockProvider;
     activeKey?: ConfigInterface['ACTIVE_KEY'];
     postingKey?: ConfigInterface['POSTING_KEY'];
     jsonId?: ConfigInterface['JSON_ID'];
@@ -40,7 +43,7 @@ export interface ConfigInput extends Partial<ConfigInterface> {
     debugMode?: ConfigInterface['DEBUG_MODE'];
 }
 
-type ConfigAliasKey = keyof Omit<ConfigInput, keyof ConfigInterface>;
+type ConfigAliasKey = keyof Omit<ConfigInput, keyof ConfigInterface | 'blockProvider'>;
 
 const CONFIG_KEYS: Array<keyof ConfigInterface> = [
     'ACTIVE_KEY',

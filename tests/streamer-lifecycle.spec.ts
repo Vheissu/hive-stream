@@ -63,28 +63,31 @@ describe('Streamer lifecycle safety', () => {
 
         await streamer.registerAdapter(createMockAdapter());
 
-        jest.spyOn(streamer['client'].database, 'getBlock').mockResolvedValue({
-            timestamp: '2025-01-01T00:00:00',
-            block_id: 'block-1',
-            previous: 'block-0',
-            transaction_ids: ['trx-1'],
-            transactions: [{
-                operations: [
-                    ['custom_json', {
-                        id: 'first',
-                        json: '{}',
-                        required_auths: ['alice'],
-                        required_posting_auths: []
-                    }],
-                    ['custom_json', {
-                        id: 'second',
-                        json: '{}',
-                        required_auths: ['alice'],
-                        required_posting_auths: []
-                    }]
-                ]
-            }]
-        } as any);
+        streamer['blockProvider'] = {
+            getDynamicGlobalProperties: jest.fn().mockResolvedValue({ head_block_number: 1, time: '2025-01-01T00:00:00' }),
+            getBlock: jest.fn().mockResolvedValue({
+                timestamp: '2025-01-01T00:00:00',
+                block_id: 'block-1',
+                previous: 'block-0',
+                transaction_ids: ['trx-1'],
+                transactions: [{
+                    operations: [
+                        ['custom_json', {
+                            id: 'first',
+                            json: '{}',
+                            required_auths: ['alice'],
+                            required_posting_auths: []
+                        }],
+                        ['custom_json', {
+                            id: 'second',
+                            json: '{}',
+                            required_auths: ['alice'],
+                            required_posting_auths: []
+                        }]
+                    ]
+                }]
+            })
+        } as any;
 
         jest.spyOn(streamer as any, 'processOperation').mockImplementation(async (operation: [string, any]) => {
             const id = operation[1].id;

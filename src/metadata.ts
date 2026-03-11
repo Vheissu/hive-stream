@@ -51,6 +51,13 @@ export interface ContractPayloadMetadata {
     supportedOperations: string[];
 }
 
+export interface ProviderMetadata {
+    name: string;
+    exportName: string;
+    constructorSignature: string;
+    description: string;
+}
+
 export interface HiveStreamMetadata {
     schemaVersion: number;
     config: {
@@ -66,6 +73,7 @@ export interface HiveStreamMetadata {
         validValues: string[];
     };
     adapters: AdapterMetadata[];
+    providers: ProviderMetadata[];
 }
 
 function deepFreeze<T>(value: T): Readonly<T> {
@@ -511,6 +519,26 @@ export const HIVE_STREAM_METADATA: Readonly<HiveStreamMetadata> = deepFreeze({
             exportName: 'PostgreSQLAdapter',
             constructorSignature: 'new PostgreSQLAdapter(config)',
             description: 'PostgreSQL adapter for state, event, and SQL-backed contract data.'
+        }
+    ],
+    providers: [
+        {
+            name: 'Hive Provider',
+            exportName: 'HiveProvider',
+            constructorSignature: 'new HiveProvider({ apiNodes })',
+            description: 'Default block provider wrapping @hiveio/dhive JSON-RPC calls.'
+        },
+        {
+            name: 'HAF Provider',
+            exportName: 'HafProvider',
+            constructorSignature: 'new HafProvider(config?)',
+            description: 'HAF/HafSQL PostgreSQL block provider for high-performance block fetching.'
+        },
+        {
+            name: 'HAF Client',
+            exportName: 'HafClient',
+            constructorSignature: 'new HafClient(config?)',
+            description: 'Standalone HAF query helper for direct analytics queries.'
         }
     ]
 });
