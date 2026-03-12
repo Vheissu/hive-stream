@@ -13,3 +13,9 @@ Additional high-level flow examples live in `examples/flows/`:
 - `auto-forward.ts` - Forward inbound HIVE/HBD transfers to another account
 - `auto-split.ts` - Split inbound HIVE/HBD transfers across multiple recipients
 - `auto-refund.ts` - Refund inbound HIVE/HBD transfers back to the sender
+- `builder-burn-route.ts` - Use the chainable inbound transfer builder to burn and route the remainder
+
+Chainable write-operation examples live in `examples/ops/`:
+
+- `transfer-builder.ts` - Build and send a HIVE/HBD transfer with `streamer.ops`
+- `proposal-builder.ts` - Build and send a DHF proposal with `streamer.ops`

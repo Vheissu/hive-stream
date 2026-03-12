@@ -293,7 +293,64 @@ ss.flows.autoRouteIncomingTransfers({
 ss.start();
 ```
 
-`flows.autoBurnIncomingTransfers()` is the quickest high-level option for the burn case. `flows.autoForwardIncomingTransfers()` covers treasury forwarding, `flows.autoSplitIncomingTransfers()` handles common revenue-sharing, `flows.autoRefundIncomingTransfers()` is useful for rejecting unsupported payments, and `flows.autoRouteIncomingTransfers()` lets you combine burn and transfer routes in one handler. In route and split flows, one destination can omit `percentage`/`basisPoints` and automatically receive the remainder. If you want tighter control, `burnTransferPercentage()` works on a single transfer payload, `burnTransferPortion()` accepts basis points, and `streamer.money` exposes `parseAssetAmount()`, `formatAmount()`, `formatAssetAmount()`, `calculatePercentageAmount()`, `calculateBasisPointsAmount()`, `splitAmountByBasisPoints()`, and `splitAmountByPercentage()`.
+### Route grouped payouts with an optional on-top donation
+```javascript
+const { Streamer } = require('hive-stream');
+
+const ss = new Streamer({ env: true });
+
+ss.flows.autoRouteIncomingTransfers({
+  account: 'tweet-backup',
+  routes: [
+    { to: 'tweet-catcher', percentage: 20, memo: 'Tweet watcher share' },
+    { group: [{ account: 'node-1' }, { account: 'node-2' }], percentage: 4, memo: 'Node operator share' },
+    { group: [{ account: 'wit-1' }, { account: 'wit-2' }], percentage: 6, memo: 'Witness share' },
+    { type: 'burn', percentage: 70, memo: 'Burn share' },
+    { to: 'platform-op', mode: 'onTop', percentage: 8, memo: 'Optional platform donation' }
+  ]
+});
+
+ss.start();
+```
+
+### Chain inbound transfer flows with a builder
+```javascript
+const { Streamer } = require('hive-stream');
+
+const ss = new Streamer({ env: true });
+
+ss.flows
+  .incomingTransfers()
+  .burn(69, 'Feel the burn')
+  .remainderTo('treasury', 'Treasury remainder')
+  .start();
+
+ss.start();
+```
+
+### Preview a payout plan before the flow starts
+```javascript
+const { Streamer } = require('hive-stream');
+
+const ss = new Streamer({ env: true });
+
+const plan = ss.flows
+  .incomingTransfers('tweet-backup')
+  .forwardTo('tweet-catcher', 20, 'Tweet watcher share')
+  .forwardGroup([{ account: 'node-1' }, { account: 'node-2' }], 4, { memo: 'Node operator share' })
+  .remainderToGroup([{ account: 'wit-1' }, { account: 'wit-2' }], { memo: 'Witness share' })
+  .burn(70, 'Burn share')
+  .donateOnTop('platform-op', 8, 'Optional platform donation')
+  .plan({ from: 'buyer', to: 'tweet-backup', amount: '1.080 HBD', memo: 'Archive this tweet' });
+
+console.log(plan.baseAmount);  // "1.000"
+console.log(plan.onTopAmount); // "0.080"
+console.log(plan.routes);
+```
+
+`flows.autoBurnIncomingTransfers()` is the quickest high-level option for the burn case. `flows.autoForwardIncomingTransfers()` covers treasury forwarding, `flows.autoSplitIncomingTransfers()` handles common revenue-sharing, and `flows.autoRefundIncomingTransfers()` is useful for rejecting unsupported payments. `flows.autoRouteIncomingTransfers()` is the general router for mixed burn/transfer/group routes, and `flows.planIncomingTransferRoutes()` previews the same math without broadcasting. In base routes, one destination can omit `percentage`/`basisPoints` and automatically receive the remainder. Routes with `mode: 'onTop'` are treated as a surcharge on the base payout amount, so a `1.000 HBD` base payout with an `8%` donation should arrive as `1.080 HBD`.
+
+`flows.incomingTransfers()` is the chainable version of the same idea. Single-step builders compile down to `autoBurnIncomingTransfers()`, `autoForwardIncomingTransfers()`, or `autoRefundIncomingTransfers()`. Multi-step builders compile down to `autoRouteIncomingTransfers()`, and `.plan(...)` gives you the exact rounded output before any transfer is sent.
 
 ### Money Namespace
 ```javascript
@@ -303,6 +360,7 @@ ss.money.parseAssetAmount('1.000 HIVE');
 ss.money.formatAmount('1.2399'); // "1.239"
 ss.money.calculatePercentageAmount('10.000', 12.5); // "1.250"
 ss.money.splitAmountByBasisPoints('1.000', [6900, 3100]); // ["0.690", "0.310"]
+ss.money.splitAmountByWeights('1.080', [10000, 800]); // ["1.000", "0.080"]
 ```
 
 ### Issue Hive Engine Tokens
@@ -353,6 +411,59 @@ recurrentTransfer({ from, to, amount, memo, recurrence, executions }, signingKey
 createProposal({ creator, receiver, start_date, end_date, daily_pay, subject, permlink }, signingKeys?)
 updateProposalVotes({ voter, proposal_ids, approve }, signingKeys?)
 removeProposals({ proposal_owner, proposal_ids }, signingKeys?)
+```
+
+### Operation Builders
+```javascript
+const { Streamer } = require('hive-stream');
+
+const ss = new Streamer({ env: true });
+
+await ss.ops
+  .transfer()
+  .from('alice')
+  .to('bob')
+  .hive(1.25)
+  .memo('Builder transfer example')
+  .send();
+
+await ss.ops
+  .createProposal()
+  .creator('alice')
+  .receiver('treasury')
+  .startDate(new Date('2026-04-01T00:00:00.000Z'))
+  .endDate(new Date('2026-05-01T00:00:00.000Z'))
+  .dailyHbd(12.5)
+  .subject('Builder proposal example')
+  .permlink('builder-proposal-example')
+  .send();
+```
+
+Additional chainable write builders are available for Hive Engine token ops and governance/voting:
+
+```javascript
+await ss.ops
+  .transferEngine()
+  .from('alice')
+  .to('bob')
+  .symbol('BEE')
+  .quantity('1.23456')
+  .memo('Engine transfer')
+  .send();
+
+await ss.ops
+  .voteProposals()
+  .voter('alice')
+  .ids(1, 2, 3)
+  .approve()
+  .send();
+
+await ss.ops
+  .upvote()
+  .author('bob')
+  .permlink('my-post')
+  .weight(25)
+  .send();
 ```
 
 ### Upvote/Downvote Posts
@@ -491,6 +602,14 @@ Higher-level flow examples live in `examples/flows/`:
 - `examples/flows/auto-forward.ts`
 - `examples/flows/auto-split.ts`
 - `examples/flows/auto-refund.ts`
+- `examples/flows/builder-burn-route.ts`
+- `examples/flows/grouped-route-on-top.ts`
+- `examples/flows/builder-payout-plan.ts`
+
+Chainable operation examples live in `examples/ops/`:
+
+- `examples/ops/transfer-builder.ts`
+- `examples/ops/proposal-builder.ts`
 
 ## Time-based Actions
 

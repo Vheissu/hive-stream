@@ -99,6 +99,7 @@ describe('metadata exports', () => {
     test('includes money and flows namespaces for tooling discovery', () => {
         const money = HIVE_STREAM_METADATA.namespaces.find((item) => item.name === 'money');
         const flows = HIVE_STREAM_METADATA.namespaces.find((item) => item.name === 'flows');
+        const ops = HIVE_STREAM_METADATA.namespaces.find((item) => item.name === 'ops');
 
         expect(money?.methods.map((method) => method.method)).toEqual(
             expect.arrayContaining([
@@ -108,17 +109,37 @@ describe('metadata exports', () => {
                 'calculatePercentageAmount',
                 'calculateBasisPointsAmount',
                 'splitAmountByBasisPoints',
-                'splitAmountByPercentage'
+                'splitAmountByPercentage',
+                'splitAmountByWeights'
             ])
         );
 
         expect(flows?.methods.map((method) => method.method)).toEqual(
             expect.arrayContaining([
+                'incomingTransfers',
                 'autoBurnIncomingTransfers',
                 'autoForwardIncomingTransfers',
                 'autoRefundIncomingTransfers',
                 'autoSplitIncomingTransfers',
-                'autoRouteIncomingTransfers'
+                'autoRouteIncomingTransfers',
+                'planIncomingTransferRoutes'
+            ])
+        );
+
+        expect(ops?.methods.map((method) => method.method)).toEqual(
+            expect.arrayContaining([
+                'transfer',
+                'burn',
+                'escrowTransfer',
+                'recurrentTransfer',
+                'createProposal',
+                'transferEngine',
+                'burnEngine',
+                'issueEngine',
+                'voteProposals',
+                'removeProposals',
+                'upvote',
+                'downvote'
             ])
         );
     });

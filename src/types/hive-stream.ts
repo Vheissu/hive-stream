@@ -167,6 +167,15 @@ export interface FlowDedupeStore {
     add(key: string): void | Promise<void>;
 }
 
+export type FlowMemoInput = string | ((event: TransferEvent) => string);
+export type FlowRouteMode = 'base' | 'onTop';
+export type FlowGroupSplitStrategy = 'equal' | 'weighted';
+export type FlowAllocationInput = string | number | {
+    percentage?: string | number;
+    percent?: string | number;
+    basisPoints?: number;
+};
+
 export interface AutoBurnIncomingTransfersOptions {
     account?: string;
     percentage?: string | number;
@@ -185,10 +194,16 @@ export interface FlowRouteBase {
     percent?: string | number;
     basisPoints?: number;
     memo?: string | ((event: TransferEvent) => string);
+    mode?: FlowRouteMode;
 }
 
 export interface FlowBurnRoute extends FlowRouteBase {
     type: 'burn';
+}
+
+export interface FlowGroupRecipient {
+    account: string | ((event: TransferEvent) => string);
+    weight?: string | number;
 }
 
 export interface FlowTransferRoute extends FlowRouteBase {
@@ -196,14 +211,31 @@ export interface FlowTransferRoute extends FlowRouteBase {
     to: string | ((event: TransferEvent) => string);
 }
 
-export type FlowRoute = FlowBurnRoute | FlowTransferRoute;
+export interface FlowTransferGroupRoute extends FlowRouteBase {
+    type?: 'transfer';
+    group: FlowGroupRecipient[];
+    split?: FlowGroupSplitStrategy;
+}
+
+export type FlowRoute = FlowBurnRoute | FlowTransferRoute | FlowTransferGroupRoute;
 
 export interface PlannedFlowRoute {
     type: 'burn' | 'transfer';
+    mode: FlowRouteMode;
     amount: string;
     asset: string;
     memo: string;
     to?: string;
+    routeIndex: number;
+    groupIndex?: number;
+}
+
+export interface PlannedIncomingTransferRoutes {
+    incomingAmount: string;
+    asset: string;
+    baseAmount: string;
+    onTopAmount: string;
+    routes: PlannedFlowRoute[];
 }
 
 export interface AutoRouteIncomingTransfersOptions {
@@ -266,6 +298,134 @@ export interface FlowSubscriptionHandle {
     stop(): void;
 }
 
+export interface IncomingTransferFlowBuilder {
+    forAccount(account: string): this;
+    allowSymbols(...symbols: string[]): this;
+    memo(memo: FlowMemoInput): this;
+    dedupeWith(store: FlowDedupeStore): this;
+    ignoreZeroAmount(ignore?: boolean): this;
+    onError(handler: (error: unknown, event: TransferEvent) => void | Promise<void>): this;
+    burn(allocation: FlowAllocationInput, memo?: FlowMemoInput): this;
+    burnOnTop(allocation: FlowAllocationInput, memo?: FlowMemoInput): this;
+    forwardTo(to: string, allocation?: FlowAllocationInput, memo?: FlowMemoInput): this;
+    forwardOnTop(to: string, allocation: FlowAllocationInput, memo?: FlowMemoInput): this;
+    donateOnTop(to: string, allocation: FlowAllocationInput, memo?: FlowMemoInput): this;
+    forwardGroup(recipients: FlowGroupRecipient[], allocation: FlowAllocationInput, options?: { memo?: FlowMemoInput; split?: FlowGroupSplitStrategy }): this;
+    forwardGroupOnTop(recipients: FlowGroupRecipient[], allocation: FlowAllocationInput, options?: { memo?: FlowMemoInput; split?: FlowGroupSplitStrategy }): this;
+    remainderTo(to: string, memo?: FlowMemoInput): this;
+    remainderToGroup(recipients: FlowGroupRecipient[], options?: { memo?: FlowMemoInput; split?: FlowGroupSplitStrategy }): this;
+    refund(memo?: FlowMemoInput): this;
+    refundPortion(allocation: FlowAllocationInput, memo?: FlowMemoInput): this;
+    remainderToSender(memo?: FlowMemoInput): this;
+    plan(transfer: string | TransferEvent | { amount?: string; from?: string; to?: string; memo?: string }): PlannedIncomingTransferRoutes;
+    start(): FlowSubscriptionHandle;
+}
+
+export interface TransferOperationBuilder {
+    from(account: string): this;
+    to(account: string): this;
+    amount(amount: string | number, symbol?: string): this;
+    hive(amount: string | number): this;
+    hbd(amount: string | number): this;
+    memo(memo: string): this;
+    send(): any;
+}
+
+export interface BurnOperationBuilder {
+    from(account: string): this;
+    amount(amount: string | number, symbol?: string): this;
+    hive(amount: string | number): this;
+    hbd(amount: string | number): this;
+    memo(memo: string): this;
+    send(): any;
+}
+
+export interface EscrowTransferBuilder {
+    from(account: string): this;
+    to(account: string): this;
+    agent(account: string): this;
+    id(escrowId: number): this;
+    hive(amount: string | number): this;
+    hbd(amount: string | number): this;
+    fee(amount: string | number, symbol?: string): this;
+    ratificationDeadline(value: string | Date): this;
+    expiration(value: string | Date): this;
+    jsonMeta(meta: string | Record<string, any>): this;
+    send(signingKeys?: string | string[]): any;
+}
+
+export interface RecurrentTransferBuilder {
+    from(account: string): this;
+    to(account: string): this;
+    amount(amount: string | number, symbol?: string): this;
+    hive(amount: string | number): this;
+    hbd(amount: string | number): this;
+    memo(memo: string): this;
+    recurrence(value: number): this;
+    executions(value: number): this;
+    send(signingKeys?: string | string[]): any;
+}
+
+export interface ProposalBuilder {
+    creator(account: string): this;
+    receiver(account: string): this;
+    startDate(value: string | Date): this;
+    endDate(value: string | Date): this;
+    dailyPay(amount: string | number, symbol?: string): this;
+    dailyHive(amount: string | number): this;
+    dailyHbd(amount: string | number): this;
+    subject(value: string): this;
+    permlink(value: string): this;
+    send(signingKeys?: string | string[]): any;
+}
+
+export interface HiveEngineTransferBuilder {
+    from(account: string): this;
+    to(account: string): this;
+    symbol(symbol: string): this;
+    quantity(quantity: string | number): this;
+    memo(memo: string): this;
+    send(): any;
+}
+
+export interface HiveEngineBurnBuilder {
+    from(account: string): this;
+    symbol(symbol: string): this;
+    quantity(quantity: string | number): this;
+    memo(memo: string): this;
+    send(): any;
+}
+
+export interface HiveEngineIssueBuilder {
+    from(account: string): this;
+    to(account: string): this;
+    symbol(symbol: string): this;
+    quantity(quantity: string | number): this;
+    memo(memo: string): this;
+    send(): any;
+}
+
+export interface ProposalVotesBuilder {
+    voter(account: string): this;
+    ids(...proposalIds: number[]): this;
+    approve(value?: boolean): this;
+    reject(): this;
+    send(signingKeys?: string | string[]): any;
+}
+
+export interface RemoveProposalsBuilder {
+    owner(account: string): this;
+    ids(...proposalIds: number[]): this;
+    send(signingKeys?: string | string[]): any;
+}
+
+export interface VoteBuilder {
+    author(account: string): this;
+    permlink(value: string): this;
+    weight(value: string | number): this;
+    send(): any;
+}
+
 export interface MoneyNamespace {
     parseAssetAmount(rawAmount: string): ParsedAssetAmount;
     formatAmount(amount: string | number, precision?: number): string;
@@ -274,12 +434,30 @@ export interface MoneyNamespace {
     calculateBasisPointsAmount(amount: string | number, basisPoints: number, precision?: number): string;
     splitAmountByBasisPoints(amount: string | number, basisPoints: number[], precision?: number): string[];
     splitAmountByPercentage(amount: string | number, percentages: Array<string | number>, precision?: number): string[];
+    splitAmountByWeights(amount: string | number, weights: Array<string | number>, precision?: number): string[];
+}
+
+export interface OpsNamespace {
+    transfer(): TransferOperationBuilder;
+    burn(): BurnOperationBuilder;
+    escrowTransfer(): EscrowTransferBuilder;
+    recurrentTransfer(): RecurrentTransferBuilder;
+    createProposal(): ProposalBuilder;
+    transferEngine(): HiveEngineTransferBuilder;
+    burnEngine(): HiveEngineBurnBuilder;
+    issueEngine(): HiveEngineIssueBuilder;
+    voteProposals(): ProposalVotesBuilder;
+    removeProposals(): RemoveProposalsBuilder;
+    upvote(): VoteBuilder;
+    downvote(): VoteBuilder;
 }
 
 export interface FlowNamespace {
+    incomingTransfers(account?: string): IncomingTransferFlowBuilder;
     autoBurnIncomingTransfers(options?: AutoBurnIncomingTransfersOptions): FlowSubscriptionHandle;
     autoForwardIncomingTransfers(options: AutoForwardIncomingTransfersOptions): FlowSubscriptionHandle;
     autoRefundIncomingTransfers(options?: AutoRefundIncomingTransfersOptions): FlowSubscriptionHandle;
     autoSplitIncomingTransfers(options: AutoSplitIncomingTransfersOptions): FlowSubscriptionHandle;
     autoRouteIncomingTransfers(options: AutoRouteIncomingTransfersOptions): FlowSubscriptionHandle;
+    planIncomingTransferRoutes(transfer: string | TransferEvent | { amount?: string; from?: string; to?: string; memo?: string }, options: Pick<AutoRouteIncomingTransfersOptions, 'routes' | 'memo' | 'allowedSymbols'>): PlannedIncomingTransferRoutes;
 }

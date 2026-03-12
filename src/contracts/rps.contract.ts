@@ -86,6 +86,17 @@ export function createRpsContract(options: RpsContractOptions = {}) {
         return new BigNumber(0);
     };
 
+    const debitCachedBalance = (amount: BigNumber): void => {
+        if (!state.balanceCache) {
+            return;
+        }
+
+        state.balanceCache = {
+            balance: BigNumber.maximum(new BigNumber(0), state.balanceCache.balance.minus(amount)),
+            timestamp: Date.now()
+        };
+    };
+
     const processQueue = async (): Promise<void> => {
         if (state.processingQueue || state.betQueue.length === 0) {
             return;
@@ -145,22 +156,26 @@ export function createRpsContract(options: RpsContractOptions = {}) {
             if (verify) {
                 if (!validCurrencies.includes(amountCurrency)) {
                     await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] You sent an invalid currency.');
+                    debitCachedBalance(amountParsed);
                     return;
                 }
 
                 if (amountParsed.isLessThan(minAmount)) {
                     await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, `[Refund] Bet amount too small. Minimum: ${minAmount} ${amountCurrency}.`);
+                    debitCachedBalance(amountParsed);
                     return;
                 }
 
                 if (amountParsed.isGreaterThan(maxAmount)) {
                     await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, `[Refund] You sent too much. Maximum: ${maxAmount} ${amountCurrency}.`);
+                    debitCachedBalance(amountParsed);
                     return;
                 }
 
                 const potentialPayout = amountParsed.multipliedBy(2);
                 if (potentialPayout.isGreaterThan(availableBalance)) {
                     await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] The server cannot afford this bet payout.');
+                    debitCachedBalance(amountParsed);
                     return;
                 }
 
@@ -193,12 +208,13 @@ export function createRpsContract(options: RpsContractOptions = {}) {
 
                     if (result === 'win') {
                         await state.streamer.transferHiveTokens(account, sender, formatBlockchainAmount(potentialPayout), parsedAmount.asset, `[Winner] | You: ${payload.move} | Server: ${serverMove} | Seed: ${serverSeed}`);
-                        // Invalidate balance cache after payout
-                        state.balanceCache = null;
+                        debitCachedBalance(potentialPayout);
                     } else if (result === 'tie') {
                         await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, `[Tie] | You: ${payload.move} | Server: ${serverMove} | Seed: ${serverSeed}`);
+                        debitCachedBalance(amountParsed);
                     } else {
                         await state.streamer.transferHiveTokens(account, sender, '0.001', parsedAmount.asset, `[Lost] | You: ${payload.move} | Server: ${serverMove} | Seed: ${serverSeed}`);
+                        debitCachedBalance(new BigNumber('0.001'));
                     }
                 } finally {
                     if (payoutIncremented) {
@@ -221,6 +237,7 @@ export function createRpsContract(options: RpsContractOptions = {}) {
                 if (amountRaw && typeof amountRaw === 'string' && amountRaw.includes(' ')) {
                     const parsedAmount = parseBlockchainAmount(amountRaw);
                     await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] An error occurred processing your bet.');
+                    debitCachedBalance(parsedAmount.value);
                 }
             } catch (refundError) {
                 console.error('[RpsContract] Refund failed:', refundError);

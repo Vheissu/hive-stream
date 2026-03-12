@@ -299,6 +299,18 @@ describe('Utils (extended)', () => {
         });
     });
 
+    describe('splitAmountByWeights()', () => {
+        test('splits amounts by relative weights and reconciles the remainder on the last route', () => {
+            expect(Utils.splitAmountByWeights('1.080', [10000, 800])).toEqual(['1.000', '0.080']);
+            expect(Utils.splitAmountByWeights('0.500', [3, 1])).toEqual(['0.375', '0.125']);
+        });
+
+        test('throws when weights are invalid', () => {
+            expect(() => Utils.splitAmountByWeights('1.000', [])).toThrow('weights array cannot be empty');
+            expect(() => Utils.splitAmountByWeights('1.000', [1, 0])).toThrow('weights must be greater than zero');
+        });
+    });
+
     describe('broadcastOperations() input validation', () => {
         test('throws when operations array is empty', () => {
             expect(() => Utils.broadcastOperations(

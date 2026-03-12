@@ -275,6 +275,53 @@ export const Utils = {
         });
     },
 
+    splitAmountByWeights(
+        amount: NumericValue,
+        weights: Array<string | number>,
+        precision: number = 3,
+        roundingMode: BigNumber.RoundingMode = BigNumber.ROUND_DOWN
+    ): string[] {
+        if (!Array.isArray(weights) || weights.length === 0) {
+            throw new Error('weights array cannot be empty');
+        }
+
+        if (!Number.isInteger(precision) || precision < 0) {
+            throw new Error('precision must be a non-negative integer');
+        }
+
+        const normalized = weights.map((weight) => {
+            const value = BigNumber.isBigNumber(weight) ? weight : new BigNumber(weight);
+
+            if (value.isNaN() || !value.isFinite()) {
+                throw new Error('Invalid weight');
+            }
+
+            if (value.lte(0)) {
+                throw new Error('weights must be greater than zero');
+            }
+
+            return value;
+        });
+
+        const totalWeight = normalized.reduce((sum, value) => sum.plus(value), new BigNumber(0));
+        const value = BigNumber.isBigNumber(amount) ? amount : new BigNumber(amount);
+
+        if (value.isNaN() || !value.isFinite()) {
+            throw new Error('Invalid amount');
+        }
+
+        let allocated = new BigNumber(0);
+
+        return normalized.map((weight, index) => {
+            const share = index === normalized.length - 1
+                ? value.minus(allocated)
+                : value.multipliedBy(weight).dividedBy(totalWeight).decimalPlaces(precision, roundingMode);
+
+            allocated = allocated.plus(share);
+            return share.toFixed(precision);
+        });
+    },
+
     /**
      * Shuffles an array in place using the Fisher-Yates algorithm
      * @param array - The array to shuffle (modified in place)
@@ -515,8 +562,14 @@ export const Utils = {
             throw new Error('Missing required parameters for Hive token transfer');
         }
 
+        let formattedAmount: string;
+        try {
+            formattedAmount = this.formatAssetAmount(amount, symbol);
+        } catch (error) {
+            throw new Error('Invalid transfer amount');
+        }
+
         const key = PrivateKey.fromString(config.ACTIVE_KEY);
-        const formattedAmount = this.formatAssetAmount(amount, symbol);
 
         return client.broadcast.transfer({ from, to, amount: formattedAmount, memo }, key);
     },

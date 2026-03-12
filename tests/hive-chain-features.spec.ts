@@ -164,6 +164,7 @@ describe('Hive chain features', () => {
             expect(streamer.money.formatAmount('1.2399')).toBe('1.239');
             expect(streamer.money.calculatePercentageAmount('3.000', 67)).toBe('2.010');
             expect(streamer.money.splitAmountByBasisPoints('1.000', [6900, 3100])).toEqual(['0.690', '0.310']);
+            expect(streamer.money.splitAmountByWeights('1.080', [10000, 800])).toEqual(['1.000', '0.080']);
         });
 
         test('burnHiveEngineTokens forwards symbol and quantity in correct order', () => {

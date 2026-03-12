@@ -8,6 +8,7 @@ export * from './exchanges/exchange';
 export * from './exchanges/coingecko';
 export * from './contracts/contract';
 export * from './api';
+export * from './builders';
 
 export * from './providers/block-provider';
 export * from './providers/hive-provider';

@@ -6,6 +6,20 @@ import { TimeAction } from './actions';
 import { Client } from '@hiveio/dhive';
 import BigNumber from 'bignumber.js';
 import { Utils } from './utils';
+import {
+    HiveBurnBuilder,
+    HiveEscrowTransferBuilder,
+    HiveEngineTokenBurnBuilder,
+    HiveEngineTokenIssueBuilder,
+    HiveEngineTokenTransferBuilder,
+    HiveProposalBuilder,
+    HiveProposalVotesBuilder,
+    HiveRemoveProposalsBuilder,
+    HiveRecurrentTransferBuilder,
+    HiveTransferBuilder,
+    HiveVoteBuilder,
+    IncomingTransfersBuilder
+} from './builders';
 import { ConfigInput, ConfigInterface, createConfig, normalizeConfigInput } from './config';
 import { BlockProvider } from './providers/block-provider';
 import { HiveProvider } from './providers/hive-provider';
@@ -20,10 +34,15 @@ import {
     ContractContext,
     ContractTrigger,
     FlowDedupeStore,
+    FlowGroupRecipient,
     FlowRoute,
+    FlowRouteMode,
+    FlowTransferGroupRoute,
     FlowNamespace,
     FlowSubscriptionHandle,
+    OpsNamespace,
     MoneyNamespace,
+    PlannedIncomingTransferRoutes,
     PlannedFlowRoute,
     SubscriptionCallback,
     TransferEvent,
@@ -122,13 +141,30 @@ export class Streamer {
         calculateBasisPointsAmount: (amount: string | number, basisPoints: number, precision?: number) => Utils.calculateBasisPointsAmount(amount, basisPoints, precision),
         splitAmountByBasisPoints: (amount: string | number, basisPoints: number[], precision?: number) => Utils.splitAmountByBasisPoints(amount, basisPoints, precision),
         splitAmountByPercentage: (amount: string | number, percentages: Array<string | number>, precision?: number) => Utils.splitAmountByPercentage(amount, percentages, precision),
+        splitAmountByWeights: (amount: string | number, weights: Array<string | number>, precision?: number) => Utils.splitAmountByWeights(amount, weights, precision),
     };
     public readonly flows: FlowNamespace = {
+        incomingTransfers: (account?: string) => new IncomingTransfersBuilder(this, account),
         autoBurnIncomingTransfers: (options: AutoBurnIncomingTransfersOptions = {}) => this.autoBurnIncomingTransfers(options),
         autoForwardIncomingTransfers: (options: AutoForwardIncomingTransfersOptions) => this.autoForwardIncomingTransfers(options),
         autoRefundIncomingTransfers: (options: AutoRefundIncomingTransfersOptions = {}) => this.autoRefundIncomingTransfers(options),
         autoSplitIncomingTransfers: (options: AutoSplitIncomingTransfersOptions) => this.autoSplitIncomingTransfers(options),
         autoRouteIncomingTransfers: (options: AutoRouteIncomingTransfersOptions) => this.autoRouteIncomingTransfers(options),
+        planIncomingTransferRoutes: (transfer, options) => this.planIncomingTransferRoutes(transfer, options),
+    };
+    public readonly ops: OpsNamespace = {
+        transfer: () => new HiveTransferBuilder(this),
+        burn: () => new HiveBurnBuilder(this),
+        escrowTransfer: () => new HiveEscrowTransferBuilder(this),
+        recurrentTransfer: () => new HiveRecurrentTransferBuilder(this),
+        createProposal: () => new HiveProposalBuilder(this),
+        transferEngine: () => new HiveEngineTokenTransferBuilder(this),
+        burnEngine: () => new HiveEngineTokenBurnBuilder(this),
+        issueEngine: () => new HiveEngineTokenIssueBuilder(this),
+        voteProposals: () => new HiveProposalVotesBuilder(this),
+        removeProposals: () => new HiveRemoveProposalsBuilder(this),
+        upvote: () => new HiveVoteBuilder(this, 'upvote'),
+        downvote: () => new HiveVoteBuilder(this, 'downvote'),
     };
 
     constructor(userConfig: ConfigInput = {}) {
@@ -226,6 +262,20 @@ export class Streamer {
         };
     }
 
+    private normalizeTransferPreviewInput(
+        transfer: string | TransferEvent | { amount?: string; from?: string; to?: string; memo?: string }
+    ): TransferEvent {
+        if (typeof transfer === 'object' && transfer !== null && 'transfer' in transfer && 'transaction' in transfer && 'block' in transfer) {
+            return transfer as TransferEvent;
+        }
+
+        const op = typeof transfer === 'string'
+            ? { amount: transfer }
+            : transfer || {};
+
+        return this.createTransferEvent(op, 0, '', '', '', new Date(0));
+    }
+
     private resolveAccount(account?: string): string {
         const resolved = account || this.username || this.config.USERNAME;
 
@@ -309,7 +359,11 @@ export class Streamer {
         return bps.toNumber();
     }
 
-    private normalizeRouteAllocations(routes: FlowRoute[]): number[] {
+    private resolveFlowMode(route: FlowRoute): FlowRouteMode {
+        return route.mode === 'onTop' ? 'onTop' : 'base';
+    }
+
+    private normalizeBaseRouteAllocations(routes: FlowRoute[]): number[] {
         const allocations = routes.map((route, index) => this.resolveFlowBasisPoints(route, `Route ${index + 1}`, true));
         const unspecified = allocations.filter((allocation) => allocation === null).length;
         const explicitTotal = allocations.reduce((sum, allocation) => sum + (allocation || 0), 0);
@@ -335,6 +389,17 @@ export class Streamer {
         return allocations as number[];
     }
 
+    private normalizeOnTopRouteAllocations(routes: FlowRoute[]): number[] {
+        const allocations = routes.map((route, index) => this.resolveFlowBasisPoints(route, `On-top route ${index + 1}`, false) as number);
+        const explicitTotal = allocations.reduce((sum, allocation) => sum + allocation, 0);
+
+        if (explicitTotal <= 0) {
+            throw new Error('On-top flow route allocations must be greater than zero');
+        }
+
+        return allocations;
+    }
+
     private resolvePlannedRouteMemo(
         event: TransferEvent,
         route: FlowRoute,
@@ -356,12 +421,107 @@ export class Streamer {
         return defaultMemo || '';
     }
 
-    private buildPlannedFlowRoutes(
+    private resolveGroupSplitStrategy(route: FlowTransferGroupRoute): 'equal' | 'weighted' {
+        if (route.split) {
+            return route.split;
+        }
+
+        return route.group.some((recipient) => recipient.weight !== undefined) ? 'weighted' : 'equal';
+    }
+
+    private resolveGroupWeights(route: FlowTransferGroupRoute, routeIndex: number): Array<string | number> {
+        if (!Array.isArray(route.group) || route.group.length === 0) {
+            throw new Error(`Route ${routeIndex + 1} group must include at least one account`);
+        }
+
+        if (this.resolveGroupSplitStrategy(route) === 'equal') {
+            return route.group.map(() => 1);
+        }
+
+        return route.group.map((recipient, groupIndex) => {
+            if (recipient.weight === undefined) {
+                return 1;
+            }
+
+            const weight = new BigNumber(recipient.weight);
+            if (weight.isNaN() || !weight.isFinite() || weight.lte(0)) {
+                throw new Error(`Route ${routeIndex + 1} recipient ${groupIndex + 1} weight must be greater than zero`);
+            }
+
+            return weight.toString();
+        });
+    }
+
+    private expandPlannedRoute(
+        event: TransferEvent,
+        route: FlowRoute,
+        routeIndex: number,
+        amount: string,
+        asset: string,
+        memo: string
+    ): PlannedFlowRoute[] {
+        const mode = this.resolveFlowMode(route);
+
+        if (route.type === 'burn') {
+            return [{
+                type: 'burn',
+                mode,
+                amount,
+                asset,
+                memo,
+                routeIndex
+            }];
+        }
+
+        if ('group' in route) {
+            const weights = this.resolveGroupWeights(route, routeIndex);
+            const amounts = Utils.splitAmountByWeights(amount, weights);
+
+            return route.group.map((recipient: FlowGroupRecipient, groupIndex: number) => {
+                const destination = typeof recipient.account === 'function' ? recipient.account(event) : recipient.account;
+                if (typeof destination !== 'string' || destination.trim().length === 0) {
+                    throw new Error(`Route ${routeIndex + 1} recipient ${groupIndex + 1} destination account is required`);
+                }
+
+                return {
+                    type: 'transfer',
+                    mode,
+                    amount: amounts[groupIndex],
+                    asset,
+                    memo,
+                    to: destination.trim(),
+                    routeIndex,
+                    groupIndex
+                };
+            });
+        }
+
+        const destination = typeof route.to === 'function' ? route.to(event) : route.to;
+        if (typeof destination !== 'string' || destination.trim().length === 0) {
+            throw new Error(`Route ${routeIndex + 1} destination account is required`);
+        }
+
+        return [{
+            type: 'transfer',
+            mode,
+            amount,
+            asset,
+            memo,
+            to: destination.trim(),
+            routeIndex
+        }];
+    }
+
+    private sumPlannedRouteAmounts(plan: PlannedFlowRoute[]): string {
+        return plan.reduce((sum, route) => sum.plus(route.amount), new BigNumber(0)).toFixed(3);
+    }
+
+    private buildPlannedIncomingTransferRoutes(
         event: TransferEvent,
         routes: FlowRoute[],
         allowedSymbols: string[],
         defaultMemo?: string | ((event: TransferEvent, route: FlowRoute, index: number) => string)
-    ): PlannedFlowRoute[] {
+    ): PlannedIncomingTransferRoutes {
         if (!Array.isArray(routes) || routes.length === 0) {
             throw new Error('At least one flow route is required');
         }
@@ -372,34 +532,43 @@ export class Streamer {
             throw new Error(`Asset '${parsed.asset}' is not allowed for this flow`);
         }
 
-        const allocations = this.normalizeRouteAllocations(routes);
-        const amounts = Utils.splitAmountByBasisPoints(parsed.value, allocations);
+        const baseRoutes = routes.filter((route) => this.resolveFlowMode(route) === 'base');
+        const onTopRoutes = routes.filter((route) => this.resolveFlowMode(route) === 'onTop');
 
-        return routes.map((route, index) => {
+        if (baseRoutes.length === 0) {
+            throw new Error('At least one base flow route is required');
+        }
+
+        const baseAllocations = this.normalizeBaseRouteAllocations(baseRoutes);
+        let baseAmount = parsed.amount;
+        let onTopRouteAmounts: string[] = [];
+
+        if (onTopRoutes.length > 0) {
+            const onTopAllocations = this.normalizeOnTopRouteAllocations(onTopRoutes);
+            const pools = Utils.splitAmountByWeights(parsed.value, [10000, ...onTopAllocations]);
+
+            baseAmount = pools[0];
+            onTopRouteAmounts = pools.slice(1);
+        }
+
+        const baseRouteAmounts = Utils.splitAmountByBasisPoints(baseAmount, baseAllocations);
+        const routesPlan = routes.flatMap((route, index) => {
             const memo = this.resolvePlannedRouteMemo(event, route, index, defaultMemo);
+            const amount = this.resolveFlowMode(route) === 'base'
+                ? baseRouteAmounts.shift()
+                : onTopRouteAmounts.shift();
 
-            if (route.type === 'burn') {
-                return {
-                    type: 'burn',
-                    amount: amounts[index],
-                    asset: parsed.asset,
-                    memo
-                };
-            }
-
-            const destination = typeof route.to === 'function' ? route.to(event) : route.to;
-            if (typeof destination !== 'string' || destination.trim().length === 0) {
-                throw new Error(`Route ${index + 1} destination account is required`);
-            }
-
-            return {
-                type: 'transfer',
-                amount: amounts[index],
-                asset: parsed.asset,
-                memo,
-                to: destination.trim()
-            };
+            return this.expandPlannedRoute(event, route, index, amount, parsed.asset, memo);
         });
+        const onTopPlannedRoutes = routesPlan.filter((route) => route.mode === 'onTop');
+
+        return {
+            incomingAmount: Utils.formatAssetAmount(parsed.value, parsed.asset),
+            asset: parsed.asset,
+            baseAmount,
+            onTopAmount: this.sumPlannedRouteAmounts(onTopPlannedRoutes),
+            routes: routesPlan
+        };
     }
 
     private async executePlannedFlowRoutes(from: string, plan: PlannedFlowRoute[], ignoreZeroAmount: boolean): Promise<any[]> {
@@ -1893,6 +2062,20 @@ export class Streamer {
         });
     }
 
+    public planIncomingTransferRoutes(
+        transfer: string | TransferEvent | { amount?: string; from?: string; to?: string; memo?: string },
+        options: Pick<AutoRouteIncomingTransfersOptions, 'routes' | 'memo' | 'allowedSymbols'>
+    ): PlannedIncomingTransferRoutes {
+        if (!options || !Array.isArray(options.routes) || options.routes.length === 0) {
+            throw new Error('planIncomingTransferRoutes requires at least one route');
+        }
+
+        const event = this.normalizeTransferPreviewInput(transfer);
+        const allowedSymbols = options.allowedSymbols || ['HIVE', 'HBD'];
+
+        return this.buildPlannedIncomingTransferRoutes(event, options.routes, allowedSymbols, options.memo);
+    }
+
     public autoRouteIncomingTransfers(options: AutoRouteIncomingTransfersOptions): FlowSubscriptionHandle {
         if (!options || !Array.isArray(options.routes) || options.routes.length === 0) {
             throw new Error('autoRouteIncomingTransfers requires at least one route');
@@ -1911,13 +2094,13 @@ export class Streamer {
                     return;
                 }
 
-                const plan = this.buildPlannedFlowRoutes(event, options.routes, allowedSymbols, options.memo);
-                const results = await this.executePlannedFlowRoutes(account, plan, ignoreZeroAmount);
+                const plan = this.buildPlannedIncomingTransferRoutes(event, options.routes, allowedSymbols, options.memo);
+                const results = await this.executePlannedFlowRoutes(account, plan.routes, ignoreZeroAmount);
 
                 await this.dedupeAdd(normalizedStore, trxId);
 
                 if (options.onRouted) {
-                    await options.onRouted(results, event, plan);
+                    await options.onRouted(results, event, plan.routes);
                 }
             } catch (error) {
                 if (ignoreZeroAmount && this.isZeroAmountFlowError(error)) {

@@ -389,7 +389,7 @@ export const HIVE_STREAM_METADATA: Readonly<HiveStreamMetadata> = deepFreeze({
         {
             method: 'autoRouteIncomingTransfers',
             signature: 'autoRouteIncomingTransfers(options)',
-            description: 'Register a flow that routes inbound transfers across burn and transfer destinations.',
+            description: 'Register a flow that routes inbound transfers across burn, transfer, grouped, and on-top destinations.',
             requiresActiveKey: true,
             requiresStart: true
         },
@@ -658,6 +658,11 @@ export const HIVE_STREAM_METADATA: Readonly<HiveStreamMetadata> = deepFreeze({
                     method: 'splitAmountByPercentage',
                     signature: 'money.splitAmountByPercentage(amount, percentages[], precision?)',
                     description: 'Split an amount by percentages with exact remainder reconciliation.'
+                },
+                {
+                    method: 'splitAmountByWeights',
+                    signature: 'money.splitAmountByWeights(amount, weights[], precision?)',
+                    description: 'Split an amount by relative weights with exact remainder reconciliation.'
                 }
             ]
         },
@@ -665,6 +670,13 @@ export const HIVE_STREAM_METADATA: Readonly<HiveStreamMetadata> = deepFreeze({
             name: 'flows',
             description: 'Opinionated higher-level blockchain workflows.',
             methods: [
+                {
+                    method: 'incomingTransfers',
+                    signature: 'flows.incomingTransfers(account?)',
+                    description: 'Create a chainable builder for inbound transfer automation.',
+                    requiresActiveKey: true,
+                    requiresStart: false
+                },
                 {
                     method: 'autoBurnIncomingTransfers',
                     signature: 'flows.autoBurnIncomingTransfers(options)',
@@ -696,9 +708,106 @@ export const HIVE_STREAM_METADATA: Readonly<HiveStreamMetadata> = deepFreeze({
                 {
                     method: 'autoRouteIncomingTransfers',
                     signature: 'flows.autoRouteIncomingTransfers(options)',
-                    description: 'Register a flow that routes inbound transfers across burn and transfer destinations.',
+                    description: 'Register a flow that routes inbound transfers across burn, transfer, grouped, and on-top destinations.',
                     requiresActiveKey: true,
                     requiresStart: true
+                },
+                {
+                    method: 'planIncomingTransferRoutes',
+                    signature: 'flows.planIncomingTransferRoutes(transfer, options)',
+                    description: 'Preview exact inbound transfer routing, including grouped fan-out and on-top allocations, without broadcasting.',
+                    requiresActiveKey: false,
+                    requiresStart: false
+                }
+            ]
+        },
+        {
+            name: 'ops',
+            description: 'Chainable builders for common blockchain write operations.',
+            methods: [
+                {
+                    method: 'transfer',
+                    signature: 'ops.transfer()',
+                    description: 'Create a chainable builder for HIVE/HBD transfers.',
+                    requiresActiveKey: true,
+                    requiresStart: false
+                },
+                {
+                    method: 'burn',
+                    signature: 'ops.burn()',
+                    description: 'Create a chainable builder for HIVE/HBD burns.',
+                    requiresActiveKey: true,
+                    requiresStart: false
+                },
+                {
+                    method: 'escrowTransfer',
+                    signature: 'ops.escrowTransfer()',
+                    description: 'Create a chainable builder for escrow_transfer operations.',
+                    requiresActiveKey: true,
+                    requiresStart: false
+                },
+                {
+                    method: 'recurrentTransfer',
+                    signature: 'ops.recurrentTransfer()',
+                    description: 'Create a chainable builder for recurrent transfers.',
+                    requiresActiveKey: true,
+                    requiresStart: false
+                },
+                {
+                    method: 'createProposal',
+                    signature: 'ops.createProposal()',
+                    description: 'Create a chainable builder for DHF proposals.',
+                    requiresActiveKey: true,
+                    requiresStart: false
+                },
+                {
+                    method: 'transferEngine',
+                    signature: 'ops.transferEngine()',
+                    description: 'Create a chainable builder for Hive Engine token transfers.',
+                    requiresActiveKey: true,
+                    requiresStart: false
+                },
+                {
+                    method: 'burnEngine',
+                    signature: 'ops.burnEngine()',
+                    description: 'Create a chainable builder for Hive Engine token burns.',
+                    requiresActiveKey: true,
+                    requiresStart: false
+                },
+                {
+                    method: 'issueEngine',
+                    signature: 'ops.issueEngine()',
+                    description: 'Create a chainable builder for Hive Engine token issuance.',
+                    requiresActiveKey: true,
+                    requiresStart: false
+                },
+                {
+                    method: 'voteProposals',
+                    signature: 'ops.voteProposals()',
+                    description: 'Create a chainable builder for proposal votes.',
+                    requiresActiveKey: true,
+                    requiresStart: false
+                },
+                {
+                    method: 'removeProposals',
+                    signature: 'ops.removeProposals()',
+                    description: 'Create a chainable builder for proposal removal.',
+                    requiresActiveKey: true,
+                    requiresStart: false
+                },
+                {
+                    method: 'upvote',
+                    signature: 'ops.upvote()',
+                    description: 'Create a chainable builder for upvotes using the configured voter.',
+                    requiresActiveKey: true,
+                    requiresStart: false
+                },
+                {
+                    method: 'downvote',
+                    signature: 'ops.downvote()',
+                    description: 'Create a chainable builder for downvotes using the configured voter.',
+                    requiresActiveKey: true,
+                    requiresStart: false
                 }
             ]
         }
