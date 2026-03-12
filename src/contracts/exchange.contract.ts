@@ -232,6 +232,10 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
     };
 
     const createPair = async (payload: { base: string; quote: string }, ctx: any) => {
+        if (ctx.sender !== account) {
+            throw new Error('Only the exchange account can create trading pairs');
+        }
+
         if (payload.base === payload.quote) {
             throw new Error('Base and quote assets must differ');
         }
@@ -340,8 +344,10 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
                 ['completed', withdrawalId]
             );
         } catch (error) {
+            // Re-read current balance inside rollback to avoid stale state
             await withTransaction(async (adapter) => {
-                await setBalanceRow(ctx.sender, payload.asset, balance.available, balance.locked, adapter);
+                const currentBalance = await getBalanceRow(ctx.sender, payload.asset, adapter);
+                await setBalanceRow(ctx.sender, payload.asset, currentBalance.available.plus(amount), currentBalance.locked, adapter);
                 await adapter.query(
                     'UPDATE exchange_withdrawals SET status = ? WHERE id = ?',
                     ['failed', withdrawalId]
@@ -555,11 +561,23 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
                 const sellerFeeQuote = calculateFee(tradeQuote, sellerFeeBps);
 
                 await withTransaction(async (adapter) => {
+                    // Re-read orders inside transaction to guard against stale state
+                    const buyCheck = await adapter.query('SELECT * FROM exchange_orders WHERE id = ? AND status IN (\'open\', \'partial\')', [buy.id]);
+                    const sellCheck = await adapter.query('SELECT * FROM exchange_orders WHERE id = ? AND status IN (\'open\', \'partial\')', [sell.id]);
+                    if (!buyCheck.length || !sellCheck.length) {
+                        return; // Order was canceled between read and transaction
+                    }
+
                     const buyerBase = await getBalanceRow(buy.account, buy.base_asset, adapter);
                     const buyerQuote = await getBalanceRow(buy.account, buy.quote_asset, adapter);
-                    const nextBuyRemaining = buyRemaining.minus(tradeAmount);
-                    const nextBuyLocked = buyPrice.multipliedBy(nextBuyRemaining);
-                    const buyerQuoteAvailable = buyerQuote.available.plus(buyerQuote.locked.minus(nextBuyLocked));
+
+                    // Cost at buy price for the traded amount (what was locked for this chunk)
+                    const lockedCost = buyPrice.multipliedBy(tradeAmount);
+                    // Actual cost at trade price (what the buyer actually pays)
+                    const actualCost = tradeQuote;
+                    // Price surplus: difference between what was locked and what's actually needed
+                    const priceSurplus = lockedCost.minus(actualCost);
+
                     await setBalanceRow(
                         buy.account,
                         buy.base_asset,
@@ -570,20 +588,18 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
                     await setBalanceRow(
                         buy.account,
                         buy.quote_asset,
-                        buyerQuoteAvailable,
-                        nextBuyLocked,
+                        buyerQuote.available.plus(priceSurplus),
+                        buyerQuote.locked.minus(lockedCost),
                         adapter
                     );
 
                     const sellerBase = await getBalanceRow(sell.account, sell.base_asset, adapter);
                     const sellerQuote = await getBalanceRow(sell.account, sell.quote_asset, adapter);
-                    const nextSellRemaining = sellRemaining.minus(tradeAmount);
-                    const nextSellLocked = nextSellRemaining;
                     await setBalanceRow(
                         sell.account,
                         sell.base_asset,
                         sellerBase.available,
-                        nextSellLocked,
+                        sellerBase.locked.minus(tradeAmount),
                         adapter
                     );
                     await setBalanceRow(
@@ -615,6 +631,9 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
                             adapter
                         );
                     }
+
+                    const nextBuyRemaining = buyRemaining.minus(tradeAmount);
+                    const nextSellRemaining = sellRemaining.minus(tradeAmount);
 
                     await adapter.query(
                         'UPDATE exchange_orders SET remaining = ?, status = ? WHERE id = ?',

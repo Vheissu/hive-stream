@@ -1,6 +1,7 @@
 import { Streamer } from '../../src/streamer';
 import { SqliteAdapter } from '../../src/adapters/sqlite.adapter';
 import { createNFTContract } from '../../src/contracts/nft.contract';
+import { Utils } from '../../src/utils';
 
 const createCustomJsonContext = (streamer: Streamer, adapter: SqliteAdapter, sender: string, transactionId: string) => ({
     trigger: 'custom_json' as const,
@@ -104,6 +105,11 @@ describe('NFT transactional safety', () => {
             price: '10.000',
             currency: 'HIVE'
         }, createCustomJsonContext(streamer, adapter, 'alice', 'trx-list-token'));
+
+        // Mock blockchain verification calls that the buyNFT action wrapper now performs
+        jest.spyOn(Utils, 'getTransaction').mockResolvedValue({ operations: [] } as any);
+        jest.spyOn(Utils, 'verifyTransfer').mockResolvedValue(true);
+        jest.spyOn(streamer, 'transferHiveTokens').mockResolvedValue(true as any);
 
         jest.spyOn(adapter, 'addEvent').mockImplementationOnce(async () => {
             throw new Error('event persistence failed');

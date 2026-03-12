@@ -172,6 +172,7 @@ export function createDiceContract(options: DiceContractOptions = {}) {
                 }
 
                 state.pendingPayouts = state.pendingPayouts.plus(tokensWonBN);
+                let payoutIncremented = true;
 
                 const random = rng(ctx.block.previousId, ctx.block.id, ctx.transaction.id);
                 const winningMemo = `You won ${tokensWon} ${tokenSymbol}. Roll: ${random}, Your guess: ${roll}`;
@@ -180,11 +181,16 @@ export function createDiceContract(options: DiceContractOptions = {}) {
                 try {
                     if (random < roll) {
                         await state.streamer.transferHiveTokens(account, sender, tokensWon, tokenSymbol, winningMemo);
+                        // Invalidate balance cache after payout
+                        state.balanceCache = null;
                     } else {
                         await state.streamer.transferHiveTokens(account, sender, '0.001', tokenSymbol, losingMemo);
                     }
                 } finally {
-                    state.pendingPayouts = state.pendingPayouts.minus(tokensWonBN);
+                    if (payoutIncremented) {
+                        state.pendingPayouts = state.pendingPayouts.minus(tokensWonBN);
+                        payoutIncremented = false;
+                    }
                 }
             }
         } catch (e) {

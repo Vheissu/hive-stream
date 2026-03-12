@@ -132,6 +132,12 @@ export function createCrowdfundContract(options: CrowdfundContractOptions = {}) 
         );
 
         const milestones = payload.milestones || [];
+        if (milestones.length > 0) {
+            const totalPercent = milestones.reduce((sum, m) => sum + m.targetPercent, 0);
+            if (totalPercent > 100) {
+                throw new Error('Milestone percentages cannot exceed 100%');
+            }
+        }
         for (let index = 0; index < milestones.length; index++) {
             const milestone = milestones[index];
             await state.adapter.query(
@@ -291,6 +297,17 @@ export function createCrowdfundContract(options: CrowdfundContractOptions = {}) 
             ['released', releasedAmount, new Date(), payload.campaignId, payload.milestoneIndex]
         );
 
+        // Transfer funds to the beneficiary
+        if ((state as any).streamer) {
+            await (state as any).streamer.transferHiveTokens(
+                campaign.creator,
+                campaign.beneficiary,
+                toBigNumber(releasedAmount).toFixed(3),
+                campaign.asset,
+                `Crowdfund milestone release: ${payload.campaignId} #${payload.milestoneIndex}`
+            );
+        }
+
         await emitContractEvent(state.adapter, name, 'releaseMilestone', payload, {
             action: 'crowdfund_milestone_released',
             data: {
@@ -328,6 +345,17 @@ export function createCrowdfundContract(options: CrowdfundContractOptions = {}) 
             [1, payload.campaignId, sender]
         );
 
+        // Transfer refund to the contributor
+        if ((state as any).streamer) {
+            await (state as any).streamer.transferHiveTokens(
+                campaign.creator,
+                sender,
+                toBigNumber(totalRefund).toFixed(3),
+                campaign.asset,
+                `Crowdfund refund: ${payload.campaignId}`
+            );
+        }
+
         await emitContractEvent(state.adapter, name, 'refundContribution', payload, {
             action: 'crowdfund_refund_requested',
             data: {
@@ -342,8 +370,9 @@ export function createCrowdfundContract(options: CrowdfundContractOptions = {}) 
     return defineContract({
         name,
         hooks: {
-            create: async ({ adapter }) => {
+            create: async ({ adapter, streamer }) => {
                 state.adapter = adapter;
+                (state as any).streamer = streamer;
                 await initialize();
             }
         },

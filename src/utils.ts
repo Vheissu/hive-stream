@@ -1,3 +1,4 @@
+import BigNumber from 'bignumber.js';
 import { HiveRates } from './hive-rates';
 import { Client, SignedTransaction, PrivateKey } from '@hiveio/dhive';
 import { Config, ConfigInterface } from './config';
@@ -312,10 +313,15 @@ export const Utils = {
         if (!client || !config.ACTIVE_KEY || !from || !to || !amount || !symbol) {
             throw new Error('Missing required parameters for Hive token transfer');
         }
-        
+
+        const amountBN = new BigNumber(amount);
+        if (amountBN.isNaN() || !amountBN.isFinite()) {
+            throw new Error('Invalid transfer amount');
+        }
+
         const key = PrivateKey.fromString(config.ACTIVE_KEY);
-        const formattedAmount = `${parseFloat(amount).toFixed(3)} ${symbol}`;
-        
+        const formattedAmount = `${amountBN.toFixed(3)} ${symbol}`;
+
         return client.broadcast.transfer({ from, to, amount: formattedAmount, memo }, key);
     },
 
@@ -643,9 +649,14 @@ export const Utils = {
         const key = PrivateKey.fromString(config.ACTIVE_KEY);
         let completed = 0;
 
+        const amountBN = new BigNumber(amount);
+        if (amountBN.isNaN() || !amountBN.isFinite()) {
+            throw new Error('Invalid transfer amount');
+        }
+
         for (const user of accounts) {
             const to = user.replace('@', '');
-            const formattedAmount = `${parseFloat(amount).toFixed(3)} ${symbol}`;
+            const formattedAmount = `${amountBN.toFixed(3)} ${symbol}`;
 
             try {
                 await client.broadcast.transfer({ from, to, amount: formattedAmount, memo }, key);

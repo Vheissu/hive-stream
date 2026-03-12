@@ -9,7 +9,8 @@ describe('NFTContract', () => {
     beforeEach(() => {
         mockAdapter = new MockAdapter();
         mockStreamer = {
-            getAdapter: () => mockAdapter
+            getAdapter: () => mockAdapter,
+            transferHiveTokens: jest.fn().mockResolvedValue(true)
         };
 
         nftContract = new NFTContract();
@@ -181,7 +182,10 @@ describe('NFTContract', () => {
         });
 
         it('should reject minting when max supply reached', async () => {
-            mockAdapter.setQueryResult([{ symbol: 'TESTNFT', creator: 'alice', max_supply: 1000, current_supply: 1000 }]);
+            mockAdapter.setQueryResults([
+                [{ symbol: 'TESTNFT', creator: 'alice', max_supply: 1000, current_supply: 1000 }],
+                [{ max_supply: 1000, current_supply: 1000 }] // Re-read inside transaction
+            ]);
 
             const payload = {
                 collectionSymbol: 'TESTNFT',
@@ -196,6 +200,7 @@ describe('NFTContract', () => {
         it('should reject duplicate token ID', async () => {
             mockAdapter.setQueryResults([
                 [{ symbol: 'TESTNFT', creator: 'alice', max_supply: 1000, current_supply: 0 }],
+                [{ max_supply: 1000, current_supply: 0 }], // Re-read inside transaction
                 [{ token_id: 'token001' }] // Existing token
             ]);
 

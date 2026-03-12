@@ -124,6 +124,11 @@ export function createLottoContract(options: LottoContractOptions = {}) {
                 return;
             }
 
+            if (amountParsed.isLessThan(cost)) {
+                await state.streamer.transferHiveTokens(account, sender, amountTrim[0], amountTrim[1], `[Refund] A ticket costs ${cost} ${tokenSymbol}. You sent ${amountRaw}. Insufficient amount.`);
+                return;
+            }
+
             if (amountParsed.isGreaterThan(cost)) {
                 const difference = amountParsed.minus(cost).toFixed(3);
                 await state.streamer.transferHiveTokens(account, sender, difference, amountTrim[1], `[Refund] A ticket costs ${cost} ${tokenSymbol}. You sent ${amountRaw}. You were refunded ${difference} ${tokenSymbol}.`);
@@ -157,23 +162,21 @@ export function createLottoContract(options: LottoContractOptions = {}) {
 
     const getWinners = async (count: number, entries: any[], ctx: any): Promise<any[]> => {
         const winners: any[] = [];
+        const selectedIndices = new Set<number>();
+        const maxEntries = Math.min(count, entries.length);
 
-        Utils.shuffle(entries);
+        for (let attempt = 0; winners.length < maxEntries && attempt < maxEntries * 10; attempt++) {
+            const index = rng(
+                ctx.block.previousId,
+                ctx.block.id,
+                ctx.transaction.id,
+                attempt,
+                entries.length
+            ) - 1; // rng returns 1-based, convert to 0-based
 
-        for (const entry of entries) {
-            if (winners.length < count) {
-                const winner = entries[rng(
-                    ctx.block.previousId + `${seedrandom().double()}`,
-                    ctx.block.id + `${seedrandom().double()}`,
-                    ctx.transaction.id + `${seedrandom().double()}`,
-                    seedrandom().double(),
-                    entries.length - 1
-                )];
-
-                winners.push(winner);
-                await Utils.sleep(300);
-            } else {
-                break;
+            if (!selectedIndices.has(index)) {
+                selectedIndices.add(index);
+                winners.push(entries[index]);
             }
         }
 
@@ -193,20 +196,26 @@ export function createLottoContract(options: LottoContractOptions = {}) {
                     return arr;
                 }, []);
 
+                // Mark draw as completed BEFORE refunding to prevent re-draws
+                await state.adapter.replace(COLLECTION_LOTTERY, { _id: draw._id }, { ...draw, status: 'completed' });
+
                 await state.streamer.transferHiveTokensMultiple(account, entrants, new BigNumber(cost).toFixed(3), tokenSymbol, '[Refund] The hourly lotto draw did not have enough contestants.');
                 return;
             }
 
             const balance = await getBalance();
-            const winningsAmount = new BigNumber(total).multipliedBy(cost).toNumber();
-            const percentageFee = new BigNumber(winningsAmount).dividedBy(100).multipliedBy(feePercentage);
-            const payoutTotal = new BigNumber(winningsAmount).minus(percentageFee);
-            const amountPerWinner = new BigNumber(payoutTotal).dividedBy(hourlyWinnersPick).toFixed(3);
+            const winningsAmount = new BigNumber(total).multipliedBy(cost);
+            const percentageFee = winningsAmount.dividedBy(100).multipliedBy(feePercentage);
+            const payoutTotal = winningsAmount.minus(percentageFee);
+            const amountPerWinner = payoutTotal.dividedBy(hourlyWinnersPick).toFixed(3);
 
-            // Check balance BEFORE paying fee to avoid losing fee on insufficient balance
-            if (balance !== null && payoutTotal.toNumber() > balance) {
+            // Check full outgoing amount (winnings + fee) against balance
+            if (balance !== null && winningsAmount.toNumber() > balance) {
                 throw new Error('Balance is less than amount to pay out');
             }
+
+            // Mark draw as completed BEFORE payouts to prevent re-draws
+            await state.adapter.replace(COLLECTION_LOTTERY, { _id: draw._id }, { ...draw, status: 'completed' });
 
             if (account !== feeAccount) {
                 await state.streamer.transferHiveTokens(account, feeAccount, percentageFee.toFixed(3), tokenSymbol, 'percentage fee');
@@ -247,24 +256,32 @@ export function createLottoContract(options: LottoContractOptions = {}) {
             const total = draw.entries.length;
 
             if (total < minEntriesDaily) {
-                for (const entrant of draw.entries) {
-                    await state.streamer.transferHiveTokens(account, entrant.account, new BigNumber(cost).toFixed(3), tokenSymbol, '[Refund] The daily lotto draw did not have enough contestants.');
-                    await Utils.sleep(3000);
-                }
+                // Mark draw as completed BEFORE refunding to prevent re-draws
+                await state.adapter.replace(COLLECTION_LOTTERY, { _id: draw._id }, { ...draw, status: 'completed' });
+
+                // Use transferHiveTokensMultiple for error isolation (one failure doesn't kill others)
+                const entrants = draw.entries.reduce((arr: string[], entrant: any) => {
+                    arr.push(entrant.account);
+                    return arr;
+                }, []);
+                await state.streamer.transferHiveTokensMultiple(account, entrants, new BigNumber(cost).toFixed(3), tokenSymbol, '[Refund] The daily lotto draw did not have enough contestants.');
 
                 return;
             }
 
             const balance = await getBalance();
-            const winningsAmount = new BigNumber(total).multipliedBy(cost).toNumber();
-            const percentageFee = new BigNumber(winningsAmount).dividedBy(100).multipliedBy(feePercentage);
-            const payoutTotal = new BigNumber(winningsAmount).minus(percentageFee);
-            const amountPerWinner = new BigNumber(payoutTotal).dividedBy(dailyWinnersPick).toFixed(3);
+            const winningsAmount = new BigNumber(total).multipliedBy(cost);
+            const percentageFee = winningsAmount.dividedBy(100).multipliedBy(feePercentage);
+            const payoutTotal = winningsAmount.minus(percentageFee);
+            const amountPerWinner = payoutTotal.dividedBy(dailyWinnersPick).toFixed(3);
 
-            // Check balance BEFORE paying fee to avoid losing fee on insufficient balance
-            if (balance !== null && payoutTotal.toNumber() > balance) {
+            // Check full outgoing amount (winnings + fee) against balance
+            if (balance !== null && winningsAmount.toNumber() > balance) {
                 throw new Error('Balance is less than amount to pay out');
             }
+
+            // Mark draw as completed BEFORE payouts to prevent re-draws
+            await state.adapter.replace(COLLECTION_LOTTERY, { _id: draw._id }, { ...draw, status: 'completed' });
 
             if (account !== feeAccount) {
                 await state.streamer.transferHiveTokens(account, feeAccount, percentageFee.toFixed(3), tokenSymbol, 'percentage fee');

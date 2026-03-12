@@ -167,6 +167,7 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
                 }
 
                 state.pendingPayouts = state.pendingPayouts.plus(potentialPayout);
+                let payoutIncremented = true;
 
                 try {
                     const serverSeed = uuidv4();
@@ -191,6 +192,8 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
                         });
 
                         await state.streamer.transferHiveTokens(account, sender, potentialPayout.toFixed(3), amountTrim[1], `[Winner] | Guess: ${payload.guess} | Server Roll: ${generatedGuess} | Previous block id: ${ctx.block.previousId} | BlockID: ${ctx.block.id} | Trx ID: ${ctx.transaction.id} | Server Seed: ${serverSeed}`);
+                        // Invalidate balance cache after payout
+                        state.balanceCache = null;
                         return;
                     }
 
@@ -208,7 +211,10 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
 
                     await state.streamer.transferHiveTokens(account, sender, '0.001', amountTrim[1], `[Lost] | Guess: ${payload.guess} | Server Roll: ${generatedGuess} | Previous block id: ${ctx.block.previousId} | BlockID: ${ctx.block.id} | Trx ID: ${ctx.transaction.id} | Server Seed: ${serverSeed}`);
                 } finally {
-                    state.pendingPayouts = state.pendingPayouts.minus(potentialPayout);
+                    if (payoutIncremented) {
+                        state.pendingPayouts = state.pendingPayouts.minus(potentialPayout);
+                        payoutIncremented = false;
+                    }
                 }
             }
         } catch (e) {

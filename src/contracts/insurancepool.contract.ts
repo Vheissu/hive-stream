@@ -292,6 +292,18 @@ export function createInsurancePoolContract(options: InsurancePoolContractOption
             [approvedAmount, 'approved', payload.note || '', new Date(), payload.claimId]
         );
 
+        // Actually pay the claimant
+        if ((state as any).streamer) {
+            const contractAccount = pool.owner;
+            await (state as any).streamer.transferHiveTokens(
+                contractAccount,
+                claim.holder,
+                toBigNumber(approvedAmount).toFixed(3),
+                pool.asset,
+                `Insurance claim payout: ${payload.claimId}`
+            );
+        }
+
         await emitContractEvent(state.adapter, name, 'approveClaim', payload, {
             action: 'insurance_claim_approved',
             data: {
@@ -332,8 +344,9 @@ export function createInsurancePoolContract(options: InsurancePoolContractOption
     return defineContract({
         name,
         hooks: {
-            create: async ({ adapter }) => {
+            create: async ({ adapter, streamer }) => {
                 state.adapter = adapter;
+                (state as any).streamer = streamer;
                 await initialize();
             }
         },

@@ -260,18 +260,18 @@ export function createTokenContract(options: TokenContractOptions = {}) {
                 throw new Error('Cannot transfer tokens to yourself');
             }
 
-            const token = await state.adapter.query('SELECT * FROM tokens WHERE symbol = ?', [symbol]);
-
-            if (!token || token.length === 0) {
-                throw new Error(`Token ${symbol} does not exist`);
-            }
-
             const amountBN = new BigNumber(amount);
             if (amountBN.isNaN() || amountBN.lte(0)) {
                 throw new Error('Amount must be a positive number');
             }
 
             await withTransaction(async (adapter) => {
+                // Token existence check inside transaction to prevent TOCTOU
+                const token = await adapter.query('SELECT * FROM tokens WHERE symbol = ?', [symbol]);
+                if (!token || token.length === 0) {
+                    throw new Error(`Token ${symbol} does not exist`);
+                }
+
                 const senderBalance = await adapter.query(
                     'SELECT balance FROM token_balances WHERE account = ? AND symbol = ?',
                     [ctx.sender, symbol]

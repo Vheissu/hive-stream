@@ -45,6 +45,9 @@ describe('Third wave contract suite', () => {
         });
         adapter = new SqliteAdapter(':memory:');
         await streamer.registerAdapter(adapter);
+
+        // Mock transferHiveTokens so contract payouts don't hit the real blockchain
+        jest.spyOn(streamer, 'transferHiveTokens').mockResolvedValue(true as any);
     });
 
     afterEach(async () => {

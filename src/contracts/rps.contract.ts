@@ -172,6 +172,7 @@ export function createRpsContract(options: RpsContractOptions = {}) {
                 }
 
                 state.pendingPayouts = state.pendingPayouts.plus(potentialPayout);
+                let payoutIncremented = true;
 
                 try {
                     const serverSeed = uuidv4();
@@ -199,13 +200,18 @@ export function createRpsContract(options: RpsContractOptions = {}) {
 
                     if (result === 'win') {
                         await state.streamer.transferHiveTokens(account, sender, potentialPayout.toFixed(3), amountTrim[1], `[Winner] | You: ${payload.move} | Server: ${serverMove} | Seed: ${serverSeed}`);
+                        // Invalidate balance cache after payout
+                        state.balanceCache = null;
                     } else if (result === 'tie') {
                         await state.streamer.transferHiveTokens(account, sender, amountTrim[0], amountTrim[1], `[Tie] | You: ${payload.move} | Server: ${serverMove} | Seed: ${serverSeed}`);
                     } else {
                         await state.streamer.transferHiveTokens(account, sender, '0.001', amountTrim[1], `[Lost] | You: ${payload.move} | Server: ${serverMove} | Seed: ${serverSeed}`);
                     }
                 } finally {
-                    state.pendingPayouts = state.pendingPayouts.minus(potentialPayout);
+                    if (payoutIncremented) {
+                        state.pendingPayouts = state.pendingPayouts.minus(potentialPayout);
+                        payoutIncremented = false;
+                    }
                 }
             }
         } catch (e) {

@@ -37,7 +37,7 @@ describe('Exchange Contract', () => {
     });
 
     test('Deposits, places orders, and matches', async () => {
-        await contract.actions.createPair.handler({ base: 'HIVE', quote: 'HBD' }, baseContext('custom_json', 'alice'));
+        await contract.actions.createPair.handler({ base: 'HIVE', quote: 'HBD' }, baseContext('custom_json', 'beggars'));
 
         const aliceDepositContext = baseContext('transfer', 'alice');
         aliceDepositContext.transfer.rawAmount = '100.000 HBD';

@@ -99,7 +99,8 @@ describe('Contract transactional safety', () => {
             }
         };
 
-        await contract.actions.createPair.handler({ base: 'HIVE', quote: 'HBD' }, aliceContext);
+        const beggarsContext = createCustomJsonContext(streamer, adapter, 'beggars');
+        await contract.actions.createPair.handler({ base: 'HIVE', quote: 'HBD' }, beggarsContext);
         await contract.actions.deposit.handler({}, depositContext);
 
         jest.spyOn(adapter, 'addEvent').mockImplementationOnce(async () => {

@@ -272,11 +272,16 @@ export class NFTContract {
                 throw new Error('Attributes must be 1000 characters or less');
             }
 
-            if (collectionData.max_supply && collectionData.current_supply >= collectionData.max_supply) {
-                throw new Error('Collection has reached maximum supply');
-            }
-
             await this.withTransaction(async (adapter) => {
+                // Re-read supply inside the transaction to prevent race conditions
+                const collectionCheck = await adapter.query(
+                    'SELECT max_supply, current_supply FROM nft_collections WHERE symbol = ?',
+                    [collectionSymbol]
+                );
+                if (collectionCheck[0]?.max_supply && collectionCheck[0].current_supply >= collectionCheck[0].max_supply) {
+                    throw new Error('Collection has reached maximum supply');
+                }
+
                 const existingToken = await adapter.query(
                     'SELECT token_id FROM nft_tokens WHERE token_id = ? AND collection_symbol = ?',
                     [tokenId, collectionSymbol]
@@ -693,13 +698,14 @@ export class NFTContract {
 
             let royaltyAmount = new BigNumber(0);
             let sellerAmount = paidAmount;
+            let royaltyRecipient: string | null = null;
 
             if (collection && collection.length > 0 && collection[0].royalty > 0) {
                 royaltyAmount = paidAmount.multipliedBy(collection[0].royalty);
                 sellerAmount = paidAmount.minus(royaltyAmount);
 
                 if (royaltyAmount.gt(0) && collection[0].creator !== listingData.seller) {
-                    console.log(`[NFTContract] Royalty payment: ${royaltyAmount.toFixed(3)} ${asset} to ${collection[0].creator}`);
+                    royaltyRecipient = collection[0].creator;
                 }
             }
 
@@ -733,6 +739,27 @@ export class NFTContract {
                     }
                 });
             });
+
+            // Pay the seller using the Streamer's transfer method
+            const contractAccount = (this._instance as any).config?.HIVE_ACCOUNT || 'beggars';
+            await this._instance.transferHiveTokens(
+                contractAccount,
+                listingData.seller,
+                sellerAmount.toFixed(3),
+                asset,
+                `NFT sale: ${tokenId} from ${collectionSymbol}`
+            );
+
+            // Pay royalty to creator if applicable
+            if (royaltyRecipient && royaltyAmount.gt(0)) {
+                await this._instance.transferHiveTokens(
+                    contractAccount,
+                    royaltyRecipient,
+                    royaltyAmount.toFixed(3),
+                    asset,
+                    `NFT royalty: ${tokenId} from ${collectionSymbol}`
+                );
+            }
 
             console.log(`[NFTContract] NFT ${tokenId} sold to ${sender} for ${amount} ${asset}`);
 
@@ -902,9 +929,24 @@ export function createNFTContract(options: NFTContractOptions = {}) {
             unlistNFT: action((payload, ctx) => callWithContext(payload, ctx, (instance as any).unlistNFT.bind(instance), { sender: ctx.sender }), {
                 trigger: 'custom_json'
             }),
-            buyNFT: action((payload, ctx) => {
+            buyNFT: action(async (payload, ctx) => {
                 const amountRaw = ctx.transfer?.rawAmount || '';
+                if (!amountRaw || !amountRaw.includes(' ')) {
+                    throw new Error('Invalid transfer amount format');
+                }
                 const [amount, asset] = amountRaw.split(' ');
+                if (!amount || !asset || isNaN(Number(amount))) {
+                    throw new Error('Invalid transfer amount');
+                }
+
+                // Verify the transfer actually happened on-chain
+                const transaction = await Utils.getTransaction(instance._instance['client'], ctx.block.number, ctx.transaction.id);
+                const contractAccount = (instance._instance as any).config?.HIVE_ACCOUNT || 'beggars';
+                const verified = await Utils.verifyTransfer(transaction, ctx.sender, contractAccount, amountRaw);
+                if (!verified) {
+                    throw new Error('Transfer verification failed');
+                }
+
                 return callWithContext(payload, ctx, (instance as any).buyNFT.bind(instance), {
                     sender: ctx.sender,
                     amount,
