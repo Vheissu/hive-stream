@@ -58,6 +58,20 @@ export interface ProviderMetadata {
     description: string;
 }
 
+export interface NamespaceMethodMetadata {
+    method: string;
+    signature: string;
+    description: string;
+    requiresActiveKey?: boolean;
+    requiresStart?: boolean;
+}
+
+export interface NamespaceMetadata {
+    name: string;
+    description: string;
+    methods: NamespaceMethodMetadata[];
+}
+
 export interface HiveStreamMetadata {
     schemaVersion: number;
     config: {
@@ -74,6 +88,7 @@ export interface HiveStreamMetadata {
     };
     adapters: AdapterMetadata[];
     providers: ProviderMetadata[];
+    namespaces: NamespaceMetadata[];
 }
 
 function deepFreeze<T>(value: T): Readonly<T> {
@@ -323,9 +338,72 @@ export const HIVE_STREAM_METADATA: Readonly<HiveStreamMetadata> = deepFreeze({
             requiresStart: false
         },
         {
+            method: 'burnHiveTokens',
+            signature: 'burnHiveTokens(from, amount, symbol, memo?)',
+            description: 'Burn HIVE or HBD by transferring to the null account.',
+            requiresActiveKey: true,
+            requiresStart: false
+        },
+        {
+            method: 'burnTransferPortion',
+            signature: 'burnTransferPortion(from, transferOrAmount, basisPoints, memo?, allowedSymbols?)',
+            description: 'Parse an inbound transfer amount and burn the requested basis-point portion safely.',
+            requiresActiveKey: true,
+            requiresStart: false
+        },
+        {
+            method: 'burnTransferPercentage',
+            signature: 'burnTransferPercentage(from, transferOrAmount, percentage, memo?, allowedSymbols?)',
+            description: 'Parse an inbound transfer amount and burn the requested percentage safely.',
+            requiresActiveKey: true,
+            requiresStart: false
+        },
+        {
+            method: 'autoBurnIncomingTransfers',
+            signature: 'autoBurnIncomingTransfers(options)',
+            description: 'Register a flow that burns a percentage or basis-point portion of inbound transfers.',
+            requiresActiveKey: true,
+            requiresStart: true
+        },
+        {
+            method: 'autoForwardIncomingTransfers',
+            signature: 'autoForwardIncomingTransfers(options)',
+            description: 'Register a flow that forwards inbound transfers to another account.',
+            requiresActiveKey: true,
+            requiresStart: true
+        },
+        {
+            method: 'autoRefundIncomingTransfers',
+            signature: 'autoRefundIncomingTransfers(options?)',
+            description: 'Register a flow that refunds inbound transfers back to the sender.',
+            requiresActiveKey: true,
+            requiresStart: true
+        },
+        {
+            method: 'autoSplitIncomingTransfers',
+            signature: 'autoSplitIncomingTransfers(options)',
+            description: 'Register a flow that splits inbound transfers across multiple recipients.',
+            requiresActiveKey: true,
+            requiresStart: true
+        },
+        {
+            method: 'autoRouteIncomingTransfers',
+            signature: 'autoRouteIncomingTransfers(options)',
+            description: 'Register a flow that routes inbound transfers across burn and transfer destinations.',
+            requiresActiveKey: true,
+            requiresStart: true
+        },
+        {
             method: 'transferHiveEngineTokens',
             signature: 'transferHiveEngineTokens(from, to, symbol, quantity, memo?)',
             description: 'Transfer Hive Engine tokens.',
+            requiresActiveKey: true,
+            requiresStart: false
+        },
+        {
+            method: 'burnHiveEngineTokens',
+            signature: 'burnHiveEngineTokens(from, symbol, quantity, memo?)',
+            description: 'Burn Hive Engine tokens by transferring to the null account.',
             requiresActiveKey: true,
             requiresStart: false
         },
@@ -539,6 +617,90 @@ export const HIVE_STREAM_METADATA: Readonly<HiveStreamMetadata> = deepFreeze({
             exportName: 'HafClient',
             constructorSignature: 'new HafClient(config?)',
             description: 'Standalone HAF query helper for direct analytics queries.'
+        }
+    ],
+    namespaces: [
+        {
+            name: 'money',
+            description: 'Safe financial parsing, rounding, and percentage helpers.',
+            methods: [
+                {
+                    method: 'parseAssetAmount',
+                    signature: 'money.parseAssetAmount(rawAmount)',
+                    description: 'Parse a blockchain amount string like "1.000 HIVE".'
+                },
+                {
+                    method: 'formatAmount',
+                    signature: 'money.formatAmount(amount, precision?)',
+                    description: 'Format a numeric amount with safe rounding.'
+                },
+                {
+                    method: 'formatAssetAmount',
+                    signature: 'money.formatAssetAmount(amount, symbol, precision?)',
+                    description: 'Format a numeric amount with an asset symbol.'
+                },
+                {
+                    method: 'calculatePercentageAmount',
+                    signature: 'money.calculatePercentageAmount(amount, percentage, precision?)',
+                    description: 'Calculate a percentage of an amount using safe rounding.'
+                },
+                {
+                    method: 'calculateBasisPointsAmount',
+                    signature: 'money.calculateBasisPointsAmount(amount, basisPoints, precision?)',
+                    description: 'Calculate a basis-point portion of an amount using safe rounding.'
+                },
+                {
+                    method: 'splitAmountByBasisPoints',
+                    signature: 'money.splitAmountByBasisPoints(amount, basisPoints[], precision?)',
+                    description: 'Split an amount by basis points with exact remainder reconciliation.'
+                },
+                {
+                    method: 'splitAmountByPercentage',
+                    signature: 'money.splitAmountByPercentage(amount, percentages[], precision?)',
+                    description: 'Split an amount by percentages with exact remainder reconciliation.'
+                }
+            ]
+        },
+        {
+            name: 'flows',
+            description: 'Opinionated higher-level blockchain workflows.',
+            methods: [
+                {
+                    method: 'autoBurnIncomingTransfers',
+                    signature: 'flows.autoBurnIncomingTransfers(options)',
+                    description: 'Register a flow that burns a percentage or basis-point portion of inbound transfers.',
+                    requiresActiveKey: true,
+                    requiresStart: true
+                },
+                {
+                    method: 'autoForwardIncomingTransfers',
+                    signature: 'flows.autoForwardIncomingTransfers(options)',
+                    description: 'Register a flow that forwards inbound transfers to another account.',
+                    requiresActiveKey: true,
+                    requiresStart: true
+                },
+                {
+                    method: 'autoRefundIncomingTransfers',
+                    signature: 'flows.autoRefundIncomingTransfers(options?)',
+                    description: 'Register a flow that refunds inbound transfers back to the sender.',
+                    requiresActiveKey: true,
+                    requiresStart: true
+                },
+                {
+                    method: 'autoSplitIncomingTransfers',
+                    signature: 'flows.autoSplitIncomingTransfers(options)',
+                    description: 'Register a flow that splits inbound transfers across multiple recipients.',
+                    requiresActiveKey: true,
+                    requiresStart: true
+                },
+                {
+                    method: 'autoRouteIncomingTransfers',
+                    signature: 'flows.autoRouteIncomingTransfers(options)',
+                    description: 'Register a flow that routes inbound transfers across burn and transfer destinations.',
+                    requiresActiveKey: true,
+                    requiresStart: true
+                }
+            ]
         }
     ]
 });

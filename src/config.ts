@@ -19,10 +19,17 @@ export interface ConfigInterface {
     DEBUG_MODE: boolean;
 }
 
+import { config as loadDotenv } from 'dotenv';
 import { BlockProvider } from './providers/block-provider';
+
+export interface EnvConfigOptions {
+    path?: string | string[];
+    override?: boolean;
+}
 
 export interface ConfigInput extends Partial<ConfigInterface> {
     blockProvider?: BlockProvider;
+    env?: boolean | EnvConfigOptions;
     activeKey?: ConfigInterface['ACTIVE_KEY'];
     postingKey?: ConfigInterface['POSTING_KEY'];
     jsonId?: ConfigInterface['JSON_ID'];
@@ -30,6 +37,8 @@ export interface ConfigInput extends Partial<ConfigInterface> {
     hiveEngineId?: ConfigInterface['HIVE_ENGINE_ID'];
     appName?: ConfigInterface['APP_NAME'];
     username?: ConfigInterface['USERNAME'];
+    account?: ConfigInterface['USERNAME'];
+    hiveAccount?: ConfigInterface['USERNAME'];
     payloadIdentifier?: ConfigInterface['PAYLOAD_IDENTIFIER'];
     lastBlockNumber?: ConfigInterface['LAST_BLOCK_NUMBER'];
     blockCheckInterval?: ConfigInterface['BLOCK_CHECK_INTERVAL'];
@@ -43,7 +52,7 @@ export interface ConfigInput extends Partial<ConfigInterface> {
     debugMode?: ConfigInterface['DEBUG_MODE'];
 }
 
-type ConfigAliasKey = keyof Omit<ConfigInput, keyof ConfigInterface | 'blockProvider'>;
+type ConfigAliasKey = keyof Omit<ConfigInput, keyof ConfigInterface | 'blockProvider' | 'env'>;
 
 const CONFIG_KEYS: Array<keyof ConfigInterface> = [
     'ACTIVE_KEY',
@@ -74,6 +83,8 @@ export const CONFIG_KEY_ALIASES: Record<ConfigAliasKey, keyof ConfigInterface> =
     hiveEngineId: 'HIVE_ENGINE_ID',
     appName: 'APP_NAME',
     username: 'USERNAME',
+    account: 'USERNAME',
+    hiveAccount: 'USERNAME',
     payloadIdentifier: 'PAYLOAD_IDENTIFIER',
     lastBlockNumber: 'LAST_BLOCK_NUMBER',
     blockCheckInterval: 'BLOCK_CHECK_INTERVAL',
@@ -117,6 +128,93 @@ export const Config: ConfigInterface = {
     DEBUG_MODE: false,
 };
 
+const ENV_VALUE_ALIASES: Record<keyof ConfigInterface, string[]> = {
+    ACTIVE_KEY: ['HIVE_ACTIVE_KEY', 'ACTIVE_KEY'],
+    POSTING_KEY: ['HIVE_POSTING_KEY', 'POSTING_KEY'],
+    JSON_ID: ['JSON_ID'],
+    HIVE_ENGINE_API: ['HIVE_ENGINE_API'],
+    HIVE_ENGINE_ID: ['HIVE_ENGINE_ID'],
+    APP_NAME: ['APP_NAME'],
+    USERNAME: ['HIVE_ACCOUNT', 'HIVE_USERNAME', 'ACCOUNT', 'USERNAME'],
+    PAYLOAD_IDENTIFIER: ['PAYLOAD_IDENTIFIER'],
+    LAST_BLOCK_NUMBER: ['LAST_BLOCK_NUMBER'],
+    BLOCK_CHECK_INTERVAL: ['BLOCK_CHECK_INTERVAL'],
+    BLOCKS_BEHIND_WARNING: ['BLOCKS_BEHIND_WARNING'],
+    RESUME_FROM_STATE: ['RESUME_FROM_STATE'],
+    CATCH_UP_BATCH_SIZE: ['CATCH_UP_BATCH_SIZE'],
+    CATCH_UP_DELAY_MS: ['CATCH_UP_DELAY_MS'],
+    API_NODES: ['API_NODES'],
+    API_ENABLED: ['API_ENABLED'],
+    API_PORT: ['API_PORT'],
+    DEBUG_MODE: ['DEBUG_MODE'],
+};
+
+function parseBoolean(value: string): boolean {
+    return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
+}
+
+function parseNumber(value: string, fallback: number): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function parseStringArray(value: string, fallback: string[]): string[] {
+    const parsed = value.split(',').map((item) => item.trim()).filter(Boolean);
+    return parsed.length > 0 ? parsed : fallback;
+}
+
+export function loadEnv(options: boolean | EnvConfigOptions = true): void {
+    if (!options) {
+        return;
+    }
+
+    const dotenvOptions = typeof options === 'object' ? options : {};
+    loadDotenv(dotenvOptions);
+}
+
+export function readEnvConfig(): Partial<ConfigInterface> {
+    const envConfig: Partial<ConfigInterface> = {};
+    const envRecord = envConfig as Record<keyof ConfigInterface, ConfigInterface[keyof ConfigInterface]>;
+
+    for (const key of CONFIG_KEYS) {
+        const envKeys = ENV_VALUE_ALIASES[key];
+        const value = envKeys
+            .map((envKey) => process.env[envKey])
+            .find((entry) => entry !== undefined && entry !== '');
+
+        if (value === undefined) {
+            continue;
+        }
+
+        switch (key) {
+            case 'LAST_BLOCK_NUMBER':
+            case 'BLOCK_CHECK_INTERVAL':
+            case 'BLOCKS_BEHIND_WARNING':
+            case 'CATCH_UP_BATCH_SIZE':
+            case 'CATCH_UP_DELAY_MS':
+            case 'API_PORT':
+                envRecord[key] = parseNumber(value, Config[key]) as ConfigInterface[typeof key];
+                break;
+
+            case 'RESUME_FROM_STATE':
+            case 'API_ENABLED':
+            case 'DEBUG_MODE':
+                envRecord[key] = parseBoolean(value) as ConfigInterface[typeof key];
+                break;
+
+            case 'API_NODES':
+                envRecord[key] = parseStringArray(value, Config.API_NODES) as ConfigInterface[typeof key];
+                break;
+
+            default:
+                envRecord[key] = value as ConfigInterface[typeof key];
+                break;
+        }
+    }
+
+    return envConfig;
+}
+
 export function normalizeConfigInput(config: ConfigInput = {}): Partial<ConfigInterface> {
     const normalized: Partial<ConfigInterface> = {};
     const normalizedRecord = normalized as Record<keyof ConfigInterface, ConfigInterface[keyof ConfigInterface]>;
@@ -146,12 +244,21 @@ export function normalizeConfigInput(config: ConfigInput = {}): Partial<ConfigIn
 }
 
 export function createConfig(config: ConfigInput = {}): ConfigInterface {
+    if (config.env) {
+        loadEnv(config.env);
+    }
+
+    const envConfig = config.env ? readEnvConfig() : {};
     const normalized = normalizeConfigInput(config);
-    const apiNodes = Array.isArray(normalized.API_NODES) ? [...normalized.API_NODES] : [...Config.API_NODES];
+    const merged = {
+        ...Config,
+        ...envConfig,
+        ...normalized,
+    };
+    const apiNodes = Array.isArray(merged.API_NODES) ? [...merged.API_NODES] : [...Config.API_NODES];
 
     return {
-        ...Config,
-        ...normalized,
+        ...merged,
         API_NODES: apiNodes,
     };
 }

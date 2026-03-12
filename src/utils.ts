@@ -3,9 +3,11 @@ import { HiveRates } from './hive-rates';
 import { Client, SignedTransaction, PrivateKey } from '@hiveio/dhive';
 import { Config, ConfigInterface } from './config';
 import seedrandom from 'seedrandom';
+import type { ParsedAssetAmount } from './types/hive-stream';
 
 const MAX_PAYLOAD_SIZE = 2000;
 const MAX_ACCOUNTS_CHECK = 999;
+const NULL_ACCOUNT = 'null';
 
 type HiveKeyInput = string | PrivateKey;
 
@@ -14,6 +16,8 @@ interface AuthorityInput {
     account_auths: [string, number][];
     key_auths: [string, number][];
 }
+
+type NumericValue = string | number | BigNumber;
 
 /**
  * Utility functions for Hive blockchain operations and general helpers
@@ -72,6 +76,203 @@ export const Utils = {
         }
 
         return JSON.stringify(meta);
+    },
+
+    parseAssetAmount(rawAmount: string): ParsedAssetAmount {
+        if (typeof rawAmount !== 'string' || rawAmount.trim().length === 0) {
+            throw new Error('Asset amount must be a non-empty string');
+        }
+
+        const parts = rawAmount.trim().split(/\s+/);
+        if (parts.length !== 2) {
+            throw new Error(`Invalid asset amount '${rawAmount}'`);
+        }
+
+        const value = new BigNumber(parts[0]);
+        if (value.isNaN() || !value.isFinite()) {
+            throw new Error(`Invalid asset amount '${rawAmount}'`);
+        }
+
+        return {
+            rawAmount: rawAmount.trim(),
+            amount: parts[0],
+            asset: parts[1],
+            value
+        };
+    },
+
+    calculateBasisPointsAmount(
+        amount: NumericValue,
+        basisPoints: number,
+        precision: number = 3,
+        roundingMode: BigNumber.RoundingMode = BigNumber.ROUND_DOWN
+    ): string {
+        if (!Number.isInteger(basisPoints) || basisPoints < 0 || basisPoints > 10000) {
+            throw new Error('basisPoints must be an integer between 0 and 10000');
+        }
+
+        if (!Number.isInteger(precision) || precision < 0) {
+            throw new Error('precision must be a non-negative integer');
+        }
+
+        const value = BigNumber.isBigNumber(amount) ? amount : new BigNumber(amount);
+        if (value.isNaN() || !value.isFinite()) {
+            throw new Error('Invalid amount');
+        }
+
+        return value
+            .multipliedBy(basisPoints)
+            .dividedBy(10000)
+            .decimalPlaces(precision, roundingMode)
+            .toFixed(precision);
+    },
+
+    formatAmount(
+        amount: NumericValue,
+        precision: number = 3,
+        roundingMode: BigNumber.RoundingMode = BigNumber.ROUND_DOWN
+    ): string {
+        if (!Number.isInteger(precision) || precision < 0) {
+            throw new Error('precision must be a non-negative integer');
+        }
+
+        const value = BigNumber.isBigNumber(amount) ? amount : new BigNumber(amount);
+        if (value.isNaN() || !value.isFinite()) {
+            throw new Error('Invalid amount');
+        }
+
+        return value.decimalPlaces(precision, roundingMode).toFixed(precision);
+    },
+
+    formatAssetAmount(
+        amount: NumericValue,
+        symbol: string,
+        precision: number = 3,
+        roundingMode: BigNumber.RoundingMode = BigNumber.ROUND_DOWN
+    ): string {
+        if (typeof symbol !== 'string' || symbol.trim().length === 0) {
+            throw new Error('Asset symbol is required');
+        }
+
+        return `${this.formatAmount(amount, precision, roundingMode)} ${symbol.trim()}`;
+    },
+
+    calculatePercentageAmount(
+        amount: NumericValue,
+        percentage: NumericValue,
+        precision: number = 3,
+        roundingMode: BigNumber.RoundingMode = BigNumber.ROUND_DOWN
+    ): string {
+        if (!Number.isInteger(precision) || precision < 0) {
+            throw new Error('precision must be a non-negative integer');
+        }
+
+        const value = BigNumber.isBigNumber(amount) ? amount : new BigNumber(amount);
+        const percentageValue = BigNumber.isBigNumber(percentage) ? percentage : new BigNumber(percentage);
+
+        if (value.isNaN() || !value.isFinite()) {
+            throw new Error('Invalid amount');
+        }
+
+        if (percentageValue.isNaN() || !percentageValue.isFinite()) {
+            throw new Error('Invalid percentage');
+        }
+
+        if (percentageValue.lt(0) || percentageValue.gt(100)) {
+            throw new Error('percentage must be between 0 and 100');
+        }
+
+        return value
+            .multipliedBy(percentageValue)
+            .dividedBy(100)
+            .decimalPlaces(precision, roundingMode)
+            .toFixed(precision);
+    },
+
+    splitAmountByBasisPoints(
+        amount: NumericValue,
+        basisPoints: number[],
+        precision: number = 3,
+        roundingMode: BigNumber.RoundingMode = BigNumber.ROUND_DOWN
+    ): string[] {
+        if (!Array.isArray(basisPoints) || basisPoints.length === 0) {
+            throw new Error('basisPoints array cannot be empty');
+        }
+
+        if (!Number.isInteger(precision) || precision < 0) {
+            throw new Error('precision must be a non-negative integer');
+        }
+
+        const totalBps = basisPoints.reduce((sum, value) => sum + value, 0);
+        if (totalBps !== 10000) {
+            throw new Error('basisPoints allocations must total 10000');
+        }
+
+        const value = BigNumber.isBigNumber(amount) ? amount : new BigNumber(amount);
+        if (value.isNaN() || !value.isFinite()) {
+            throw new Error('Invalid amount');
+        }
+
+        let allocated = new BigNumber(0);
+
+        return basisPoints.map((bps, index) => {
+            if (!Number.isInteger(bps) || bps < 0 || bps > 10000) {
+                throw new Error('basisPoints must be integers between 0 and 10000');
+            }
+
+            const share = index === basisPoints.length - 1
+                ? value.minus(allocated)
+                : value.multipliedBy(bps).dividedBy(10000).decimalPlaces(precision, roundingMode);
+
+            allocated = allocated.plus(share);
+            return share.toFixed(precision);
+        });
+    },
+
+    splitAmountByPercentage(
+        amount: NumericValue,
+        percentages: Array<string | number>,
+        precision: number = 3,
+        roundingMode: BigNumber.RoundingMode = BigNumber.ROUND_DOWN
+    ): string[] {
+        if (!Array.isArray(percentages) || percentages.length === 0) {
+            throw new Error('percentages array cannot be empty');
+        }
+
+        const normalized = percentages.map((percentage) => {
+            const value = BigNumber.isBigNumber(percentage) ? percentage : new BigNumber(percentage);
+
+            if (value.isNaN() || !value.isFinite()) {
+                throw new Error('Invalid percentage');
+            }
+
+            if (value.lt(0) || value.gt(100)) {
+                throw new Error('percentage must be between 0 and 100');
+            }
+
+            return value;
+        });
+
+        const total = normalized.reduce((sum, value) => sum.plus(value), new BigNumber(0));
+        if (!total.eq(100)) {
+            throw new Error('percentages must total 100');
+        }
+
+        const value = BigNumber.isBigNumber(amount) ? amount : new BigNumber(amount);
+        if (value.isNaN() || !value.isFinite()) {
+            throw new Error('Invalid amount');
+        }
+
+        let allocated = new BigNumber(0);
+
+        return normalized.map((percentage, index) => {
+            const share = index === normalized.length - 1
+                ? value.minus(allocated)
+                : value.multipliedBy(percentage).dividedBy(100).decimalPlaces(precision, roundingMode);
+
+            allocated = allocated.plus(share);
+            return share.toFixed(precision);
+        });
     },
 
     /**
@@ -314,15 +515,31 @@ export const Utils = {
             throw new Error('Missing required parameters for Hive token transfer');
         }
 
-        const amountBN = new BigNumber(amount);
-        if (amountBN.isNaN() || !amountBN.isFinite()) {
-            throw new Error('Invalid transfer amount');
-        }
-
         const key = PrivateKey.fromString(config.ACTIVE_KEY);
-        const formattedAmount = `${amountBN.toFixed(3)} ${symbol}`;
+        const formattedAmount = this.formatAssetAmount(amount, symbol);
 
         return client.broadcast.transfer({ from, to, amount: formattedAmount, memo }, key);
+    },
+
+    /**
+     * Burns HIVE or HBD by transferring the amount to the null account.
+     * @param client - The Hive client instance
+     * @param config - Configuration containing the active key
+     * @param from - Sender account name
+     * @param amount - Amount to burn
+     * @param symbol - Asset symbol (HIVE or HBD)
+     * @param memo - Optional memo for the burn transfer
+     * @returns Promise resolving to the broadcast result
+     */
+    burnHiveTokens(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        from: string,
+        amount: string,
+        symbol: string,
+        memo: string = ''
+    ) {
+        return this.transferHiveTokens(client, config, from, NULL_ACCOUNT, amount, symbol, memo);
     },
 
     /**
@@ -649,14 +866,9 @@ export const Utils = {
         const key = PrivateKey.fromString(config.ACTIVE_KEY);
         let completed = 0;
 
-        const amountBN = new BigNumber(amount);
-        if (amountBN.isNaN() || !amountBN.isFinite()) {
-            throw new Error('Invalid transfer amount');
-        }
-
         for (const user of accounts) {
             const to = user.replace('@', '');
-            const formattedAmount = `${amountBN.toFixed(3)} ${symbol}`;
+            const formattedAmount = this.formatAssetAmount(amount, symbol);
 
             try {
                 await client.broadcast.transfer({ from, to, amount: formattedAmount, memo }, key);
@@ -805,6 +1017,27 @@ export const Utils = {
             id: config.HIVE_ENGINE_ID, 
             json: JSON.stringify(json)
         }, key);
+    },
+
+    /**
+     * Burns Hive Engine tokens by transferring them to the null account.
+     * @param client - The Hive client instance
+     * @param config - Configuration containing the active key and Hive Engine ID
+     * @param from - Sender account name
+     * @param symbol - Token symbol
+     * @param quantity - Token quantity to burn
+     * @param memo - Optional memo for the burn transfer
+     * @returns Promise resolving to the broadcast result
+     */
+    burnHiveEngineTokens(
+        client: Client,
+        config: ConfigInterface,
+        from: string,
+        symbol: string,
+        quantity: string,
+        memo: string = ''
+    ) {
+        return this.transferHiveEngineTokens(client, config, from, NULL_ACCOUNT, quantity, symbol, memo);
     },
 
     /**

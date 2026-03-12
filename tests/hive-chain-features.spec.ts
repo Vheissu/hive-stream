@@ -124,6 +124,192 @@ describe('Hive chain features', () => {
             );
         });
 
+        test('burnHiveTokens forwards the null-account burn request', () => {
+            const spy = jest.spyOn(Utils, 'burnHiveTokens').mockResolvedValue({} as any);
+
+            streamer.burnHiveTokens('alice', '1.500', 'HIVE', 'memo');
+
+            expect(spy).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.anything(),
+                'alice',
+                '1.500',
+                'HIVE',
+                'memo'
+            );
+        });
+
+        test('burnTransferPortion parses amount and forwards a safe burn request', () => {
+            const spy = jest.spyOn(streamer, 'burnHiveTokens').mockResolvedValue({} as any);
+
+            streamer.burnTransferPortion('alice', { amount: '3.000 HIVE' }, 6700, 'memo');
+
+            expect(spy).toHaveBeenCalledWith('alice', '2.010', 'HIVE', 'memo');
+        });
+
+        test('burnTransferPortion rejects unsupported assets', () => {
+            expect(() => streamer.burnTransferPortion('alice', { amount: '3.000 TEST' }, 6700, 'memo'))
+                .toThrow('not allowed for burn');
+        });
+
+        test('burnTransferPercentage parses amount and forwards a safe burn request', () => {
+            const spy = jest.spyOn(streamer, 'burnHiveTokens').mockResolvedValue({} as any);
+
+            streamer.burnTransferPercentage('alice', { amount: '3.000 HIVE' }, 67, 'memo');
+
+            expect(spy).toHaveBeenCalledWith('alice', '2.010', 'HIVE', 'memo');
+        });
+
+        test('money namespace exposes safe helpers', () => {
+            expect(streamer.money.formatAmount('1.2399')).toBe('1.239');
+            expect(streamer.money.calculatePercentageAmount('3.000', 67)).toBe('2.010');
+            expect(streamer.money.splitAmountByBasisPoints('1.000', [6900, 3100])).toEqual(['0.690', '0.310']);
+        });
+
+        test('burnHiveEngineTokens forwards symbol and quantity in correct order', () => {
+            const spy = jest.spyOn(Utils, 'burnHiveEngineTokens').mockResolvedValue({} as any);
+
+            streamer.burnHiveEngineTokens('alice', 'TEST', '1.500', 'memo');
+
+            expect(spy).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.anything(),
+                'alice',
+                'TEST',
+                '1.500',
+                'memo'
+            );
+        });
+
+        test('can burn 67% of an inbound transfer from onTransfer', async () => {
+            const burnSpy = jest.spyOn(streamer, 'burnTransferPercentage').mockResolvedValue({ id: 'burn-tx' } as any);
+            const handled = new Set<string>();
+
+            streamer.onTransfer('alice', async (op, blockNumber, blockId, prevBlockId, trxId) => {
+                if (handled.has(trxId)) {
+                    return;
+                }
+
+                handled.add(trxId);
+                await streamer.burnTransferPercentage('alice', op, 67, `Auto-burn 67% of ${trxId}`);
+            });
+
+            await streamer.processOperation([
+                'transfer',
+                { from: 'bob', to: 'alice', amount: '3.000 HIVE', memo: 'income' }
+            ], 10, 'block-id', 'prev-id', 'trx-id', new Date('2026-03-12T00:00:00.000Z'));
+
+            expect(burnSpy).toHaveBeenCalledWith(
+                'alice',
+                { from: 'bob', to: 'alice', amount: '3.000 HIVE', memo: 'income' },
+                67,
+                'Auto-burn 67% of trx-id'
+            );
+        });
+
+        test('flows.autoBurnIncomingTransfers registers and can be stopped', async () => {
+            const burnSpy = jest.spyOn(streamer, 'burnHiveTokens').mockResolvedValue({ id: 'burn-tx' } as any);
+            const handle = streamer.flows.autoBurnIncomingTransfers({
+                account: 'alice',
+                percentage: 69,
+                memo: 'flow burn'
+            });
+
+            await streamer.processOperation([
+                'transfer',
+                { from: 'bob', to: 'alice', amount: '1.000 HIVE', memo: 'income' }
+            ], 10, 'block-id', 'prev-id', 'trx-id', new Date('2026-03-12T00:00:00.000Z'));
+
+            expect(burnSpy).toHaveBeenCalledWith('alice', '0.690', 'HIVE', 'flow burn');
+
+            handle.stop();
+
+            await streamer.processOperation([
+                'transfer',
+                { from: 'bob', to: 'alice', amount: '1.000 HIVE', memo: 'income-2' }
+            ], 11, 'block-id-2', 'prev-id-2', 'trx-id-2', new Date('2026-03-12T00:01:00.000Z'));
+
+            expect(burnSpy).toHaveBeenCalledTimes(1);
+        });
+
+        test('flows.autoForwardIncomingTransfers forwards the full inbound transfer by default', async () => {
+            const transferSpy = jest.spyOn(streamer, 'transferHiveTokens').mockResolvedValue({ id: 'forward-tx' } as any);
+            const handle = streamer.flows.autoForwardIncomingTransfers({
+                account: 'alice',
+                to: 'treasury',
+                memo: 'forward it'
+            });
+
+            await streamer.processOperation([
+                'transfer',
+                { from: 'bob', to: 'alice', amount: '1.000 HIVE', memo: 'income' }
+            ], 12, 'block-id-12', 'prev-id-12', 'trx-id-12', new Date('2026-03-12T00:02:00.000Z'));
+
+            expect(transferSpy).toHaveBeenCalledWith('alice', 'treasury', '1.000', 'HIVE', 'forward it');
+
+            handle.stop();
+        });
+
+        test('flows.autoRefundIncomingTransfers sends funds back to the sender', async () => {
+            const transferSpy = jest.spyOn(streamer, 'transferHiveTokens').mockResolvedValue({ id: 'refund-tx' } as any);
+            const handle = streamer.flows.autoRefundIncomingTransfers({
+                account: 'alice',
+                memo: ({ transfer }) => `Refund ${transfer.rawAmount}`
+            });
+
+            await streamer.processOperation([
+                'transfer',
+                { from: 'bob', to: 'alice', amount: '2.000 HBD', memo: 'unsupported' }
+            ], 13, 'block-id-13', 'prev-id-13', 'trx-id-13', new Date('2026-03-12T00:03:00.000Z'));
+
+            expect(transferSpy).toHaveBeenCalledWith('alice', 'bob', '2.000', 'HBD', 'Refund 2.000 HBD');
+
+            handle.stop();
+        });
+
+        test('flows.autoSplitIncomingTransfers splits exact amounts and reconciles the remainder', async () => {
+            const transferSpy = jest.spyOn(streamer, 'transferHiveTokens').mockResolvedValue({ id: 'split-tx' } as any);
+            const handle = streamer.flows.autoSplitIncomingTransfers({
+                account: 'alice',
+                recipients: [
+                    { account: 'treasury', percentage: 69, memo: 'treasury share' },
+                    { account: 'savings' }
+                ]
+            });
+
+            await streamer.processOperation([
+                'transfer',
+                { from: 'bob', to: 'alice', amount: '1.000 HIVE', memo: 'income' }
+            ], 14, 'block-id-14', 'prev-id-14', 'trx-id-14', new Date('2026-03-12T00:04:00.000Z'));
+
+            expect(transferSpy).toHaveBeenNthCalledWith(1, 'alice', 'treasury', '0.690', 'HIVE', 'treasury share');
+            expect(transferSpy).toHaveBeenNthCalledWith(2, 'alice', 'savings', '0.310', 'HIVE', '');
+
+            handle.stop();
+        });
+
+        test('flows.autoRouteIncomingTransfers supports mixed burn and transfer routes', async () => {
+            const burnSpy = jest.spyOn(streamer, 'burnHiveTokens').mockResolvedValue({ id: 'burn-route-tx' } as any);
+            const transferSpy = jest.spyOn(streamer, 'transferHiveTokens').mockResolvedValue({ id: 'route-transfer-tx' } as any);
+            const handle = streamer.flows.autoRouteIncomingTransfers({
+                account: 'alice',
+                routes: [
+                    { type: 'burn', percentage: 67, memo: 'burn share' },
+                    { to: 'treasury', memo: 'treasury remainder' }
+                ]
+            });
+
+            await streamer.processOperation([
+                'transfer',
+                { from: 'bob', to: 'alice', amount: '1.000 HIVE', memo: 'income' }
+            ], 15, 'block-id-15', 'prev-id-15', 'trx-id-15', new Date('2026-03-12T00:05:00.000Z'));
+
+            expect(burnSpy).toHaveBeenCalledWith('alice', '0.670', 'HIVE', 'burn share');
+            expect(transferSpy).toHaveBeenCalledWith('alice', 'treasury', '0.330', 'HIVE', 'treasury remainder');
+
+            handle.stop();
+        });
+
         test('onCustomJsonId only fires callbacks for the matching id', async () => {
             const matching = jest.fn();
             const nonMatching = jest.fn();

@@ -211,6 +211,94 @@ describe('Utils (extended)', () => {
         });
     });
 
+    describe('burnHiveTokens() input validation', () => {
+        test('throws when from is missing', () => {
+            expect(() => Utils.burnHiveTokens(
+                {} as any, { ACTIVE_KEY: 'key' }, '', '1.000', 'HIVE'
+            )).toThrow('Missing required parameters');
+        });
+    });
+
+    describe('parseAssetAmount()', () => {
+        test('parses a valid amount string', () => {
+            const parsed = Utils.parseAssetAmount('1.500 HIVE');
+
+            expect(parsed.amount).toBe('1.500');
+            expect(parsed.asset).toBe('HIVE');
+            expect(parsed.value.toFixed(3)).toBe('1.500');
+        });
+
+        test('throws for invalid format', () => {
+            expect(() => Utils.parseAssetAmount('1.500HIVE')).toThrow('Invalid asset amount');
+        });
+    });
+
+    describe('calculateBasisPointsAmount()', () => {
+        test('rounds down safely using basis points', () => {
+            expect(Utils.calculateBasisPointsAmount('3.000', 6700)).toBe('2.010');
+        });
+
+        test('throws for invalid basis points', () => {
+            expect(() => Utils.calculateBasisPointsAmount('3.000', 10001)).toThrow('basisPoints');
+        });
+    });
+
+    describe('formatAmount()', () => {
+        test('rounds down safely to 3 decimals', () => {
+            expect(Utils.formatAmount('1.2399')).toBe('1.239');
+        });
+
+        test('throws for invalid amount', () => {
+            expect(() => Utils.formatAmount('not-a-number')).toThrow('Invalid amount');
+        });
+    });
+
+    describe('formatAssetAmount()', () => {
+        test('formats amount and symbol safely', () => {
+            expect(Utils.formatAssetAmount('1.2399', 'HIVE')).toBe('1.239 HIVE');
+        });
+
+        test('throws when symbol is missing', () => {
+            expect(() => Utils.formatAssetAmount('1.000', '')).toThrow('Asset symbol is required');
+        });
+    });
+
+    describe('calculatePercentageAmount()', () => {
+        test('rounds down safely using percentage', () => {
+            expect(Utils.calculatePercentageAmount('3.000', 67)).toBe('2.010');
+        });
+
+        test('accepts fractional percentages', () => {
+            expect(Utils.calculatePercentageAmount('10.000', '12.5')).toBe('1.250');
+        });
+
+        test('throws for invalid percentage range', () => {
+            expect(() => Utils.calculatePercentageAmount('3.000', 101)).toThrow('percentage');
+        });
+    });
+
+    describe('splitAmountByBasisPoints()', () => {
+        test('splits amounts and reconciles remainder on the last route', () => {
+            expect(Utils.splitAmountByBasisPoints('1.000', [6900, 3100])).toEqual(['0.690', '0.310']);
+            expect(Utils.splitAmountByBasisPoints('1.000', [3333, 3333, 3334])).toEqual(['0.333', '0.333', '0.334']);
+        });
+
+        test('throws when basis points do not total 10000', () => {
+            expect(() => Utils.splitAmountByBasisPoints('1.000', [6900, 3000])).toThrow('10000');
+        });
+    });
+
+    describe('splitAmountByPercentage()', () => {
+        test('splits amounts and reconciles remainder on the last route', () => {
+            expect(Utils.splitAmountByPercentage('1.000', [69, 31])).toEqual(['0.690', '0.310']);
+            expect(Utils.splitAmountByPercentage('1.000', [33.33, 33.33, 33.34])).toEqual(['0.333', '0.333', '0.334']);
+        });
+
+        test('throws when percentages do not total 100', () => {
+            expect(() => Utils.splitAmountByPercentage('1.000', [60, 30])).toThrow('percentages must total 100');
+        });
+    });
+
     describe('broadcastOperations() input validation', () => {
         test('throws when operations array is empty', () => {
             expect(() => Utils.broadcastOperations(
@@ -329,6 +417,14 @@ describe('Utils (extended)', () => {
         test('throws when parameters are missing', () => {
             expect(() => Utils.transferHiveEngineTokens(
                 null as any, {} as any, 'alice', 'bob', '10', 'LEG'
+            )).toThrow('Missing required parameters');
+        });
+    });
+
+    describe('burnHiveEngineTokens() input validation', () => {
+        test('throws when parameters are missing', () => {
+            expect(() => Utils.burnHiveEngineTokens(
+                null as any, {} as any, 'alice', 'LEG', '10'
             )).toThrow('Missing required parameters');
         });
     });

@@ -4,16 +4,29 @@ import { SqliteAdapter } from './adapters/sqlite.adapter';
 import { sleep } from '@hiveio/dhive/lib/utils';
 import { TimeAction } from './actions';
 import { Client } from '@hiveio/dhive';
+import BigNumber from 'bignumber.js';
 import { Utils } from './utils';
 import { ConfigInput, ConfigInterface, createConfig, normalizeConfigInput } from './config';
 import { BlockProvider } from './providers/block-provider';
 import { HiveProvider } from './providers/hive-provider';
 import { 
+    AutoBurnIncomingTransfersOptions,
+    AutoForwardIncomingTransfersOptions,
+    AutoRefundIncomingTransfersOptions,
+    AutoRouteIncomingTransfersOptions,
+    AutoSplitIncomingTransfersOptions,
     ContractDefinition,
     ContractPayload,
     ContractContext,
     ContractTrigger,
+    FlowDedupeStore,
+    FlowRoute,
+    FlowNamespace,
+    FlowSubscriptionHandle,
+    MoneyNamespace,
+    PlannedFlowRoute,
     SubscriptionCallback,
+    TransferEvent,
     TransferSubscription,
     CustomJsonIdSubscription,
     EscrowSubscription,
@@ -101,6 +114,22 @@ export class Streamer {
     private readonly maxCacheSize = 1000;
 
     private utils = Utils;
+    public readonly money: MoneyNamespace = {
+        parseAssetAmount: (rawAmount: string) => Utils.parseAssetAmount(rawAmount),
+        formatAmount: (amount: string | number, precision?: number) => Utils.formatAmount(amount, precision),
+        formatAssetAmount: (amount: string | number, symbol: string, precision?: number) => Utils.formatAssetAmount(amount, symbol, precision),
+        calculatePercentageAmount: (amount: string | number, percentage: string | number, precision?: number) => Utils.calculatePercentageAmount(amount, percentage, precision),
+        calculateBasisPointsAmount: (amount: string | number, basisPoints: number, precision?: number) => Utils.calculateBasisPointsAmount(amount, basisPoints, precision),
+        splitAmountByBasisPoints: (amount: string | number, basisPoints: number[], precision?: number) => Utils.splitAmountByBasisPoints(amount, basisPoints, precision),
+        splitAmountByPercentage: (amount: string | number, percentages: Array<string | number>, precision?: number) => Utils.splitAmountByPercentage(amount, percentages, precision),
+    };
+    public readonly flows: FlowNamespace = {
+        autoBurnIncomingTransfers: (options: AutoBurnIncomingTransfersOptions = {}) => this.autoBurnIncomingTransfers(options),
+        autoForwardIncomingTransfers: (options: AutoForwardIncomingTransfersOptions) => this.autoForwardIncomingTransfers(options),
+        autoRefundIncomingTransfers: (options: AutoRefundIncomingTransfersOptions = {}) => this.autoRefundIncomingTransfers(options),
+        autoSplitIncomingTransfers: (options: AutoSplitIncomingTransfersOptions) => this.autoSplitIncomingTransfers(options),
+        autoRouteIncomingTransfers: (options: AutoRouteIncomingTransfersOptions) => this.autoRouteIncomingTransfers(options),
+    };
 
     constructor(userConfig: ConfigInput = {}) {
         this.config = createConfig(userConfig);
@@ -151,6 +180,272 @@ export class Streamer {
             streamer: this,
             adapter: this.adapter,
             config: this.config
+        };
+    }
+
+    private createTransferEvent(
+        op: any,
+        blockNumber: number,
+        blockId: string,
+        prevBlockId: string,
+        trxId: string,
+        blockTime: Date
+    ): TransferEvent {
+        const rawAmount = String(op?.amount || '');
+        let amount = '';
+        let asset = '';
+
+        try {
+            const parsed = Utils.parseAssetAmount(rawAmount);
+            amount = parsed.amount;
+            asset = parsed.asset;
+        } catch (error) {
+            amount = '';
+            asset = '';
+        }
+
+        return {
+            op,
+            transfer: {
+                from: op?.from || '',
+                to: op?.to || '',
+                rawAmount,
+                amount,
+                asset,
+                memo: op?.memo
+            },
+            block: {
+                number: blockNumber,
+                id: blockId,
+                previousId: prevBlockId,
+                time: blockTime
+            },
+            transaction: {
+                id: trxId
+            }
+        };
+    }
+
+    private resolveAccount(account?: string): string {
+        const resolved = account || this.username || this.config.USERNAME;
+
+        if (!resolved) {
+            throw new Error('Account is required');
+        }
+
+        return resolved;
+    }
+
+    private async dedupeHas(store: FlowDedupeStore, key: string): Promise<boolean> {
+        return Boolean(await store.has(key));
+    }
+
+    private async dedupeAdd(store: FlowDedupeStore, key: string): Promise<void> {
+        await store.add(key);
+    }
+
+    private normalizeDedupeStore(dedupeStore?: FlowDedupeStore | Set<string>): FlowDedupeStore {
+        const store = dedupeStore || new Set<string>();
+
+        if (store instanceof Set) {
+            return {
+                has: (key: string) => store.has(key),
+                add: (key: string) => {
+                    store.add(key);
+                }
+            };
+        }
+
+        return store;
+    }
+
+    private isZeroAmountFlowError(error: unknown): boolean {
+        return error instanceof Error
+            && (error.message === 'Burn amount must be greater than zero' || error.message === 'Route amount must be greater than zero');
+    }
+
+    private resolveFlowBasisPoints(
+        options: { percentage?: string | number; percent?: string | number; basisPoints?: number },
+        context: string,
+        allowUnspecified: boolean = true
+    ): number | null {
+        const percentage = options.percentage ?? options.percent;
+        const basisPoints = options.basisPoints;
+
+        if (percentage !== undefined && basisPoints !== undefined) {
+            throw new Error(`${context} accepts either percentage or basisPoints, not both`);
+        }
+
+        if (percentage === undefined && basisPoints === undefined) {
+            if (allowUnspecified) {
+                return null;
+            }
+
+            throw new Error(`${context} requires percentage or basisPoints`);
+        }
+
+        if (basisPoints !== undefined) {
+            if (!Number.isInteger(basisPoints) || basisPoints < 0 || basisPoints > 10000) {
+                throw new Error(`${context} basisPoints must be an integer between 0 and 10000`);
+            }
+
+            return basisPoints;
+        }
+
+        const percentageValue = new BigNumber(percentage);
+        if (percentageValue.isNaN() || !percentageValue.isFinite()) {
+            throw new Error(`${context} percentage must be a valid number`);
+        }
+
+        if (percentageValue.lt(0) || percentageValue.gt(100)) {
+            throw new Error(`${context} percentage must be between 0 and 100`);
+        }
+
+        const bps = percentageValue.multipliedBy(100);
+        if (!bps.isInteger()) {
+            throw new Error(`${context} percentage supports up to 2 decimal places; use basisPoints for finer control`);
+        }
+
+        return bps.toNumber();
+    }
+
+    private normalizeRouteAllocations(routes: FlowRoute[]): number[] {
+        const allocations = routes.map((route, index) => this.resolveFlowBasisPoints(route, `Route ${index + 1}`, true));
+        const unspecified = allocations.filter((allocation) => allocation === null).length;
+        const explicitTotal = allocations.reduce((sum, allocation) => sum + (allocation || 0), 0);
+
+        if (unspecified > 1) {
+            throw new Error('Only one flow route can omit percentage or basisPoints');
+        }
+
+        if (explicitTotal > 10000) {
+            throw new Error('Flow route allocations cannot exceed 10000 basis points');
+        }
+
+        if (unspecified === 0 && explicitTotal !== 10000) {
+            throw new Error('Flow route allocations must total 100%');
+        }
+
+        if (unspecified === 1) {
+            const remainder = 10000 - explicitTotal;
+
+            return allocations.map((allocation) => allocation === null ? remainder : allocation);
+        }
+
+        return allocations as number[];
+    }
+
+    private resolvePlannedRouteMemo(
+        event: TransferEvent,
+        route: FlowRoute,
+        index: number,
+        defaultMemo?: string | ((event: TransferEvent, route: FlowRoute, index: number) => string)
+    ): string {
+        if (typeof route.memo === 'function') {
+            return route.memo(event);
+        }
+
+        if (typeof route.memo === 'string') {
+            return route.memo;
+        }
+
+        if (typeof defaultMemo === 'function') {
+            return defaultMemo(event, route, index);
+        }
+
+        return defaultMemo || '';
+    }
+
+    private buildPlannedFlowRoutes(
+        event: TransferEvent,
+        routes: FlowRoute[],
+        allowedSymbols: string[],
+        defaultMemo?: string | ((event: TransferEvent, route: FlowRoute, index: number) => string)
+    ): PlannedFlowRoute[] {
+        if (!Array.isArray(routes) || routes.length === 0) {
+            throw new Error('At least one flow route is required');
+        }
+
+        const parsed = Utils.parseAssetAmount(event.transfer.rawAmount);
+
+        if (Array.isArray(allowedSymbols) && allowedSymbols.length > 0 && !allowedSymbols.includes(parsed.asset)) {
+            throw new Error(`Asset '${parsed.asset}' is not allowed for this flow`);
+        }
+
+        const allocations = this.normalizeRouteAllocations(routes);
+        const amounts = Utils.splitAmountByBasisPoints(parsed.value, allocations);
+
+        return routes.map((route, index) => {
+            const memo = this.resolvePlannedRouteMemo(event, route, index, defaultMemo);
+
+            if (route.type === 'burn') {
+                return {
+                    type: 'burn',
+                    amount: amounts[index],
+                    asset: parsed.asset,
+                    memo
+                };
+            }
+
+            const destination = typeof route.to === 'function' ? route.to(event) : route.to;
+            if (typeof destination !== 'string' || destination.trim().length === 0) {
+                throw new Error(`Route ${index + 1} destination account is required`);
+            }
+
+            return {
+                type: 'transfer',
+                amount: amounts[index],
+                asset: parsed.asset,
+                memo,
+                to: destination.trim()
+            };
+        });
+    }
+
+    private async executePlannedFlowRoutes(from: string, plan: PlannedFlowRoute[], ignoreZeroAmount: boolean): Promise<any[]> {
+        const results: any[] = [];
+
+        for (const route of plan) {
+            if (route.amount === '0.000') {
+                if (ignoreZeroAmount) {
+                    continue;
+                }
+
+                throw new Error('Route amount must be greater than zero');
+            }
+
+            if (route.type === 'burn') {
+                results.push(await this.burnHiveTokens(from, route.amount, route.asset, route.memo));
+                continue;
+            }
+
+            results.push(await this.transferHiveTokens(from, route.to, route.amount, route.asset, route.memo));
+        }
+
+        return results;
+    }
+
+    private calculateSingleFlowAmount(
+        transfer: { amount?: string } | string,
+        basisPoints: number | null,
+        allowedSymbols: string[],
+        errorContext: string
+    ): { amount: string; asset: string } {
+        const rawAmount = typeof transfer === 'string' ? transfer : transfer?.amount || '';
+        const parsed = Utils.parseAssetAmount(rawAmount);
+
+        if (Array.isArray(allowedSymbols) && allowedSymbols.length > 0 && !allowedSymbols.includes(parsed.asset)) {
+            throw new Error(`Asset '${parsed.asset}' is not allowed for ${errorContext}`);
+        }
+
+        const amount = basisPoints === null ? parsed.amount : Utils.calculateBasisPointsAmount(parsed.value, basisPoints);
+        if (amount === '0.000') {
+            throw new Error('Route amount must be greater than zero');
+        }
+
+        return {
+            amount,
+            asset: parsed.asset
         };
     }
 
@@ -460,12 +755,17 @@ export class Streamer {
      * @param config
      */
     public setConfig(config: ConfigInput) {
-        const normalized = normalizeConfigInput(config);
-        const shouldRecreateClient = normalized.API_NODES !== undefined;
-        const shouldRecreateHiveEngine = normalized.HIVE_ENGINE_API !== undefined;
-        const shouldSyncApiServer = normalized.API_ENABLED !== undefined || normalized.API_PORT !== undefined;
+        const normalizedInput = normalizeConfigInput(config);
+        const nextConfig = createConfig({
+            ...this.config,
+            ...normalizedInput,
+            env: config.env,
+        });
+        const shouldRecreateClient = JSON.stringify(this.config.API_NODES) !== JSON.stringify(nextConfig.API_NODES);
+        const shouldRecreateHiveEngine = this.config.HIVE_ENGINE_API !== nextConfig.HIVE_ENGINE_API;
+        const shouldSyncApiServer = this.config.API_ENABLED !== nextConfig.API_ENABLED || this.config.API_PORT !== nextConfig.API_PORT;
 
-        Object.assign(this.config, normalized);
+        Object.assign(this.config, nextConfig);
 
         // Set keys and username incase they have changed
         this.username = this.config.USERNAME;
@@ -816,13 +1116,24 @@ export class Streamer {
         if (operationType === 'transfer') {
             const sender = operationData?.from;
             const rawAmount = operationData?.amount;
-            const amountParts = typeof rawAmount === 'string' ? rawAmount.split(' ') : [];
+            let amount = '';
+            let asset = '';
+
+            try {
+                const parsedAmount = Utils.parseAssetAmount(String(rawAmount || ''));
+                amount = parsedAmount.amount;
+                asset = parsedAmount.asset;
+            } catch (error) {
+                amount = '';
+                asset = '';
+            }
+
             const transferInfo = {
                 from: sender,
                 to: operationData?.to,
                 rawAmount: rawAmount || '',
-                amount: amountParts[0] || '',
-                asset: amountParts[1] || '',
+                amount,
+                asset,
                 memo: operationData?.memo
             };
 
@@ -850,18 +1161,16 @@ export class Streamer {
                 await this.dispatchContractAction(payload, context);
             }
 
-            this.transferSubscriptions.forEach(sub => {
-                if (sub.account === operationData.to) {
-                    sub.callback(
-                        operationData,
-                        blockNumber,
-                        blockId,
-                        prevBlockId,
-                        trxId,
-                        blockTime
-                    );
-                }
-            });
+            await Promise.all(this.transferSubscriptions
+                .filter((sub) => sub.account === operationData.to)
+                .map((sub) => Promise.resolve(sub.callback(
+                    operationData,
+                    blockNumber,
+                    blockId,
+                    prevBlockId,
+                    trxId,
+                    blockTime
+                ))));
         }
 
         // This is a custom JSON operation
@@ -1350,6 +1659,290 @@ export class Streamer {
         );
     }
 
+    public burnHiveTokens(from: string, amount: string, symbol: string, memo: string = '') {
+        return Utils.burnHiveTokens(
+            this.client,
+            this.config,
+            from,
+            amount,
+            symbol,
+            memo
+        );
+    }
+
+    public burnTransferPortion(
+        from: string,
+        transfer: { amount?: string } | string,
+        basisPoints: number,
+        memo: string = '',
+        allowedSymbols: string[] = ['HIVE', 'HBD']
+    ) {
+        const rawAmount = typeof transfer === 'string' ? transfer : transfer?.amount || '';
+        const parsed = Utils.parseAssetAmount(rawAmount);
+
+        if (Array.isArray(allowedSymbols) && allowedSymbols.length > 0 && !allowedSymbols.includes(parsed.asset)) {
+            throw new Error(`Asset '${parsed.asset}' is not allowed for burn`);
+        }
+
+        const burnAmount = Utils.calculateBasisPointsAmount(parsed.value, basisPoints);
+        if (burnAmount === '0.000') {
+            throw new Error('Burn amount must be greater than zero');
+        }
+
+        return this.burnHiveTokens(from, burnAmount, parsed.asset, memo);
+    }
+
+    public burnTransferPercentage(
+        from: string,
+        transfer: { amount?: string } | string,
+        percentage: string | number,
+        memo: string = '',
+        allowedSymbols: string[] = ['HIVE', 'HBD']
+    ) {
+        const rawAmount = typeof transfer === 'string' ? transfer : transfer?.amount || '';
+        const parsed = Utils.parseAssetAmount(rawAmount);
+
+        if (Array.isArray(allowedSymbols) && allowedSymbols.length > 0 && !allowedSymbols.includes(parsed.asset)) {
+            throw new Error(`Asset '${parsed.asset}' is not allowed for burn`);
+        }
+
+        const burnAmount = Utils.calculatePercentageAmount(parsed.value, percentage);
+        if (burnAmount === '0.000') {
+            throw new Error('Burn amount must be greater than zero');
+        }
+
+        return this.burnHiveTokens(from, burnAmount, parsed.asset, memo);
+    }
+
+    public autoBurnIncomingTransfers(options: AutoBurnIncomingTransfersOptions = {}): FlowSubscriptionHandle {
+        const basisPoints = this.resolveFlowBasisPoints(options, 'autoBurnIncomingTransfers', false);
+        const account = this.resolveAccount(options.account);
+        const normalizedStore = this.normalizeDedupeStore(options.dedupeStore);
+        const allowedSymbols = options.allowedSymbols || ['HIVE', 'HBD'];
+        const ignoreZeroAmount = options.ignoreZeroAmount !== false;
+
+        const callback = async (op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => {
+            const event = this.createTransferEvent(op, blockNumber, blockId, prevBlockId, trxId, blockTime);
+
+            try {
+                if (await this.dedupeHas(normalizedStore, trxId)) {
+                    return;
+                }
+
+                const memo = typeof options.memo === 'function' ? options.memo(event) : options.memo || '';
+                const amount = this.calculateSingleFlowAmount(op, basisPoints, allowedSymbols, 'burn');
+                const result = await this.burnHiveTokens(account, amount.amount, amount.asset, memo);
+
+                await this.dedupeAdd(normalizedStore, trxId);
+
+                if (options.onBurned) {
+                    await options.onBurned(result, event);
+                }
+            } catch (error) {
+                if (ignoreZeroAmount && this.isZeroAmountFlowError(error)) {
+                    return;
+                }
+
+                if (options.onError) {
+                    await options.onError(error, event);
+                    return;
+                }
+
+                throw error;
+            }
+        };
+
+        this.onTransfer(account, callback);
+
+        return {
+            account,
+            stop: () => {
+                this.removeTransferSubscription(account, callback);
+            }
+        };
+    }
+
+    public autoForwardIncomingTransfers(options: AutoForwardIncomingTransfersOptions): FlowSubscriptionHandle {
+        if (!options || typeof options.to !== 'string' || options.to.trim().length === 0) {
+            throw new Error('autoForwardIncomingTransfers requires a destination account');
+        }
+
+        const account = this.resolveAccount(options.account);
+        const normalizedStore = this.normalizeDedupeStore(options.dedupeStore);
+        const allowedSymbols = options.allowedSymbols || ['HIVE', 'HBD'];
+        const ignoreZeroAmount = options.ignoreZeroAmount !== false;
+        const basisPoints = this.resolveFlowBasisPoints(options, 'autoForwardIncomingTransfers', true);
+        const destination = options.to.trim();
+
+        const callback = async (op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => {
+            const event = this.createTransferEvent(op, blockNumber, blockId, prevBlockId, trxId, blockTime);
+
+            try {
+                if (await this.dedupeHas(normalizedStore, trxId)) {
+                    return;
+                }
+
+                const memo = typeof options.memo === 'function' ? options.memo(event) : options.memo || '';
+                const amount = this.calculateSingleFlowAmount(op, basisPoints, allowedSymbols, 'forward');
+                const result = await this.transferHiveTokens(account, destination, amount.amount, amount.asset, memo);
+
+                await this.dedupeAdd(normalizedStore, trxId);
+
+                if (options.onForwarded) {
+                    await options.onForwarded(result, event);
+                }
+            } catch (error) {
+                if (ignoreZeroAmount && this.isZeroAmountFlowError(error)) {
+                    return;
+                }
+
+                if (options.onError) {
+                    await options.onError(error, event);
+                    return;
+                }
+
+                throw error;
+            }
+        };
+
+        this.onTransfer(account, callback);
+
+        return {
+            account,
+            stop: () => {
+                this.removeTransferSubscription(account, callback);
+            }
+        };
+    }
+
+    public autoRefundIncomingTransfers(options: AutoRefundIncomingTransfersOptions = {}): FlowSubscriptionHandle {
+        const account = this.resolveAccount(options.account);
+        const normalizedStore = this.normalizeDedupeStore(options.dedupeStore);
+        const allowedSymbols = options.allowedSymbols || ['HIVE', 'HBD'];
+        const ignoreZeroAmount = options.ignoreZeroAmount !== false;
+        const basisPoints = this.resolveFlowBasisPoints(options, 'autoRefundIncomingTransfers', true);
+
+        const callback = async (op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => {
+            const event = this.createTransferEvent(op, blockNumber, blockId, prevBlockId, trxId, blockTime);
+
+            try {
+                if (await this.dedupeHas(normalizedStore, trxId)) {
+                    return;
+                }
+
+                const memo = typeof options.memo === 'function' ? options.memo(event) : options.memo || '';
+                const amount = this.calculateSingleFlowAmount(op, basisPoints, allowedSymbols, 'refund');
+                const result = await this.transferHiveTokens(account, event.transfer.from, amount.amount, amount.asset, memo);
+
+                await this.dedupeAdd(normalizedStore, trxId);
+
+                if (options.onRefunded) {
+                    await options.onRefunded(result, event);
+                }
+            } catch (error) {
+                if (ignoreZeroAmount && this.isZeroAmountFlowError(error)) {
+                    return;
+                }
+
+                if (options.onError) {
+                    await options.onError(error, event);
+                    return;
+                }
+
+                throw error;
+            }
+        };
+
+        this.onTransfer(account, callback);
+
+        return {
+            account,
+            stop: () => {
+                this.removeTransferSubscription(account, callback);
+            }
+        };
+    }
+
+    public autoSplitIncomingTransfers(options: AutoSplitIncomingTransfersOptions): FlowSubscriptionHandle {
+        if (!options || !Array.isArray(options.recipients) || options.recipients.length === 0) {
+            throw new Error('autoSplitIncomingTransfers requires at least one recipient');
+        }
+
+        const defaultMemo = options.memo;
+
+        return this.autoRouteIncomingTransfers({
+            account: options.account,
+            routes: options.recipients.map((recipient, index) => ({
+                to: recipient.account,
+                percentage: recipient.percentage,
+                percent: recipient.percent,
+                basisPoints: recipient.basisPoints,
+                memo: recipient.memo || (typeof defaultMemo === 'function'
+                    ? (event: TransferEvent) => defaultMemo(event, { account: recipient.account }, index)
+                    : defaultMemo)
+            })),
+            allowedSymbols: options.allowedSymbols,
+            dedupeStore: options.dedupeStore,
+            ignoreZeroAmount: options.ignoreZeroAmount,
+            onRouted: async (results, event, plan) => {
+                if (options.onSplit) {
+                    await options.onSplit(results, event, plan);
+                }
+            },
+            onError: options.onError
+        });
+    }
+
+    public autoRouteIncomingTransfers(options: AutoRouteIncomingTransfersOptions): FlowSubscriptionHandle {
+        if (!options || !Array.isArray(options.routes) || options.routes.length === 0) {
+            throw new Error('autoRouteIncomingTransfers requires at least one route');
+        }
+
+        const account = this.resolveAccount(options.account);
+        const normalizedStore = this.normalizeDedupeStore(options.dedupeStore);
+        const allowedSymbols = options.allowedSymbols || ['HIVE', 'HBD'];
+        const ignoreZeroAmount = options.ignoreZeroAmount !== false;
+
+        const callback = async (op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => {
+            const event = this.createTransferEvent(op, blockNumber, blockId, prevBlockId, trxId, blockTime);
+
+            try {
+                if (await this.dedupeHas(normalizedStore, trxId)) {
+                    return;
+                }
+
+                const plan = this.buildPlannedFlowRoutes(event, options.routes, allowedSymbols, options.memo);
+                const results = await this.executePlannedFlowRoutes(account, plan, ignoreZeroAmount);
+
+                await this.dedupeAdd(normalizedStore, trxId);
+
+                if (options.onRouted) {
+                    await options.onRouted(results, event, plan);
+                }
+            } catch (error) {
+                if (ignoreZeroAmount && this.isZeroAmountFlowError(error)) {
+                    return;
+                }
+
+                if (options.onError) {
+                    await options.onError(error, event);
+                    return;
+                }
+
+                throw error;
+            }
+        };
+
+        this.onTransfer(account, callback);
+
+        return {
+            account,
+            stop: () => {
+                this.removeTransferSubscription(account, callback);
+            }
+        };
+    }
+
     public transferHiveTokensMultiple(from: string, accounts: string[] = [], amount: string = '0', symbol: string, memo: string = '') {
         return Utils.transferHiveTokensMultiple(this.client, this.config, from, accounts, amount, symbol, memo);
     }
@@ -1473,6 +2066,10 @@ export class Streamer {
         return Utils.transferHiveEngineTokens(this.client, this.config, from, to, quantity, symbol, memo);
     }
 
+    public burnHiveEngineTokens(from: string, symbol: string, quantity: string, memo: string = '') {
+        return Utils.burnHiveEngineTokens(this.client, this.config, from, symbol, quantity, memo);
+    }
+
     public transferHiveEngineTokensMultiple(from: string, accounts: any[] = [], symbol: string, memo: string = '', amount: string = '0') {
         return Utils.transferHiveEngineTokensMultiple(this.client, this.config, from, accounts, symbol, memo, amount);
     }
@@ -1539,7 +2136,7 @@ export class Streamer {
         });
     }
 
-    public onTransfer(account: string, callback: () => void): void {
+    public onTransfer(account: string, callback: (...args: any[]) => void | Promise<void>): void {
         this.transferSubscriptions.push({
             account,
             callback
@@ -1614,8 +2211,18 @@ export class Streamer {
     }
     
     // Add method to remove specific subscriptions
-    public removeTransferSubscription(account: string): void {
-        this.transferSubscriptions = this.transferSubscriptions.filter(sub => sub.account !== account);
+    public removeTransferSubscription(account: string, callback?: (...args: any[]) => void): void {
+        this.transferSubscriptions = this.transferSubscriptions.filter((sub) => {
+            if (sub.account !== account) {
+                return true;
+            }
+
+            if (!callback) {
+                return false;
+            }
+
+            return sub.callback !== callback;
+        });
     }
     
     public removeCustomJsonIdSubscription(id: string): void {

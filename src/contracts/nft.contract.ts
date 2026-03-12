@@ -2,6 +2,7 @@ import BigNumber from 'bignumber.js';
 import { Streamer } from '../streamer';
 import { Utils } from '../utils';
 import { action, defineContract } from './contract';
+import { parseBlockchainAmount } from './helpers';
 import { ensureSqlAdapter } from './helpers';
 
 const CONTRACT_NAME = 'hivenft';
@@ -931,13 +932,7 @@ export function createNFTContract(options: NFTContractOptions = {}) {
             }),
             buyNFT: action(async (payload, ctx) => {
                 const amountRaw = ctx.transfer?.rawAmount || '';
-                if (!amountRaw || !amountRaw.includes(' ')) {
-                    throw new Error('Invalid transfer amount format');
-                }
-                const [amount, asset] = amountRaw.split(' ');
-                if (!amount || !asset || isNaN(Number(amount))) {
-                    throw new Error('Invalid transfer amount');
-                }
+                const parsedAmount = parseBlockchainAmount(amountRaw);
 
                 // Verify the transfer actually happened on-chain
                 const transaction = await Utils.getTransaction(instance._instance['client'], ctx.block.number, ctx.transaction.id);
@@ -949,8 +944,8 @@ export function createNFTContract(options: NFTContractOptions = {}) {
 
                 return callWithContext(payload, ctx, (instance as any).buyNFT.bind(instance), {
                     sender: ctx.sender,
-                    amount,
-                    asset
+                    amount: parsedAmount.amount,
+                    asset: parsedAmount.asset
                 });
             }, {
                 trigger: 'transfer'

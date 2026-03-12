@@ -2,6 +2,7 @@ import BigNumber from 'bignumber.js';
 import seedrandom from 'seedrandom';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
+import { formatBlockchainAmount, parseBlockchainAmount } from './helpers';
 
 const DEFAULT_NAME = 'hivedice';
 const DEFAULT_ACCOUNT = 'beggars';
@@ -70,12 +71,7 @@ export function createDiceContract(options: DiceContractOptions = {}) {
             const accountInfo = await state.streamer['client'].database.getAccounts([account]);
 
             if (accountInfo?.[0]) {
-                const balanceParts = (accountInfo[0].balance as string).split(' ');
-                const amount = new BigNumber(balanceParts[0]);
-
-                if (amount.isNaN() || !amount.isFinite()) {
-                    throw new Error('Invalid balance format received from API');
-                }
+                const amount = parseBlockchainAmount(accountInfo[0].balance as string).value;
 
                 state.balanceCache = {
                     balance: amount,
@@ -124,21 +120,18 @@ export function createDiceContract(options: DiceContractOptions = {}) {
         const amountRaw = ctx.transfer.rawAmount;
 
         try {
-            if (!amountRaw || typeof amountRaw !== 'string' || !amountRaw.includes(' ')) {
+            let parsedAmount;
+            try {
+                parsedAmount = parseBlockchainAmount(amountRaw);
+            } catch (error) {
                 throw new Error('Invalid amount format');
             }
-
-            const amountTrim = amountRaw.split(' ');
-            if (amountTrim.length !== 2) {
-                throw new Error('Invalid amount format');
-            }
-
-            const amountParsed = new BigNumber(amountTrim[0]);
-            if (amountParsed.isNaN() || !amountParsed.isFinite() || amountParsed.isNegative()) {
+            const amountParsed = parsedAmount.value;
+            if (amountParsed.isNegative()) {
                 throw new Error('Invalid amount value');
             }
 
-            const amountCurrency = amountTrim[1].trim();
+            const amountCurrency = parsedAmount.asset;
             const transaction = await state.streamer.getTransaction(ctx.block.number, ctx.transaction.id);
             const verify = await state.streamer.verifyTransfer(transaction, sender, account, amountRaw);
 
@@ -147,27 +140,27 @@ export function createDiceContract(options: DiceContractOptions = {}) {
 
             if (verify) {
                 if (availableBalance.isLessThan(new BigNumber(minBet * 2))) {
-                    await state.streamer.transferHiveTokens(account, sender, amountTrim[0], amountTrim[1], '[Refund] The server could not fulfill your bet.');
+                    await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] The server could not fulfill your bet.');
                     return;
                 }
 
                 if (!validCurrencies.includes(amountCurrency)) {
-                    await state.streamer.transferHiveTokens(account, sender, amountTrim[0], amountTrim[1], '[Refund] Invalid bet currency.');
+                    await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] Invalid bet currency.');
                     return;
                 }
 
                 if (amountParsed.isLessThan(minBet) || amountParsed.isGreaterThan(maxBet)) {
-                    await state.streamer.transferHiveTokens(account, sender, amountTrim[0], amountTrim[1], '[Refund] You sent an invalid bet amount.');
+                    await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] You sent an invalid bet amount.');
                     return;
                 }
 
                 const roll = payload.roll;
                 const multiplier = new BigNumber(1).minus(houseEdge).multipliedBy(100).dividedBy(roll);
                 const tokensWonBN = amountParsed.multipliedBy(multiplier);
-                const tokensWon = tokensWonBN.toFixed(3, BigNumber.ROUND_DOWN);
+                const tokensWon = formatBlockchainAmount(tokensWonBN);
 
                 if (tokensWonBN.isGreaterThan(availableBalance)) {
-                    await state.streamer.transferHiveTokens(account, sender, amountTrim[0], amountTrim[1], '[Refund] The server could not fulfill your bet.');
+                    await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] The server could not fulfill your bet.');
                     return;
                 }
 
@@ -176,7 +169,7 @@ export function createDiceContract(options: DiceContractOptions = {}) {
 
                 const random = rng(ctx.block.previousId, ctx.block.id, ctx.transaction.id);
                 const winningMemo = `You won ${tokensWon} ${tokenSymbol}. Roll: ${random}, Your guess: ${roll}`;
-                const losingMemo = `You lost ${amountParsed.toFixed(3)} ${tokenSymbol}. Roll: ${random}, Your guess: ${roll}`;
+                const losingMemo = `You lost ${formatBlockchainAmount(amountParsed)} ${tokenSymbol}. Roll: ${random}, Your guess: ${roll}`;
 
                 try {
                     if (random < roll) {
@@ -204,10 +197,10 @@ export function createDiceContract(options: DiceContractOptions = {}) {
 
             try {
                 if (amountRaw && typeof amountRaw === 'string' && amountRaw.includes(' ')) {
-                    const [amountStr, currency] = amountRaw.split(' ');
-                    const amountBN = new BigNumber(amountStr);
+                    const parsedAmount = parseBlockchainAmount(amountRaw);
+                    const amountBN = parsedAmount.value;
                     if (!amountBN.isNaN() && amountBN.isFinite() && !amountBN.isNegative()) {
-                        await state.streamer.transferHiveTokens(account, sender, amountStr, currency, '[Refund] Processing error occurred.');
+                        await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] Processing error occurred.');
                     }
                 }
             } catch (refundError) {

@@ -3,6 +3,7 @@ import seedrandom from 'seedrandom';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
+import { formatBlockchainAmount, parseBlockchainAmount } from './helpers';
 
 const DEFAULT_NAME = 'rps';
 const DEFAULT_ACCOUNT = 'beggars';
@@ -66,12 +67,7 @@ export function createRpsContract(options: RpsContractOptions = {}) {
             const accountInfo = await state.streamer['client'].database.getAccounts([account]);
 
             if (accountInfo?.[0]) {
-                const balanceParts = (accountInfo[0].balance as string).split(' ');
-                const amount = new BigNumber(balanceParts[0]);
-
-                if (amount.isNaN() || !amount.isFinite()) {
-                    throw new Error('Invalid balance format received from API');
-                }
+                const amount = parseBlockchainAmount(accountInfo[0].balance as string).value;
 
                 state.balanceCache = {
                     balance: amount,
@@ -128,21 +124,18 @@ export function createRpsContract(options: RpsContractOptions = {}) {
         const amountRaw = ctx.transfer.rawAmount;
 
         try {
-            if (!amountRaw || typeof amountRaw !== 'string' || !amountRaw.includes(' ')) {
+            let parsedAmount;
+            try {
+                parsedAmount = parseBlockchainAmount(amountRaw);
+            } catch (error) {
                 throw new Error('Invalid amount format');
             }
-
-            const amountTrim = amountRaw.split(' ');
-            if (amountTrim.length !== 2) {
-                throw new Error('Invalid amount format');
-            }
-
-            const amountParsed = new BigNumber(amountTrim[0]);
-            if (amountParsed.isNaN() || !amountParsed.isFinite() || amountParsed.isNegative()) {
+            const amountParsed = parsedAmount.value;
+            if (amountParsed.isNegative()) {
                 throw new Error('Invalid amount value');
             }
 
-            const amountCurrency = amountTrim[1].trim();
+            const amountCurrency = parsedAmount.asset;
             const transaction = await state.streamer.getTransaction(ctx.block.number, ctx.transaction.id);
             const verify = await state.streamer.verifyTransfer(transaction, sender, account, amountRaw);
 
@@ -151,23 +144,23 @@ export function createRpsContract(options: RpsContractOptions = {}) {
 
             if (verify) {
                 if (!validCurrencies.includes(amountCurrency)) {
-                    await state.streamer.transferHiveTokens(account, sender, amountTrim[0], amountTrim[1], '[Refund] You sent an invalid currency.');
+                    await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] You sent an invalid currency.');
                     return;
                 }
 
                 if (amountParsed.isLessThan(minAmount)) {
-                    await state.streamer.transferHiveTokens(account, sender, amountTrim[0], amountTrim[1], `[Refund] Bet amount too small. Minimum: ${minAmount} ${amountCurrency}.`);
+                    await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, `[Refund] Bet amount too small. Minimum: ${minAmount} ${amountCurrency}.`);
                     return;
                 }
 
                 if (amountParsed.isGreaterThan(maxAmount)) {
-                    await state.streamer.transferHiveTokens(account, sender, amountTrim[0], amountTrim[1], `[Refund] You sent too much. Maximum: ${maxAmount} ${amountCurrency}.`);
+                    await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, `[Refund] You sent too much. Maximum: ${maxAmount} ${amountCurrency}.`);
                     return;
                 }
 
                 const potentialPayout = amountParsed.multipliedBy(2);
                 if (potentialPayout.isGreaterThan(availableBalance)) {
-                    await state.streamer.transferHiveTokens(account, sender, amountTrim[0], amountTrim[1], '[Refund] The server cannot afford this bet payout.');
+                    await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] The server cannot afford this bet payout.');
                     return;
                 }
 
@@ -199,13 +192,13 @@ export function createRpsContract(options: RpsContractOptions = {}) {
                     });
 
                     if (result === 'win') {
-                        await state.streamer.transferHiveTokens(account, sender, potentialPayout.toFixed(3), amountTrim[1], `[Winner] | You: ${payload.move} | Server: ${serverMove} | Seed: ${serverSeed}`);
+                        await state.streamer.transferHiveTokens(account, sender, formatBlockchainAmount(potentialPayout), parsedAmount.asset, `[Winner] | You: ${payload.move} | Server: ${serverMove} | Seed: ${serverSeed}`);
                         // Invalidate balance cache after payout
                         state.balanceCache = null;
                     } else if (result === 'tie') {
-                        await state.streamer.transferHiveTokens(account, sender, amountTrim[0], amountTrim[1], `[Tie] | You: ${payload.move} | Server: ${serverMove} | Seed: ${serverSeed}`);
+                        await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, `[Tie] | You: ${payload.move} | Server: ${serverMove} | Seed: ${serverSeed}`);
                     } else {
-                        await state.streamer.transferHiveTokens(account, sender, '0.001', amountTrim[1], `[Lost] | You: ${payload.move} | Server: ${serverMove} | Seed: ${serverSeed}`);
+                        await state.streamer.transferHiveTokens(account, sender, '0.001', parsedAmount.asset, `[Lost] | You: ${payload.move} | Server: ${serverMove} | Seed: ${serverSeed}`);
                     }
                 } finally {
                     if (payoutIncremented) {
@@ -226,8 +219,8 @@ export function createRpsContract(options: RpsContractOptions = {}) {
             // Attempt refund on unexpected errors to avoid loss of funds
             try {
                 if (amountRaw && typeof amountRaw === 'string' && amountRaw.includes(' ')) {
-                    const parts = amountRaw.split(' ');
-                    await state.streamer.transferHiveTokens(account, sender, parts[0], parts[1], '[Refund] An error occurred processing your bet.');
+                    const parsedAmount = parseBlockchainAmount(amountRaw);
+                    await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] An error occurred processing your bet.');
                 }
             } catch (refundError) {
                 console.error('[RpsContract] Refund failed:', refundError);

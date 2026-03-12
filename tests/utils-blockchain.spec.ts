@@ -523,6 +523,18 @@ describe('Utils blockchain methods', () => {
         });
     });
 
+    describe('burnHiveTokens() success path', () => {
+        test('broadcasts transfer to null account', () => {
+            const client = createMockClient();
+            Utils.burnHiveTokens(client, { ACTIVE_KEY: TEST_KEY }, 'alice', '1.5', 'HIVE', 'burn');
+
+            expect(client.broadcast.transfer).toHaveBeenCalledWith(
+                { from: 'alice', to: 'null', amount: '1.500 HIVE', memo: 'burn' },
+                expect.any(PrivateKey)
+            );
+        });
+    });
+
     describe('broadcastOperations() success path', () => {
         test('broadcasts with single key', () => {
             const client = createMockClient();
@@ -565,6 +577,22 @@ describe('Utils blockchain methods', () => {
             expect(payload.contractPayload.symbol).toBe('LEG'); // uppercased
             expect(payload.contractPayload.to).toBe('bob');
             expect(payload.contractPayload.quantity).toBe('100');
+        });
+    });
+
+    describe('burnHiveEngineTokens() success path', () => {
+        test('broadcasts custom_json with null recipient', () => {
+            const client = createMockClient();
+            const config = { ACTIVE_KEY: TEST_KEY, HIVE_ENGINE_ID: 'ssc-mainnet-hive' } as any;
+
+            Utils.burnHiveEngineTokens(client, config, 'alice', 'leg', '100', 'burn');
+
+            const payload = JSON.parse(client.broadcast.json.mock.calls[0][0].json);
+            expect(payload.contractAction).toBe('transfer');
+            expect(payload.contractPayload.symbol).toBe('LEG');
+            expect(payload.contractPayload.to).toBe('null');
+            expect(payload.contractPayload.quantity).toBe('100');
+            expect(payload.contractPayload.memo).toBe('burn');
         });
     });
 

@@ -54,6 +54,7 @@ CamelCase config keys are recommended for readability. Legacy uppercase keys are
 
 ```
 const options = {
+  env: true,
   activeKey: '',
   postingKey: '',
   jsonId: 'hivestream',
@@ -76,6 +77,8 @@ const options = {
 
 const ss = new Streamer(options);
 ```
+
+If you prefer loading credentials from environment variables, pass `env: true`. Hive Stream will read canonical keys like `ACTIVE_KEY` and `USERNAME`, plus Hive-friendly aliases like `HIVE_ACCOUNT` and `HIVE_ACTIVE_KEY`.
 
 If you want the built-in API without starting block streaming yet:
 
@@ -102,8 +105,9 @@ These event subscriptions and contract actions are separate paths: subscriptions
 #### Watch for transfers
 
 ```javascript
-ss.onTransfer('myaccount', (op, { sender, amount, asset, memo }, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+ss.onTransfer('myaccount', (op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
   // Fires only when op.to === 'myaccount'
+  // Parse op.amount yourself, for example: "1.000 HIVE"
 });
 ```
 
@@ -180,9 +184,30 @@ transferHiveTokens(from, to, amount, symbol, memo = '') {
 }
 ```
 
+### Burn Hive (HIVE or HBD)
+```javascript
+burnHiveTokens(from, amount, symbol, memo = '') {
+
+}
+```
+
+### Burn A Percentage Of An Incoming Transfer
+```javascript
+burnTransferPercentage(from, transferOrAmount, percentage, memo = '', allowedSymbols = ['HIVE', 'HBD']) {
+
+}
+```
+
 ### Transfer Hive Engine Tokens
 ```javascript
 transferHiveEngineTokens(from, to, symbol, quantity, memo = '') {
+
+}
+```
+
+### Burn Hive Engine Tokens
+```javascript
+burnHiveEngineTokens(from, symbol, quantity, memo = '') {
 
 }
 ```
@@ -192,6 +217,92 @@ transferHiveEngineTokens(from, to, symbol, quantity, memo = '') {
 transferHiveEngineTokensMultiple(from, accounts = [], symbol, memo = '', amount = '0') {
 
 }
+```
+
+### Burn part of an inbound transfer safely
+```javascript
+const { Streamer } = require('hive-stream');
+
+const ss = new Streamer({ env: true });
+
+ss.flows.autoBurnIncomingTransfers({
+  percentage: 67,
+  memo: ({ transaction }) => `Auto-burn 67% of ${transaction.id}`
+});
+
+ss.start();
+```
+
+### Forward inbound transfers automatically
+```javascript
+const { Streamer } = require('hive-stream');
+
+const ss = new Streamer({ env: true });
+
+ss.flows.autoForwardIncomingTransfers({
+  to: 'treasury',
+  percentage: 100,
+  memo: ({ transaction }) => `Forwarded from ${transaction.id}`
+});
+
+ss.start();
+```
+
+### Split inbound transfers across multiple accounts
+```javascript
+const { Streamer } = require('hive-stream');
+
+const ss = new Streamer({ env: true });
+
+ss.flows.autoSplitIncomingTransfers({
+  recipients: [
+    { account: 'null', percentage: 69, memo: 'Feel the burn' },
+    { account: 'treasury' }
+  ]
+});
+
+ss.start();
+```
+
+### Refund inbound transfers automatically
+```javascript
+const { Streamer } = require('hive-stream');
+
+const ss = new Streamer({ env: true });
+
+ss.flows.autoRefundIncomingTransfers({
+  memo: ({ transfer }) => `Refunded ${transfer.rawAmount} to ${transfer.from}`
+});
+
+ss.start();
+```
+
+### Route inbound transfers with one flow
+```javascript
+const { Streamer } = require('hive-stream');
+
+const ss = new Streamer({ env: true });
+
+ss.flows.autoRouteIncomingTransfers({
+  routes: [
+    { type: 'burn', percentage: 67, memo: 'Auto-burn 67%' },
+    { to: 'treasury', memo: 'Treasury remainder' }
+  ]
+});
+
+ss.start();
+```
+
+`flows.autoBurnIncomingTransfers()` is the quickest high-level option for the burn case. `flows.autoForwardIncomingTransfers()` covers treasury forwarding, `flows.autoSplitIncomingTransfers()` handles common revenue-sharing, `flows.autoRefundIncomingTransfers()` is useful for rejecting unsupported payments, and `flows.autoRouteIncomingTransfers()` lets you combine burn and transfer routes in one handler. In route and split flows, one destination can omit `percentage`/`basisPoints` and automatically receive the remainder. If you want tighter control, `burnTransferPercentage()` works on a single transfer payload, `burnTransferPortion()` accepts basis points, and `streamer.money` exposes `parseAssetAmount()`, `formatAmount()`, `formatAssetAmount()`, `calculatePercentageAmount()`, `calculateBasisPointsAmount()`, `splitAmountByBasisPoints()`, and `splitAmountByPercentage()`.
+
+### Money Namespace
+```javascript
+const ss = new Streamer();
+
+ss.money.parseAssetAmount('1.000 HIVE');
+ss.money.formatAmount('1.2399'); // "1.239"
+ss.money.calculatePercentageAmount('10.000', 12.5); // "1.250"
+ss.money.splitAmountByBasisPoints('1.000', [6900, 3100]); // ["0.690", "0.310"]
 ```
 
 ### Issue Hive Engine Tokens
@@ -373,6 +484,13 @@ Sample snippets for the newest contracts live in `examples/contracts/`:
 - `examples/contracts/poll.ts`
 - `examples/contracts/tipjar.ts`
 - `examples/contracts/exchange.ts`
+
+Higher-level flow examples live in `examples/flows/`:
+
+- `examples/flows/auto-burn.ts`
+- `examples/flows/auto-forward.ts`
+- `examples/flows/auto-split.ts`
+- `examples/flows/auto-refund.ts`
 
 ## Time-based Actions
 

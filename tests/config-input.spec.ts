@@ -2,10 +2,17 @@ import { createConfig, normalizeConfigInput } from '../src/config';
 import { Streamer } from '../src/streamer';
 
 describe('Config input aliases', () => {
+    const originalEnv = { ...process.env };
+
+    afterEach(() => {
+        process.env = { ...originalEnv };
+    });
+
     test('maps camelCase keys to canonical config keys', () => {
         const normalized = normalizeConfigInput({
             activeKey: 'active',
             postingKey: 'posting',
+            account: 'alias-account',
             username: 'alice',
             jsonId: 'builder',
             payloadIdentifier: 'payload',
@@ -34,6 +41,14 @@ describe('Config input aliases', () => {
         expect(normalized.API_ENABLED).toBe(true);
         expect(normalized.API_PORT).toBe(5050);
         expect(normalized.DEBUG_MODE).toBe(false);
+    });
+
+    test('maps account aliases to USERNAME when username is not supplied', () => {
+        const normalized = normalizeConfigInput({
+            account: 'alice'
+        });
+
+        expect(normalized.USERNAME).toBe('alice');
     });
 
     test('canonical keys override camelCase aliases when both are supplied', () => {
@@ -76,6 +91,30 @@ describe('Config input aliases', () => {
         expect(sut['username']).toBe('builder-user');
         expect(sut['postingKey']).toBe('posting-key');
         expect(sut['activeKey']).toBe('active-key');
+
+        await sut.stop();
+    });
+
+    test('createConfig reads env aliases when env is enabled', () => {
+        process.env.HIVE_ACCOUNT = 'env-account';
+        process.env.HIVE_ACTIVE_KEY = 'env-active';
+
+        const config = createConfig({ env: true });
+
+        expect(config.USERNAME).toBe('env-account');
+        expect(config.ACTIVE_KEY).toBe('env-active');
+    });
+
+    test('Streamer constructor accepts env-enabled config', async () => {
+        process.env.HIVE_ACCOUNT = 'env-streamer';
+        process.env.HIVE_ACTIVE_KEY = 'env-active-key';
+
+        const sut = new Streamer({
+            env: true
+        });
+
+        expect(sut['username']).toBe('env-streamer');
+        expect(sut['activeKey']).toBe('env-active-key');
 
         await sut.stop();
     });

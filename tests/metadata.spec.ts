@@ -11,6 +11,7 @@ describe('metadata exports', () => {
         expect(Object.isFrozen(meta.config)).toBe(true);
         expect(Object.isFrozen(meta.subscriptions)).toBe(true);
         expect(Object.isFrozen(meta.writeOperations)).toBe(true);
+        expect(Object.isFrozen(meta.namespaces)).toBe(true);
     });
 
     test('includes config defaults aligned with Config source', () => {
@@ -39,6 +40,28 @@ describe('metadata exports', () => {
 
         expect(customJsonId).toBeDefined();
         expect(customJsonId?.idFilterBuiltIn).toBe(true);
+    });
+
+    test('includes burn helpers in write operation metadata', () => {
+        const burnHive = HIVE_STREAM_METADATA.writeOperations.find((item) => item.method === 'burnHiveTokens');
+        const burnTransferPortion = HIVE_STREAM_METADATA.writeOperations.find((item) => item.method === 'burnTransferPortion');
+        const burnTransferPercentage = HIVE_STREAM_METADATA.writeOperations.find((item) => item.method === 'burnTransferPercentage');
+        const autoBurnIncomingTransfers = HIVE_STREAM_METADATA.writeOperations.find((item) => item.method === 'autoBurnIncomingTransfers');
+        const autoForwardIncomingTransfers = HIVE_STREAM_METADATA.writeOperations.find((item) => item.method === 'autoForwardIncomingTransfers');
+        const autoRefundIncomingTransfers = HIVE_STREAM_METADATA.writeOperations.find((item) => item.method === 'autoRefundIncomingTransfers');
+        const autoSplitIncomingTransfers = HIVE_STREAM_METADATA.writeOperations.find((item) => item.method === 'autoSplitIncomingTransfers');
+        const autoRouteIncomingTransfers = HIVE_STREAM_METADATA.writeOperations.find((item) => item.method === 'autoRouteIncomingTransfers');
+        const burnHiveEngine = HIVE_STREAM_METADATA.writeOperations.find((item) => item.method === 'burnHiveEngineTokens');
+
+        expect(burnHive?.signature).toBe('burnHiveTokens(from, amount, symbol, memo?)');
+        expect(burnTransferPortion?.signature).toBe('burnTransferPortion(from, transferOrAmount, basisPoints, memo?, allowedSymbols?)');
+        expect(burnTransferPercentage?.signature).toBe('burnTransferPercentage(from, transferOrAmount, percentage, memo?, allowedSymbols?)');
+        expect(autoBurnIncomingTransfers?.signature).toBe('autoBurnIncomingTransfers(options)');
+        expect(autoForwardIncomingTransfers?.signature).toBe('autoForwardIncomingTransfers(options)');
+        expect(autoRefundIncomingTransfers?.signature).toBe('autoRefundIncomingTransfers(options?)');
+        expect(autoSplitIncomingTransfers?.signature).toBe('autoSplitIncomingTransfers(options)');
+        expect(autoRouteIncomingTransfers?.signature).toBe('autoRouteIncomingTransfers(options)');
+        expect(burnHiveEngine?.signature).toBe('burnHiveEngineTokens(from, symbol, quantity, memo?)');
     });
 
     test('exposes valid time action values from TimeAction source', () => {
@@ -71,6 +94,33 @@ describe('metadata exports', () => {
 
         const names = HIVE_STREAM_METADATA.providers.map((p) => p.exportName);
         expect(names).toEqual(['HiveProvider', 'HafProvider', 'HafClient']);
+    });
+
+    test('includes money and flows namespaces for tooling discovery', () => {
+        const money = HIVE_STREAM_METADATA.namespaces.find((item) => item.name === 'money');
+        const flows = HIVE_STREAM_METADATA.namespaces.find((item) => item.name === 'flows');
+
+        expect(money?.methods.map((method) => method.method)).toEqual(
+            expect.arrayContaining([
+                'parseAssetAmount',
+                'formatAmount',
+                'formatAssetAmount',
+                'calculatePercentageAmount',
+                'calculateBasisPointsAmount',
+                'splitAmountByBasisPoints',
+                'splitAmountByPercentage'
+            ])
+        );
+
+        expect(flows?.methods.map((method) => method.method)).toEqual(
+            expect.arrayContaining([
+                'autoBurnIncomingTransfers',
+                'autoForwardIncomingTransfers',
+                'autoRefundIncomingTransfers',
+                'autoSplitIncomingTransfers',
+                'autoRouteIncomingTransfers'
+            ])
+        );
     });
 
     test('keeps helper exports aligned with the expanded contract catalog', () => {

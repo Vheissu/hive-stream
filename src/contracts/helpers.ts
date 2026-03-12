@@ -1,6 +1,7 @@
 import BigNumber from 'bignumber.js';
 import { z } from 'zod';
 import type { ContractContext } from '../types/hive-stream';
+import { Utils } from '../utils';
 
 export const amountSchema = z.string().regex(/^\d+(?:\.\d{1,8})?$/, 'Invalid amount');
 export const identifierSchema = z.string().min(1).max(80).regex(/^[a-zA-Z0-9:_-]+$/, 'Invalid identifier');
@@ -72,14 +73,14 @@ export function getIncomingPayment(ctx: ContractContext) {
 
     const operationAmount = ctx.operation?.data?.amount;
     if (ctx.trigger === 'recurrent_transfer' && typeof operationAmount === 'string') {
-        const parts = operationAmount.split(' ');
+        const parsed = parseBlockchainAmount(operationAmount);
 
         return {
             from: ctx.operation?.data?.from,
             to: ctx.operation?.data?.to,
-            rawAmount: operationAmount,
-            amount: parts[0] || '',
-            asset: parts[1] || '',
+            rawAmount: parsed.rawAmount,
+            amount: parsed.amount,
+            asset: parsed.asset,
             memo: ctx.operation?.data?.memo,
             source: 'recurrent_transfer' as const
         };
@@ -93,15 +94,13 @@ export function getEscrowPayment(ctx: ContractContext) {
     const candidates = [escrow.hiveAmount, escrow.hbdAmount].filter((value): value is string => Boolean(value));
 
     for (const candidate of candidates) {
-        const parts = candidate.split(' ');
-        const amount = parts[0] || '0';
-        const asset = parts[1] || '';
+        const parsed = parseBlockchainAmount(candidate);
 
-        if (toBigNumber(amount).gt(0)) {
+        if (parsed.value.gt(0)) {
             return {
-                rawAmount: candidate,
-                amount,
-                asset
+                rawAmount: parsed.rawAmount,
+                amount: parsed.amount,
+                asset: parsed.asset
             };
         }
     }
@@ -165,4 +164,12 @@ export function assertAssetMatches(actual: string, expected: string, label: stri
 
 export function uniqueItems(values: string[]): string[] {
     return [...new Set(values.filter(Boolean))];
+}
+
+export function parseBlockchainAmount(rawAmount: string) {
+    return Utils.parseAssetAmount(rawAmount);
+}
+
+export function formatBlockchainAmount(value: string | number | BigNumber, precision: number = 3): string {
+    return Utils.formatAmount(value, precision);
 }
