@@ -348,7 +348,7 @@ describe('Contract Helpers', () => {
         });
 
         test('throws for non-numeric', () => {
-            expect(() => ensurePositiveAmount('abc', 'Amount')).toThrow('Amount must be greater than zero');
+            expect(() => ensurePositiveAmount('abc', 'Amount')).toThrow('Invalid numeric value');
         });
     });
 

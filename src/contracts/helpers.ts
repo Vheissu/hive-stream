@@ -143,7 +143,11 @@ export function parseJson<T>(value: any, fallback: T): T {
 }
 
 export function toBigNumber(value: string | number | BigNumber): BigNumber {
-    return new BigNumber(value);
+    const bn = new BigNumber(value as any);
+    if (bn.isNaN() || !bn.isFinite()) {
+        throw new Error(`Invalid numeric value: ${String(value)}`);
+    }
+    return bn;
 }
 
 export function ensurePositiveAmount(value: string, label: string): void {

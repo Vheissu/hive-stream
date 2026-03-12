@@ -98,7 +98,10 @@ export function createLottoContract(options: LottoContractOptions = {}) {
         const amountRaw = ctx.transfer.rawAmount;
 
         const amountTrim = amountRaw.split(' ');
-        const amountParsed = parseFloat(amountTrim[0]);
+        const amountParsed = new BigNumber(amountTrim[0]);
+        if (amountParsed.isNaN() || !amountParsed.isFinite() || amountParsed.isNegative()) {
+            throw new Error('Invalid ticket amount');
+        }
         const amountCurrency = amountTrim[1].trim();
 
         const transaction = await state.streamer.getTransaction(ctx.block.number, ctx.transaction.id);
@@ -121,10 +124,10 @@ export function createLottoContract(options: LottoContractOptions = {}) {
                 return;
             }
 
-            if (amountParsed > cost) {
-                const difference = new BigNumber(amountParsed).minus(cost).toFixed(3);
+            if (amountParsed.isGreaterThan(cost)) {
+                const difference = amountParsed.minus(cost).toFixed(3);
                 await state.streamer.transferHiveTokens(account, sender, difference, amountTrim[1], `[Refund] A ticket costs ${cost} ${tokenSymbol}. You sent ${amountRaw}. You were refunded ${difference} ${tokenSymbol}.`);
-                return;
+                // Continue to create the entry — user paid enough for a ticket
             }
 
             const lotto = (await state.adapter.find(COLLECTION_LOTTERY, { status: 'active', type: payload.type })) || [];
@@ -190,7 +193,7 @@ export function createLottoContract(options: LottoContractOptions = {}) {
                     return arr;
                 }, []);
 
-                await state.streamer.transferHiveTokensMultiple(account, entrants, '10.000', tokenSymbol, '[Refund] The hourly lotto draw did not have enough contestants.');
+                await state.streamer.transferHiveTokensMultiple(account, entrants, new BigNumber(cost).toFixed(3), tokenSymbol, '[Refund] The hourly lotto draw did not have enough contestants.');
                 return;
             }
 
@@ -200,12 +203,13 @@ export function createLottoContract(options: LottoContractOptions = {}) {
             const payoutTotal = new BigNumber(winningsAmount).minus(percentageFee);
             const amountPerWinner = new BigNumber(payoutTotal).dividedBy(hourlyWinnersPick).toFixed(3);
 
-            if (account !== feeAccount) {
-                await state.streamer.transferHiveTokens(account, feeAccount, percentageFee.toFixed(3), tokenSymbol, 'percentage fee');
-            }
-
+            // Check balance BEFORE paying fee to avoid losing fee on insufficient balance
             if (balance !== null && payoutTotal.toNumber() > balance) {
                 throw new Error('Balance is less than amount to pay out');
+            }
+
+            if (account !== feeAccount) {
+                await state.streamer.transferHiveTokens(account, feeAccount, percentageFee.toFixed(3), tokenSymbol, 'percentage fee');
             }
 
             const winners = await getWinners(hourlyWinnersPick, draw.entries, ctx);
@@ -244,7 +248,7 @@ export function createLottoContract(options: LottoContractOptions = {}) {
 
             if (total < minEntriesDaily) {
                 for (const entrant of draw.entries) {
-                    await state.streamer.transferHiveTokens(account, entrant.account, '10.000', tokenSymbol, '[Refund] The daily lotto draw did not have enough contestants.');
+                    await state.streamer.transferHiveTokens(account, entrant.account, new BigNumber(cost).toFixed(3), tokenSymbol, '[Refund] The daily lotto draw did not have enough contestants.');
                     await Utils.sleep(3000);
                 }
 
@@ -257,12 +261,13 @@ export function createLottoContract(options: LottoContractOptions = {}) {
             const payoutTotal = new BigNumber(winningsAmount).minus(percentageFee);
             const amountPerWinner = new BigNumber(payoutTotal).dividedBy(dailyWinnersPick).toFixed(3);
 
-            if (account !== feeAccount) {
-                await state.streamer.transferHiveTokens(account, feeAccount, percentageFee.toFixed(3), tokenSymbol, 'percentage fee');
-            }
-
+            // Check balance BEFORE paying fee to avoid losing fee on insufficient balance
             if (balance !== null && payoutTotal.toNumber() > balance) {
                 throw new Error('Balance is less than amount to pay out');
+            }
+
+            if (account !== feeAccount) {
+                await state.streamer.transferHiveTokens(account, feeAccount, percentageFee.toFixed(3), tokenSymbol, 'percentage fee');
             }
 
             const winners = await getWinners(dailyWinnersPick, draw.entries, ctx);

@@ -269,6 +269,18 @@ export function createCrowdfundContract(options: CrowdfundContractOptions = {}) 
             throw new Error('Milestone already released');
         }
 
+        // Guard against total milestone releases exceeding campaign funds
+        const allMilestones = await state.adapter.query(
+            'SELECT * FROM crowdfund_milestones WHERE campaign_id = ?',
+            [payload.campaignId]
+        );
+        const totalReleasedPercent = allMilestones
+            .filter((m: any) => m.status === 'released')
+            .reduce((sum: number, m: any) => sum + Number(m.target_percent), 0);
+        if (totalReleasedPercent + Number(milestone.target_percent) > 100) {
+            throw new Error('Cannot release milestone: total released would exceed 100% of campaign funds');
+        }
+
         const releasedAmount = toBigNumber(campaign.current_amount)
             .multipliedBy(milestone.target_percent)
             .dividedBy(100)

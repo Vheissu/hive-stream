@@ -216,6 +216,17 @@ export function createRpsContract(options: RpsContractOptions = {}) {
                 payload,
                 message: error.message
             });
+
+            // Attempt refund on unexpected errors to avoid loss of funds
+            try {
+                if (amountRaw && typeof amountRaw === 'string' && amountRaw.includes(' ')) {
+                    const parts = amountRaw.split(' ');
+                    await state.streamer.transferHiveTokens(account, sender, parts[0], parts[1], '[Refund] An error occurred processing your bet.');
+                }
+            } catch (refundError) {
+                console.error('[RpsContract] Refund failed:', refundError);
+            }
+
             throw error;
         }
     };

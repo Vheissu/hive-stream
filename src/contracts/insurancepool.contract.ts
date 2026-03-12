@@ -267,6 +267,10 @@ export function createInsurancePoolContract(options: InsurancePoolContractOption
         }
 
         const claim = claimRows[0];
+        if (claim.status !== 'pending') {
+            throw new Error(`Claim ${payload.claimId} has already been ${claim.status}`);
+        }
+
         const poolRows = await state.adapter.query('SELECT * FROM insurance_pools WHERE pool_id = ?', [claim.pool_id]);
         const pool = poolRows[0];
         if (pool.owner !== owner) {
