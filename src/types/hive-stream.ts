@@ -493,6 +493,118 @@ export interface UpdateProfileBuilder {
     send(): any;
 }
 
+export interface SavingsTransferBuilder {
+    from(account: string): this;
+    to(account: string): this;
+    amount(amount: string | number, symbol?: string): this;
+    hive(amount: string | number): this;
+    hbd(amount: string | number): this;
+    memo(memo: string): this;
+    requestId(id: number): this;
+    send(): any;
+}
+
+export interface ConvertBuilder {
+    from(account: string): this;
+    amount(amount: string | number, symbol?: string): this;
+    hbd(amount: string | number): this;
+    requestId(id: number): this;
+    send(): any;
+}
+
+export interface CollateralizedConvertBuilder {
+    from(account: string): this;
+    amount(amount: string | number, symbol?: string): this;
+    hive(amount: string | number): this;
+    requestId(id: number): this;
+    send(): any;
+}
+
+export interface DeleteCommentBuilder {
+    author(account: string): this;
+    permlink(value: string): this;
+    send(): any;
+}
+
+export interface LimitOrderBuilder {
+    owner(account: string): this;
+    orderId(id: number): this;
+    amountToSell(amount: string | number, symbol?: string): this;
+    minToReceive(amount: string | number, symbol?: string): this;
+    fillOrKill(value?: boolean): this;
+    expiration(value: string | Date): this;
+    send(signingKeys?: string | string[]): any;
+}
+
+export interface CancelOrderBuilder {
+    owner(account: string): this;
+    orderId(id: number): this;
+    send(signingKeys?: string | string[]): any;
+}
+
+export interface WithdrawRouteBuilder {
+    from(account: string): this;
+    to(account: string): this;
+    percent(value: number): this;
+    autoVest(value?: boolean): this;
+    send(signingKeys?: string | string[]): any;
+}
+
+export interface CommentOptionsBuilder {
+    author(account: string): this;
+    permlink(value: string): this;
+    maxAcceptedPayout(amount: string | number, symbol?: string): this;
+    percentHbd(value: number): this;
+    allowVotes(value?: boolean): this;
+    allowCurationRewards(value?: boolean): this;
+    beneficiary(account: string, weight: number): this;
+    send(): any;
+}
+
+export interface QueryNamespace {
+    getDynamicGlobalProperties(): Promise<any>;
+    getChainProperties(): Promise<any>;
+    getCurrentMedianHistoryPrice(): Promise<any>;
+    getRewardFund(name?: string): Promise<any>;
+    getFollowers(account: string, start?: string, type?: string, limit?: number): Promise<any[]>;
+    getFollowing(account: string, start?: string, type?: string, limit?: number): Promise<any[]>;
+    getFollowCount(account: string): Promise<any>;
+    getContent(author: string, permlink: string): Promise<any>;
+    getContentReplies(author: string, permlink: string): Promise<any[]>;
+    getDiscussions(by: string, query: Record<string, any>): Promise<any[]>;
+    getBlog(account: string, options?: Record<string, any>): Promise<any[]>;
+    getFeed(account: string, options?: Record<string, any>): Promise<any[]>;
+    getTrending(options?: Record<string, any>): Promise<any[]>;
+    getHot(options?: Record<string, any>): Promise<any[]>;
+    getCreated(options?: Record<string, any>): Promise<any[]>;
+    getActiveVotes(author: string, permlink: string): Promise<any[]>;
+    getVestingDelegations(account: string, from?: string, limit?: number): Promise<any[]>;
+    getAccountHistory(account: string, from?: number, limit?: number): Promise<any[]>;
+    getOrderBook(limit?: number): Promise<any>;
+    getOpenOrders(account: string): Promise<any[]>;
+    getRCMana(account: string): Promise<any>;
+    getVPMana(account: string): Promise<any>;
+    findRCAccounts(accounts: string[]): Promise<any[]>;
+    getCommunity(name: string): Promise<any>;
+    listCommunities(options?: Record<string, any>): Promise<any[]>;
+    getAccountNotifications(account: string, options?: Record<string, any>): Promise<any[]>;
+    listAllSubscriptions(account: string): Promise<any[]>;
+    findTransaction(transactionId: string): Promise<any>;
+    getWitnessByAccount(account: string): Promise<any>;
+    getWitnesses(ids: number[]): Promise<any[]>;
+    getWitnessesByVote(from: string, limit: number): Promise<any[]>;
+    getBlock(blockNumber: number): Promise<any>;
+    getBlockHeader(blockNumber: number): Promise<any>;
+    getOperations(blockNumber: number, onlyVirtual?: boolean): Promise<any[]>;
+    getConfig(): Promise<any>;
+    lookupAccounts(lowerBound: string, limit: number): Promise<string[]>;
+    lookupWitnessAccounts(lowerBound: string, limit: number): Promise<string[]>;
+    getConversionRequests(account: string): Promise<any[]>;
+    getCollateralizedConversionRequests(account: string): Promise<any[]>;
+    getSavingsWithdrawFrom(account: string): Promise<any[]>;
+    getProposals(options?: Record<string, any>): Promise<any[]>;
+}
+
 export interface MoneyNamespace {
     parseAssetAmount(rawAmount: string): ParsedAssetAmount;
     formatAmount(amount: string | number, precision?: number): string;
@@ -531,6 +643,15 @@ export interface OpsNamespace {
     setProxy(): SetProxyBuilder;
     clearProxy(): SetProxyBuilder;
     updateProfile(): UpdateProfileBuilder;
+    transferToSavings(): SavingsTransferBuilder;
+    transferFromSavings(): SavingsTransferBuilder;
+    convert(): ConvertBuilder;
+    collateralizedConvert(): CollateralizedConvertBuilder;
+    deleteComment(): DeleteCommentBuilder;
+    limitOrder(): LimitOrderBuilder;
+    cancelOrder(): CancelOrderBuilder;
+    withdrawRoute(): WithdrawRouteBuilder;
+    commentOptions(): CommentOptionsBuilder;
 }
 
 export interface FlowNamespace {

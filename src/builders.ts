@@ -3,8 +3,13 @@ import type { Streamer } from './streamer';
 import type {
     AutoRouteIncomingTransfersOptions,
     BurnOperationBuilder,
+    CancelOrderBuilder,
     ClaimRewardsBuilder,
+    CollateralizedConvertBuilder,
+    CommentOptionsBuilder,
+    ConvertBuilder,
     DelegateBuilder,
+    DeleteCommentBuilder,
     EscrowTransferBuilder,
     FlowAllocationInput,
     FlowDedupeStore,
@@ -18,6 +23,7 @@ import type {
     HiveEngineIssueBuilder,
     HiveEngineTransferBuilder,
     IncomingTransferFlowBuilder,
+    LimitOrderBuilder,
     PlannedIncomingTransferRoutes,
     PowerDownBuilder,
     PowerUpBuilder,
@@ -26,12 +32,14 @@ import type {
     ReblogBuilder,
     RemoveProposalsBuilder,
     RecurrentTransferBuilder,
+    SavingsTransferBuilder,
     SetProxyBuilder,
     TransferEvent,
     TransferOperationBuilder,
     UpdateProfileBuilder,
     VoteBuilder,
-    WitnessVoteBuilder
+    WitnessVoteBuilder,
+    WithdrawRouteBuilder
 } from './types/hive-stream';
 
 interface BuilderAllocation {
@@ -1369,5 +1377,374 @@ export class HiveUpdateProfileBuilder implements UpdateProfileBuilder {
         }
 
         return this.streamer.updateProfile(this.state.account, this.state.profile);
+    }
+}
+
+export class HiveSavingsTransferBuilder implements SavingsTransferBuilder {
+    private state: {
+        from?: string;
+        to?: string;
+        amount?: string;
+        symbol?: string;
+        memo?: string;
+        requestId?: number;
+    } = {};
+
+    constructor(
+        private readonly streamer: Streamer,
+        private readonly direction: 'to' | 'from'
+    ) {}
+
+    public from(account: string): this {
+        this.state.from = account;
+        return this;
+    }
+
+    public to(account: string): this {
+        this.state.to = account;
+        return this;
+    }
+
+    public amount(amount: string | number, symbol?: string): this {
+        const parsed = parseAssetInput(amount, symbol);
+        this.state.amount = parsed.amount;
+        this.state.symbol = parsed.symbol;
+        return this;
+    }
+
+    public hive(amount: string | number): this {
+        return this.amount(amount, 'HIVE');
+    }
+
+    public hbd(amount: string | number): this {
+        return this.amount(amount, 'HBD');
+    }
+
+    public memo(memo: string): this {
+        this.state.memo = memo;
+        return this;
+    }
+
+    public requestId(id: number): this {
+        this.state.requestId = id;
+        return this;
+    }
+
+    public send(): any {
+        if (!this.state.from || !this.state.amount || !this.state.symbol) {
+            throw new Error(`${this.direction === 'to' ? 'transferToSavings' : 'transferFromSavings'}() builder requires from and amount before send()`);
+        }
+
+        const to = this.state.to || this.state.from;
+
+        if (this.direction === 'to') {
+            return this.streamer.transferToSavings(
+                this.state.from, to, this.state.amount, this.state.symbol, this.state.memo || ''
+            );
+        }
+
+        return this.streamer.transferFromSavings(
+            this.state.from, to, this.state.amount, this.state.symbol, this.state.requestId || 0, this.state.memo || ''
+        );
+    }
+}
+
+export class HiveConvertBuilder implements ConvertBuilder {
+    private state: {
+        from?: string;
+        amount?: string;
+        requestId?: number;
+    } = {};
+
+    constructor(private readonly streamer: Streamer) {}
+
+    public from(account: string): this {
+        this.state.from = account;
+        return this;
+    }
+
+    public amount(amount: string | number, symbol?: string): this {
+        this.state.amount = buildAssetAmount(amount, symbol || 'HBD');
+        return this;
+    }
+
+    public hbd(amount: string | number): this {
+        return this.amount(amount, 'HBD');
+    }
+
+    public requestId(id: number): this {
+        this.state.requestId = id;
+        return this;
+    }
+
+    public send(): any {
+        if (!this.state.from || !this.state.amount) {
+            throw new Error('convert() builder requires from and amount before send()');
+        }
+
+        return this.streamer.convert(this.state.from, this.state.amount, this.state.requestId || 0);
+    }
+}
+
+export class HiveCollateralizedConvertBuilder implements CollateralizedConvertBuilder {
+    private state: {
+        from?: string;
+        amount?: string;
+        requestId?: number;
+    } = {};
+
+    constructor(private readonly streamer: Streamer) {}
+
+    public from(account: string): this {
+        this.state.from = account;
+        return this;
+    }
+
+    public amount(amount: string | number, symbol?: string): this {
+        this.state.amount = buildAssetAmount(amount, symbol || 'HIVE');
+        return this;
+    }
+
+    public hive(amount: string | number): this {
+        return this.amount(amount, 'HIVE');
+    }
+
+    public requestId(id: number): this {
+        this.state.requestId = id;
+        return this;
+    }
+
+    public send(): any {
+        if (!this.state.from || !this.state.amount) {
+            throw new Error('collateralizedConvert() builder requires from and amount before send()');
+        }
+
+        return this.streamer.collateralizedConvert(this.state.from, this.state.amount, this.state.requestId || 0);
+    }
+}
+
+export class HiveDeleteCommentBuilder implements DeleteCommentBuilder {
+    private state: {
+        author?: string;
+        permlink?: string;
+    } = {};
+
+    constructor(private readonly streamer: Streamer) {}
+
+    public author(account: string): this {
+        this.state.author = account;
+        return this;
+    }
+
+    public permlink(value: string): this {
+        this.state.permlink = value;
+        return this;
+    }
+
+    public send(): any {
+        if (!this.state.author || !this.state.permlink) {
+            throw new Error('deleteComment() builder requires author and permlink before send()');
+        }
+
+        return this.streamer.deleteComment(this.state.author, this.state.permlink);
+    }
+}
+
+export class HiveLimitOrderBuilder implements LimitOrderBuilder {
+    private state: {
+        owner?: string;
+        orderId?: number;
+        amountToSell?: string;
+        minToReceive?: string;
+        fillOrKill?: boolean;
+        expiration?: string | Date;
+    } = {};
+
+    constructor(private readonly streamer: Streamer) {}
+
+    public owner(account: string): this {
+        this.state.owner = account;
+        return this;
+    }
+
+    public orderId(id: number): this {
+        this.state.orderId = id;
+        return this;
+    }
+
+    public amountToSell(amount: string | number, symbol?: string): this {
+        this.state.amountToSell = buildAssetAmount(amount, symbol);
+        return this;
+    }
+
+    public minToReceive(amount: string | number, symbol?: string): this {
+        this.state.minToReceive = buildAssetAmount(amount, symbol);
+        return this;
+    }
+
+    public fillOrKill(value: boolean = true): this {
+        this.state.fillOrKill = value;
+        return this;
+    }
+
+    public expiration(value: string | Date): this {
+        this.state.expiration = value;
+        return this;
+    }
+
+    public send(signingKeys?: string | string[]): any {
+        if (!this.state.owner || !this.state.amountToSell || !this.state.minToReceive) {
+            throw new Error('limitOrder() builder requires owner, amountToSell, and minToReceive before send()');
+        }
+
+        return this.streamer.limitOrderCreate(
+            this.state.owner,
+            this.state.orderId || Math.floor(Date.now() / 1000),
+            this.state.amountToSell,
+            this.state.minToReceive,
+            this.state.fillOrKill || false,
+            this.state.expiration,
+            signingKeys
+        );
+    }
+}
+
+export class HiveCancelOrderBuilder implements CancelOrderBuilder {
+    private state: {
+        owner?: string;
+        orderId?: number;
+    } = {};
+
+    constructor(private readonly streamer: Streamer) {}
+
+    public owner(account: string): this {
+        this.state.owner = account;
+        return this;
+    }
+
+    public orderId(id: number): this {
+        this.state.orderId = id;
+        return this;
+    }
+
+    public send(signingKeys?: string | string[]): any {
+        if (!this.state.owner || this.state.orderId === undefined) {
+            throw new Error('cancelOrder() builder requires owner and orderId before send()');
+        }
+
+        return this.streamer.limitOrderCancel(this.state.owner, this.state.orderId, signingKeys);
+    }
+}
+
+export class HiveWithdrawRouteBuilder implements WithdrawRouteBuilder {
+    private state: {
+        from?: string;
+        to?: string;
+        percent?: number;
+        autoVest?: boolean;
+    } = {};
+
+    constructor(private readonly streamer: Streamer) {}
+
+    public from(account: string): this {
+        this.state.from = account;
+        return this;
+    }
+
+    public to(account: string): this {
+        this.state.to = account;
+        return this;
+    }
+
+    public percent(value: number): this {
+        this.state.percent = value;
+        return this;
+    }
+
+    public autoVest(value: boolean = true): this {
+        this.state.autoVest = value;
+        return this;
+    }
+
+    public send(signingKeys?: string | string[]): any {
+        if (!this.state.from || !this.state.to || this.state.percent === undefined) {
+            throw new Error('withdrawRoute() builder requires from, to, and percent before send()');
+        }
+
+        return this.streamer.setWithdrawVestingRoute(
+            this.state.from,
+            this.state.to,
+            this.state.percent,
+            this.state.autoVest || false,
+            signingKeys
+        );
+    }
+}
+
+export class HiveCommentOptionsBuilder implements CommentOptionsBuilder {
+    private state: {
+        author?: string;
+        permlink?: string;
+        maxAcceptedPayout?: string;
+        percentHbd?: number;
+        allowVotes?: boolean;
+        allowCurationRewards?: boolean;
+        beneficiaries: Array<{ account: string; weight: number }>;
+    } = { beneficiaries: [] };
+
+    constructor(private readonly streamer: Streamer) {}
+
+    public author(account: string): this {
+        this.state.author = account;
+        return this;
+    }
+
+    public permlink(value: string): this {
+        this.state.permlink = value;
+        return this;
+    }
+
+    public maxAcceptedPayout(amount: string | number, symbol?: string): this {
+        this.state.maxAcceptedPayout = buildAssetAmount(amount, symbol || 'HBD');
+        return this;
+    }
+
+    public percentHbd(value: number): this {
+        this.state.percentHbd = value;
+        return this;
+    }
+
+    public allowVotes(value: boolean = true): this {
+        this.state.allowVotes = value;
+        return this;
+    }
+
+    public allowCurationRewards(value: boolean = true): this {
+        this.state.allowCurationRewards = value;
+        return this;
+    }
+
+    public beneficiary(account: string, weight: number): this {
+        this.state.beneficiaries.push({ account, weight });
+        return this;
+    }
+
+    public send(): any {
+        if (!this.state.author || !this.state.permlink) {
+            throw new Error('commentOptions() builder requires author and permlink before send()');
+        }
+
+        const extensions: any[] = [];
+        if (this.state.beneficiaries.length > 0) {
+            extensions.push([0, { beneficiaries: this.state.beneficiaries }]);
+        }
+
+        return this.streamer.commentOptions(this.state.author, this.state.permlink, {
+            max_accepted_payout: this.state.maxAcceptedPayout,
+            percent_hbd: this.state.percentHbd,
+            allow_votes: this.state.allowVotes,
+            allow_curation_rewards: this.state.allowCurationRewards,
+            extensions
+        });
     }
 }

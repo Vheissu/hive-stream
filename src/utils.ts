@@ -2214,6 +2214,628 @@ export const Utils = {
     ): string {
         const vests = this.hpToVest(hp, totalVestingFundHive, totalVestingShares);
         return `${vests} VESTS`;
+    },
+
+    // ─── Savings Operations ─────────────────────────────────────────────
+
+    transferToSavings(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        from: string,
+        to: string,
+        amount: string,
+        symbol: string,
+        memo: string = ''
+    ) {
+        if (!client || !config.ACTIVE_KEY || !from || !to || !amount || !symbol) {
+            throw new Error('Missing required parameters for transfer to savings');
+        }
+
+        const formattedAmount = this.formatAssetAmount(amount, symbol);
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+
+        const operation: [string, any] = ['transfer_to_savings', {
+            from,
+            to,
+            amount: formattedAmount,
+            memo
+        }];
+
+        return this.broadcastOperations(client, [operation], key);
+    },
+
+    transferFromSavings(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        from: string,
+        to: string,
+        amount: string,
+        symbol: string,
+        requestId: number,
+        memo: string = ''
+    ) {
+        if (!client || !config.ACTIVE_KEY || !from || !to || !amount || !symbol) {
+            throw new Error('Missing required parameters for transfer from savings');
+        }
+
+        const formattedAmount = this.formatAssetAmount(amount, symbol);
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+
+        const operation: [string, any] = ['transfer_from_savings', {
+            from,
+            to,
+            amount: formattedAmount,
+            memo,
+            request_id: requestId || 0
+        }];
+
+        return this.broadcastOperations(client, [operation], key);
+    },
+
+    cancelTransferFromSavings(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        from: string,
+        requestId: number
+    ) {
+        if (!client || !config.ACTIVE_KEY || !from || typeof requestId !== 'number') {
+            throw new Error('Missing required parameters for cancel transfer from savings');
+        }
+
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+
+        const operation: [string, any] = ['cancel_transfer_from_savings', {
+            from,
+            request_id: requestId
+        }];
+
+        return this.broadcastOperations(client, [operation], key);
+    },
+
+    // ─── Convert Operations ─────────────────────────────────────────────
+
+    convert(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        owner: string,
+        amount: string,
+        requestId: number = 0
+    ) {
+        if (!client || !config.ACTIVE_KEY || !owner || !amount) {
+            throw new Error('Missing required parameters for convert operation');
+        }
+
+        const formattedAmount = amount.includes('HBD') ? amount : this.formatAssetAmount(amount, 'HBD');
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+
+        const operation: [string, any] = ['convert', {
+            owner,
+            requestid: requestId,
+            amount: formattedAmount
+        }];
+
+        return this.broadcastOperations(client, [operation], key);
+    },
+
+    collateralizedConvert(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        owner: string,
+        amount: string,
+        requestId: number = 0
+    ) {
+        if (!client || !config.ACTIVE_KEY || !owner || !amount) {
+            throw new Error('Missing required parameters for collateralized convert operation');
+        }
+
+        const formattedAmount = amount.includes('HIVE') ? amount : this.formatAssetAmount(amount, 'HIVE');
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+
+        const operation: [string, any] = ['collateralized_convert', {
+            owner,
+            requestid: requestId,
+            amount: formattedAmount
+        }];
+
+        return this.broadcastOperations(client, [operation], key);
+    },
+
+    // ─── Content Operations ─────────────────────────────────────────────
+
+    deleteComment(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        author: string,
+        permlink: string
+    ) {
+        if (!client || !config.POSTING_KEY || !author || !permlink) {
+            throw new Error('Missing required parameters for delete comment');
+        }
+
+        const key = PrivateKey.fromString(config.POSTING_KEY);
+
+        const operation: [string, any] = ['delete_comment', {
+            author,
+            permlink
+        }];
+
+        return this.broadcastOperations(client, [operation], key);
+    },
+
+    commentOptions(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        author: string,
+        permlink: string,
+        options: {
+            max_accepted_payout?: string;
+            percent_hbd?: number;
+            allow_votes?: boolean;
+            allow_curation_rewards?: boolean;
+            extensions?: any[];
+        }
+    ) {
+        if (!client || !config.POSTING_KEY || !author || !permlink) {
+            throw new Error('Missing required parameters for comment options');
+        }
+
+        const key = PrivateKey.fromString(config.POSTING_KEY);
+
+        const operation: [string, any] = ['comment_options', {
+            author,
+            permlink,
+            max_accepted_payout: options.max_accepted_payout || '1000000.000 HBD',
+            percent_hbd: options.percent_hbd !== undefined ? options.percent_hbd : 10000,
+            allow_votes: options.allow_votes !== false,
+            allow_curation_rewards: options.allow_curation_rewards !== false,
+            extensions: options.extensions || []
+        }];
+
+        return this.broadcastOperations(client, [operation], key);
+    },
+
+    // ─── Market Operations ──────────────────────────────────────────────
+
+    limitOrderCreate(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        owner: string,
+        orderId: number,
+        amountToSell: string,
+        minToReceive: string,
+        fillOrKill: boolean = false,
+        expiration?: string | Date
+    ) {
+        if (!client || !config.ACTIVE_KEY || !owner || !amountToSell || !minToReceive) {
+            throw new Error('Missing required parameters for limit order create');
+        }
+
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+        const expirationDate = expiration
+            ? this.toHiveTimestamp(expiration)
+            : this.toHiveTimestamp(new Date(Date.now() + 28 * 24 * 60 * 60 * 1000));
+
+        const operation: [string, any] = ['limit_order_create', {
+            owner,
+            orderid: orderId,
+            amount_to_sell: amountToSell,
+            min_to_receive: minToReceive,
+            fill_or_kill: fillOrKill,
+            expiration: expirationDate
+        }];
+
+        return this.broadcastOperations(client, [operation], key);
+    },
+
+    limitOrderCancel(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        owner: string,
+        orderId: number
+    ) {
+        if (!client || !config.ACTIVE_KEY || !owner || typeof orderId !== 'number') {
+            throw new Error('Missing required parameters for limit order cancel');
+        }
+
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+
+        const operation: [string, any] = ['limit_order_cancel', {
+            owner,
+            orderid: orderId
+        }];
+
+        return this.broadcastOperations(client, [operation], key);
+    },
+
+    // ─── Vesting Route ──────────────────────────────────────────────────
+
+    setWithdrawVestingRoute(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        fromAccount: string,
+        toAccount: string,
+        percent: number,
+        autoVest: boolean = false,
+        signingKeys?: HiveKeyInput | HiveKeyInput[]
+    ) {
+        if (!client || !fromAccount || !toAccount) {
+            throw new Error('Missing required parameters for set withdraw vesting route');
+        }
+
+        if (percent < 0 || percent > 10000) {
+            throw new Error('Percent must be between 0 and 10000');
+        }
+
+        const keys = signingKeys || config.ACTIVE_KEY;
+        if (!keys) {
+            throw new Error('Active key or explicit signing keys are required');
+        }
+
+        const operation: [string, any] = ['set_withdraw_vesting_route', {
+            from_account: fromAccount,
+            to_account: toAccount,
+            percent,
+            auto_vest: autoVest
+        }];
+
+        return this.broadcastOperations(client, [operation], keys);
+    },
+
+    // ─── Account Creation ───────────────────────────────────────────────
+
+    claimAccount(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        creator: string,
+        fee: string = '0.000 HIVE'
+    ) {
+        if (!client || !config.ACTIVE_KEY || !creator) {
+            throw new Error('Missing required parameters for claim account');
+        }
+
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+
+        const operation: [string, any] = ['claim_account', {
+            creator,
+            fee,
+            extensions: []
+        }];
+
+        return this.broadcastOperations(client, [operation], key);
+    },
+
+    createClaimedAccount(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        creator: string,
+        newAccountName: string,
+        owner: AuthorityInput,
+        active: AuthorityInput,
+        posting: AuthorityInput,
+        memoKey: string,
+        jsonMetadata: string = ''
+    ) {
+        if (!client || !config.ACTIVE_KEY || !creator || !newAccountName || !owner || !active || !posting || !memoKey) {
+            throw new Error('Missing required parameters for create claimed account');
+        }
+
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+
+        const operation: [string, any] = ['create_claimed_account', {
+            creator,
+            new_account_name: newAccountName,
+            owner,
+            active,
+            posting,
+            memo_key: memoKey,
+            json_metadata: jsonMetadata,
+            extensions: []
+        }];
+
+        return this.broadcastOperations(client, [operation], key);
+    },
+
+    // ─── Witness Operations ─────────────────────────────────────────────
+
+    feedPublish(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        publisher: string,
+        baseAmount: string,
+        quoteAmount: string = '1.000 HIVE'
+    ) {
+        if (!client || !config.ACTIVE_KEY || !publisher || !baseAmount) {
+            throw new Error('Missing required parameters for feed publish');
+        }
+
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+
+        const operation: [string, any] = ['feed_publish', {
+            publisher,
+            exchange_rate: {
+                base: baseAmount,
+                quote: quoteAmount
+            }
+        }];
+
+        return this.broadcastOperations(client, [operation], key);
+    },
+
+    // ─── Comprehensive Utility Helpers ──────────────────────────────────
+
+    /**
+     * Calculates current voting mana percentage for an account
+     * @param account - Extended account object from getAccounts()
+     * @returns Voting mana as a percentage (0-100)
+     */
+    calculateVotingMana(account: any): number {
+        if (!account || !account.voting_manabar) {
+            throw new Error('Invalid account object');
+        }
+
+        const lastMana = parseInt(account.voting_manabar.current_mana, 10);
+        const lastUpdate = parseInt(account.voting_manabar.last_update_time, 10);
+        const now = Math.floor(Date.now() / 1000);
+        const maxMana = this.getEffectiveVestingShares(account);
+
+        if (maxMana === 0) {
+            return 0;
+        }
+
+        const elapsed = now - lastUpdate;
+        const regenerated = (maxMana * elapsed) / (5 * 24 * 60 * 60);
+        const currentMana = Math.min(lastMana + regenerated, maxMana);
+
+        return Math.min(100, (currentMana / maxMana) * 100);
+    },
+
+    /**
+     * Gets the effective vesting shares for an account (own + received - delegated)
+     * @param account - Extended account object
+     * @returns Effective vesting shares as a number
+     */
+    getEffectiveVestingShares(account: any): number {
+        const own = parseFloat(String(account.vesting_shares || '0').replace(' VESTS', ''));
+        const received = parseFloat(String(account.received_vesting_shares || '0').replace(' VESTS', ''));
+        const delegated = parseFloat(String(account.delegated_vesting_shares || '0').replace(' VESTS', ''));
+
+        return own + received - delegated;
+    },
+
+    /**
+     * Estimates the value of a vote in USD
+     * @param votingPower - Current voting power percentage (0-100)
+     * @param weight - Vote weight percentage (0-100)
+     * @param effectiveVests - Effective vesting shares as number
+     * @param rewardFund - Reward fund object from condenser_api.get_reward_fund
+     * @param medianPrice - Median price object from getDynamicGlobalProperties
+     * @returns Estimated vote value in USD
+     */
+    estimateVoteValue(
+        votingPower: number,
+        weight: number,
+        effectiveVests: number,
+        rewardFund: { reward_balance: string; recent_claims: string },
+        medianPrice: { base: string; quote: string }
+    ): number {
+        if (!rewardFund || !medianPrice) {
+            throw new Error('Reward fund and median price are required');
+        }
+
+        const voteWeight = Math.floor(votingPower * 100 * weight);
+        const rshares = effectiveVests * 1e6 * (voteWeight / 10000);
+
+        const rewardBalance = parseFloat(rewardFund.reward_balance.replace(' HIVE', ''));
+        const recentClaims = parseFloat(rewardFund.recent_claims);
+        const base = parseFloat(medianPrice.base.replace(' HBD', ''));
+        const quote = parseFloat(medianPrice.quote.replace(' HIVE', ''));
+
+        if (recentClaims === 0 || quote === 0) {
+            return 0;
+        }
+
+        const hivePerRshare = rewardBalance / recentClaims;
+        const voteValue = rshares * hivePerRshare * (base / quote);
+
+        return Math.max(0, Math.round(voteValue * 1000) / 1000);
+    },
+
+    /**
+     * Generates a URL-safe permlink from a title
+     * @param title - The post title
+     * @returns A valid Hive permlink string
+     */
+    generatePermlink(title: string): string {
+        if (!title || typeof title !== 'string') {
+            throw new Error('Title is required');
+        }
+
+        return title
+            .toLowerCase()
+            .replace(/[^\w\s-]/g, '')
+            .replace(/\s+/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-|-$/g, '')
+            .substring(0, 255) || 'untitled';
+    },
+
+    /**
+     * Validates a Hive account name according to blockchain rules
+     * @param name - The account name to validate
+     * @returns null if valid, or an error message string
+     */
+    validateAccountName(name: string): string | null {
+        if (!name) {
+            return 'Account name is required';
+        }
+
+        if (typeof name !== 'string') {
+            return 'Account name must be a string';
+        }
+
+        const length = name.length;
+
+        if (length < 3) {
+            return 'Account name must be at least 3 characters';
+        }
+
+        if (length > 16) {
+            return 'Account name must be at most 16 characters';
+        }
+
+        if (!/^[a-z]/.test(name)) {
+            return 'Account name must start with a letter';
+        }
+
+        if (!/^[a-z0-9.-]+$/.test(name)) {
+            return 'Account name may only contain lowercase letters, digits, dots, and hyphens';
+        }
+
+        if (/\.\./.test(name) || /--/.test(name)) {
+            return 'Account name may not contain consecutive dots or hyphens';
+        }
+
+        if (/\.$/.test(name) || /-$/.test(name)) {
+            return 'Account name may not end with a dot or hyphen';
+        }
+
+        const segments = name.split('.');
+        for (const segment of segments) {
+            if (segment.length < 3) {
+                return 'Each account name segment must be at least 3 characters';
+            }
+
+            if (!/^[a-z]/.test(segment)) {
+                return 'Each account name segment must start with a letter';
+            }
+        }
+
+        return null;
+    },
+
+    /**
+     * Returns true if the given string is a valid Hive account name
+     * @param name - The account name to check
+     * @returns true if valid, false otherwise
+     */
+    isValidAccountName(name: string): boolean {
+        return this.validateAccountName(name) === null;
+    },
+
+    /**
+     * Checks if an account exists on the blockchain
+     * @param client - The Hive client instance
+     * @param username - Account name to check
+     * @returns Promise resolving to true if account exists
+     */
+    async accountExists(client: Client, username: string): Promise<boolean> {
+        const account = await this.getAccount(client, username);
+        return account !== null;
+    },
+
+    /**
+     * Parses a Hive URL or link into its components
+     * @param url - URL like https://hive.blog/@author/permlink or @author/permlink
+     * @returns Parsed components { author, permlink, category? } or null if invalid
+     */
+    parseHiveUrl(url: string): { author: string; permlink: string; category?: string } | null {
+        if (!url || typeof url !== 'string') {
+            return null;
+        }
+
+        const cleaned = url.trim();
+
+        // Handle @author/permlink format
+        const atMatch = cleaned.match(/^@([a-z0-9.-]+)\/([a-z0-9-]+)$/);
+        if (atMatch) {
+            return { author: atMatch[1], permlink: atMatch[2] };
+        }
+
+        // Handle full URLs: https://hive.blog/category/@author/permlink
+        const urlMatch = cleaned.match(/(?:https?:\/\/[^\/]+)?\/(?:([^\/]+)\/)?@([a-z0-9.-]+)\/([a-z0-9-]+)/);
+        if (urlMatch) {
+            return {
+                author: urlMatch[2],
+                permlink: urlMatch[3],
+                category: urlMatch[1] || undefined
+            };
+        }
+
+        return null;
+    },
+
+    /**
+     * Generates a unique permlink with timestamp for replies
+     * @param parentPermlink - The parent post's permlink (optional)
+     * @returns A unique permlink string
+     */
+    generateReplyPermlink(parentPermlink?: string): string {
+        const timestamp = new Date().toISOString().replace(/[^a-z0-9]/gi, '').toLowerCase();
+        const prefix = parentPermlink ? `re-${parentPermlink.substring(0, 100)}` : 're';
+        return `${prefix}-${timestamp}`;
+    },
+
+    /**
+     * Creates the json_metadata string for a Hive post
+     * @param options - Post metadata options
+     * @returns JSON string for json_metadata field
+     */
+    createPostMetadata(options: {
+        tags?: string[];
+        image?: string[];
+        links?: string[];
+        app?: string;
+        format?: string;
+        description?: string;
+        [key: string]: any;
+    } = {}): string {
+        const metadata: Record<string, any> = {
+            tags: options.tags || [],
+            image: options.image || [],
+            links: options.links || [],
+            app: options.app || 'hive-stream',
+            format: options.format || 'markdown'
+        };
+
+        if (options.description) {
+            metadata.description = options.description;
+        }
+
+        // Include any additional custom fields
+        for (const [key, value] of Object.entries(options)) {
+            if (!['tags', 'image', 'links', 'app', 'format', 'description'].includes(key)) {
+                metadata[key] = value;
+            }
+        }
+
+        return JSON.stringify(metadata);
+    },
+
+    /**
+     * Encodes a memo with a shared secret (requires sender private memo key and receiver public memo key)
+     * Note: Requires @hiveio/dhive Memo support
+     */
+    encodeMemo(privateKey: string, publicKey: string, message: string): string {
+        // Dynamic import to avoid hard dependency on Memo
+        try {
+            const { Memo } = require('@hiveio/dhive');
+            return Memo.encode(PrivateKey.fromString(privateKey), publicKey, `#${message}`);
+        } catch {
+            throw new Error('Memo encoding requires @hiveio/dhive with Memo support');
+        }
+    },
+
+    /**
+     * Decodes an encrypted memo
+     * Note: Requires @hiveio/dhive Memo support
+     */
+    decodeMemo(privateKey: string, encodedMemo: string): string {
+        try {
+            const { Memo } = require('@hiveio/dhive');
+            return Memo.decode(PrivateKey.fromString(privateKey), encodedMemo);
+        } catch {
+            throw new Error('Memo decoding requires @hiveio/dhive with Memo support');
+        }
     }
 
 };

@@ -614,6 +614,315 @@ const profile = Utils.parseProfileMetadata(account.posting_json_metadata);
 
 ---
 
+## Query Namespace
+
+The `streamer.query` namespace provides read-only access to the entire Hive blockchain. No keys required.
+
+### Chain State
+```typescript
+const props = await streamer.query.getDynamicGlobalProperties();
+const chainProps = await streamer.query.getChainProperties();
+const config = await streamer.query.getConfig();
+const price = await streamer.query.getCurrentMedianHistoryPrice();
+const rewardFund = await streamer.query.getRewardFund('post');
+```
+
+### Content & Discussions
+```typescript
+const post = await streamer.query.getContent('author', 'permlink');
+const replies = await streamer.query.getContentReplies('author', 'permlink');
+const votes = await streamer.query.getActiveVotes('author', 'permlink');
+
+const trending = await streamer.query.getTrending({ tag: 'hive', limit: 10 });
+const hot = await streamer.query.getHot({ limit: 20 });
+const newPosts = await streamer.query.getCreated({ tag: 'dev', limit: 10 });
+const blog = await streamer.query.getBlog('alice');
+const feed = await streamer.query.getFeed('alice');
+```
+
+### Social Graph
+```typescript
+const followers = await streamer.query.getFollowers('alice', '', 'blog', 100);
+const following = await streamer.query.getFollowing('alice', '', 'blog', 100);
+const counts = await streamer.query.getFollowCount('alice');
+```
+
+### Delegations & Vesting
+```typescript
+const delegations = await streamer.query.getVestingDelegations('alice');
+```
+
+### Account History
+```typescript
+const history = await streamer.query.getAccountHistory('alice', -1, 100);
+```
+
+### Market & Orders
+```typescript
+const orderBook = await streamer.query.getOrderBook(50);
+const openOrders = await streamer.query.getOpenOrders('alice');
+```
+
+### Resource Credits & Voting Power
+```typescript
+const rc = await streamer.query.getRCMana('alice');
+const vp = await streamer.query.getVPMana('alice');
+const rcAccounts = await streamer.query.findRCAccounts(['alice', 'bob']);
+```
+
+### Communities & Notifications
+```typescript
+const community = await streamer.query.getCommunity('hive-12345');
+const communities = await streamer.query.listCommunities({ limit: 50 });
+const notifications = await streamer.query.getAccountNotifications('alice');
+const subs = await streamer.query.listAllSubscriptions('alice');
+```
+
+### Witnesses
+```typescript
+const witness = await streamer.query.getWitnessByAccount('someguy');
+const topWitnesses = await streamer.query.getWitnessesByVote('', 100);
+```
+
+### Blocks & Transactions
+```typescript
+const block = await streamer.query.getBlock(12345678);
+const header = await streamer.query.getBlockHeader(12345678);
+const ops = await streamer.query.getOperations(12345678);
+const txStatus = await streamer.query.findTransaction('trx-id-here');
+```
+
+### Conversions & Savings
+```typescript
+const conversions = await streamer.query.getConversionRequests('alice');
+const collateralized = await streamer.query.getCollateralizedConversionRequests('alice');
+const savingsWithdrawals = await streamer.query.getSavingsWithdrawFrom('alice');
+```
+
+### Proposals & Account Lookup
+```typescript
+const proposals = await streamer.query.getProposals({ status: 'votable', limit: 50 });
+const accounts = await streamer.query.lookupAccounts('ali', 10);
+```
+
+---
+
+## Savings Operations
+
+```typescript
+// Transfer to savings
+await streamer.transferToSavings('myaccount', 'myaccount', '100', 'HIVE');
+await streamer.ops.transferToSavings().from('myaccount').hive(100).send();
+
+// Transfer from savings (3-day delay)
+await streamer.transferFromSavings('myaccount', 'myaccount', '50', 'HBD', 1);
+await streamer.ops.transferFromSavings().from('myaccount').hbd(50).requestId(1).send();
+
+// Cancel pending savings withdrawal
+await streamer.cancelTransferFromSavings('myaccount', 1);
+```
+
+---
+
+## Convert Operations
+
+```typescript
+// Convert HBD to HIVE (3.5-day delay)
+await streamer.convert('myaccount', '10.000 HBD');
+await streamer.ops.convert().from('myaccount').hbd(10).send();
+
+// Collateralized convert HIVE to HBD (instant, with collateral)
+await streamer.collateralizedConvert('myaccount', '10.000 HIVE');
+await streamer.ops.collateralizedConvert().from('myaccount').hive(10).send();
+```
+
+---
+
+## Market Operations
+
+```typescript
+// Create a limit order (sell HIVE for HBD)
+await streamer.ops.limitOrder()
+    .owner('myaccount')
+    .amountToSell('10.000 HIVE')
+    .minToReceive('4.000 HBD')
+    .expiration(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))
+    .send();
+
+// Cancel an order
+await streamer.ops.cancelOrder().owner('myaccount').orderId(12345).send();
+```
+
+---
+
+## Content Operations
+
+```typescript
+// Delete a post or comment
+await streamer.deleteComment('myaccount', 'my-permlink');
+await streamer.ops.deleteComment().author('myaccount').permlink('my-permlink').send();
+
+// Set post options with beneficiaries
+await streamer.ops.commentOptions()
+    .author('myaccount')
+    .permlink('my-post')
+    .maxAcceptedPayout('1000.000 HBD')
+    .percentHbd(5000)
+    .beneficiary('devfund', 500)
+    .beneficiary('curator', 1000)
+    .send();
+```
+
+---
+
+## Vesting Withdrawal Routes
+
+```typescript
+// Route 50% of power-down to another account
+await streamer.ops.withdrawRoute()
+    .from('myaccount')
+    .to('savings-account')
+    .percent(5000)
+    .autoVest(true) // Auto power-up at destination
+    .send();
+```
+
+---
+
+## Witness Operations
+
+```typescript
+// Publish price feed (witnesses only)
+await streamer.feedPublish('mywitness', '0.400 HBD', '1.000 HIVE');
+```
+
+---
+
+## Additional Event Subscriptions
+
+```typescript
+// Watch follows/unfollows/mutes
+streamer.onFollow((data, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+    console.log(`${data.follower} ${data.what.length ? 'followed' : 'unfollowed'} ${data.following}`);
+});
+
+// Watch reblogs
+streamer.onReblog((data, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+    console.log(`${data.account} reblogged @${data.author}/${data.permlink}`);
+});
+
+// Watch account updates
+streamer.onAccountUpdate((data, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+    console.log(`${data.account} updated their account`);
+});
+
+// Watch comment deletions
+streamer.onDeleteComment((data, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+    console.log(`${data.author} deleted ${data.permlink}`);
+});
+
+// Watch market activity
+streamer.onLimitOrder((data, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+    console.log('Market order activity:', data);
+});
+
+// Watch savings transfers
+streamer.onSavingsTransfer((data, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+    console.log('Savings transfer:', data);
+});
+
+// Watch HBD/HIVE conversions
+streamer.onConvert((data, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+    console.log('Conversion:', data);
+});
+```
+
+---
+
+## Content Helpers
+
+```typescript
+import { Utils } from 'hive-stream';
+
+// Generate a permlink from a title
+const permlink = Utils.generatePermlink('My Awesome Post!'); // 'my-awesome-post'
+
+// Generate a reply permlink
+const replyPermlink = Utils.generateReplyPermlink('parent-post'); // 're-parent-post-20260318...'
+
+// Create post metadata JSON
+const metadata = Utils.createPostMetadata({
+    tags: ['hive', 'development'],
+    image: ['https://example.com/hero.png'],
+    description: 'A great post about Hive development',
+    app: 'my-app/1.0'
+});
+```
+
+---
+
+## Account Validation
+
+```typescript
+// Validate account name format
+const error = Utils.validateAccountName('alice'); // null (valid)
+const error2 = Utils.validateAccountName('AB'); // 'Account name must be at least 3 characters'
+
+// Quick boolean check
+const valid = Utils.isValidAccountName('alice'); // true
+
+// Check if account exists on chain
+const exists = await Utils.accountExists(client, 'alice'); // true/false
+```
+
+---
+
+## URL & Link Parsing
+
+```typescript
+// Parse Hive URLs
+Utils.parseHiveUrl('@alice/my-post');
+// { author: 'alice', permlink: 'my-post' }
+
+Utils.parseHiveUrl('https://hive.blog/hive-12345/@alice/my-post');
+// { author: 'alice', permlink: 'my-post', category: 'hive-12345' }
+```
+
+---
+
+## Voting Power & Vote Value
+
+```typescript
+// Calculate current voting mana %
+const mana = Utils.calculateVotingMana(account); // 98.5
+
+// Get effective vesting shares (own + received - delegated)
+const effectiveVests = Utils.getEffectiveVestingShares(account);
+
+// Estimate vote value in USD
+const voteValue = Utils.estimateVoteValue(
+    mana,           // current voting mana %
+    100,            // vote weight %
+    effectiveVests, // effective vesting shares
+    rewardFund,     // from query.getRewardFund()
+    medianPrice     // from query.getCurrentMedianHistoryPrice()
+);
+```
+
+---
+
+## Memo Encryption
+
+```typescript
+// Encode a private memo
+const encoded = Utils.encodeMemo(privateMemoKey, receiverPublicMemoKey, 'secret message');
+
+// Decode a private memo
+const decoded = Utils.decodeMemo(privateMemoKey, encodedMemo);
+```
+
+---
+
 ## Utilities
 The library includes helpers for JSON parsing, randomness, and transfer verification. See `src/utils.ts` for details.
 

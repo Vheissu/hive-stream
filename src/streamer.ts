@@ -8,13 +8,19 @@ import BigNumber from 'bignumber.js';
 import { Utils } from './utils';
 import {
     HiveBurnBuilder,
+    HiveCancelOrderBuilder,
     HiveClaimRewardsBuilder,
+    HiveCollateralizedConvertBuilder,
+    HiveCommentOptionsBuilder,
+    HiveConvertBuilder,
     HiveDelegateBuilder,
+    HiveDeleteCommentBuilder,
     HiveEscrowTransferBuilder,
     HiveEngineTokenBurnBuilder,
     HiveEngineTokenIssueBuilder,
     HiveEngineTokenTransferBuilder,
     HiveFollowBuilder,
+    HiveLimitOrderBuilder,
     HivePowerDownBuilder,
     HivePowerUpBuilder,
     HiveProposalBuilder,
@@ -22,11 +28,13 @@ import {
     HiveReblogBuilder,
     HiveRemoveProposalsBuilder,
     HiveRecurrentTransferBuilder,
+    HiveSavingsTransferBuilder,
     HiveSetProxyBuilder,
     HiveTransferBuilder,
     HiveUpdateProfileBuilder,
     HiveVoteBuilder,
     HiveWitnessVoteBuilder,
+    HiveWithdrawRouteBuilder,
     IncomingTransfersBuilder
 } from './builders';
 import { ConfigInput, ConfigInterface, createConfig, normalizeConfigInput } from './config';
@@ -51,6 +59,7 @@ import {
     FlowSubscriptionHandle,
     OpsNamespace,
     MoneyNamespace,
+    QueryNamespace,
     PlannedIncomingTransferRoutes,
     PlannedFlowRoute,
     SubscriptionCallback,
@@ -85,6 +94,13 @@ export class Streamer {
     private powerDownSubscriptions: SubscriptionCallback[] = [];
     private claimRewardsSubscriptions: SubscriptionCallback[] = [];
     private witnessVoteSubscriptions: SubscriptionCallback[] = [];
+    private followSubscriptions: SubscriptionCallback[] = [];
+    private reblogSubscriptions: SubscriptionCallback[] = [];
+    private accountUpdateSubscriptions: SubscriptionCallback[] = [];
+    private deleteCommentSubscriptions: SubscriptionCallback[] = [];
+    private limitOrderSubscriptions: SubscriptionCallback[] = [];
+    private savingsSubscriptions: SubscriptionCallback[] = [];
+    private convertSubscriptions: SubscriptionCallback[] = [];
 
     private attempts = 0;
 
@@ -195,6 +211,94 @@ export class Streamer {
         setProxy: () => new HiveSetProxyBuilder(this),
         clearProxy: () => new HiveSetProxyBuilder(this, true),
         updateProfile: () => new HiveUpdateProfileBuilder(this),
+        transferToSavings: () => new HiveSavingsTransferBuilder(this, 'to'),
+        transferFromSavings: () => new HiveSavingsTransferBuilder(this, 'from'),
+        convert: () => new HiveConvertBuilder(this),
+        collateralizedConvert: () => new HiveCollateralizedConvertBuilder(this),
+        deleteComment: () => new HiveDeleteCommentBuilder(this),
+        limitOrder: () => new HiveLimitOrderBuilder(this),
+        cancelOrder: () => new HiveCancelOrderBuilder(this),
+        withdrawRoute: () => new HiveWithdrawRouteBuilder(this),
+        commentOptions: () => new HiveCommentOptionsBuilder(this),
+    };
+    public readonly query: QueryNamespace = {
+        getDynamicGlobalProperties: () => this.client.database.getDynamicGlobalProperties(),
+        getChainProperties: () => this.client.database.getChainProperties(),
+        getCurrentMedianHistoryPrice: () => this.client.database.getCurrentMedianHistoryPrice(),
+        getRewardFund: (name = 'post') => this.client.database.call('get_reward_fund', [name]),
+        getFollowers: (account, start = '', type = 'blog', limit = 1000) =>
+            this.client.call('condenser_api', 'get_followers', [account, start, type, limit]),
+        getFollowing: (account, start = '', type = 'blog', limit = 1000) =>
+            this.client.call('condenser_api', 'get_following', [account, start, type, limit]),
+        getFollowCount: (account) =>
+            this.client.call('condenser_api', 'get_follow_count', [account]),
+        getContent: (author, permlink) =>
+            this.client.call('condenser_api', 'get_content', [author, permlink]),
+        getContentReplies: (author, permlink) =>
+            this.client.call('condenser_api', 'get_content_replies', [author, permlink]),
+        getDiscussions: (by, query) => this.client.database.getDiscussions(by as any, query as any),
+        getBlog: (account, options = {}) =>
+            this.client.database.getDiscussions('blog', { tag: account, limit: 20, ...options } as any),
+        getFeed: (account, options = {}) =>
+            this.client.database.getDiscussions('feed', { tag: account, limit: 20, ...options } as any),
+        getTrending: (options = {}) =>
+            this.client.database.getDiscussions('trending', { limit: 20, ...options } as any),
+        getHot: (options = {}) =>
+            this.client.database.getDiscussions('hot', { limit: 20, ...options } as any),
+        getCreated: (options = {}) =>
+            this.client.database.getDiscussions('created', { limit: 20, ...options } as any),
+        getActiveVotes: (author, permlink) =>
+            this.client.call('condenser_api', 'get_active_votes', [author, permlink]),
+        getVestingDelegations: (account, from = '', limit = 100) =>
+            this.client.database.getVestingDelegations(account, from, limit),
+        getAccountHistory: (account, from = -1, limit = 100) =>
+            this.client.database.getAccountHistory(account, from, limit),
+        getOrderBook: (limit = 50) =>
+            this.client.call('condenser_api', 'get_order_book', [limit]),
+        getOpenOrders: (account) =>
+            this.client.call('condenser_api', 'get_open_orders', [account]),
+        getRCMana: (account) => this.client.rc.getRCMana(account),
+        getVPMana: (account) => this.client.rc.getVPMana(account),
+        findRCAccounts: (accounts) => this.client.rc.findRCAccounts(accounts),
+        getCommunity: (name) =>
+            this.client.call('bridge', 'get_community', { name }),
+        listCommunities: (options = {}) =>
+            this.client.call('bridge', 'list_communities', { limit: 100, ...options }),
+        getAccountNotifications: (account, options = {}) =>
+            this.client.call('bridge', 'account_notifications', { account, limit: 50, ...options }),
+        listAllSubscriptions: (account) =>
+            this.client.call('bridge', 'list_all_subscriptions', { account }),
+        findTransaction: (transactionId) =>
+            this.client.transaction.findTransaction(transactionId),
+        getWitnessByAccount: (account) =>
+            this.client.call('condenser_api', 'get_witness_by_account', [account]),
+        getWitnesses: (ids) =>
+            this.client.call('condenser_api', 'get_witnesses', [ids]),
+        getWitnessesByVote: (from, limit) =>
+            this.client.call('condenser_api', 'get_witnesses_by_vote', [from, limit]),
+        getBlock: (blockNumber) => this.client.database.getBlock(blockNumber),
+        getBlockHeader: (blockNumber) => this.client.database.getBlockHeader(blockNumber),
+        getOperations: (blockNumber, onlyVirtual = false) =>
+            this.client.database.getOperations(blockNumber, onlyVirtual),
+        getConfig: () => this.client.database.getConfig(),
+        lookupAccounts: (lowerBound, limit) =>
+            this.client.call('condenser_api', 'lookup_accounts', [lowerBound, limit]),
+        lookupWitnessAccounts: (lowerBound, limit) =>
+            this.client.call('condenser_api', 'lookup_witness_accounts', [lowerBound, limit]),
+        getConversionRequests: (account) =>
+            this.client.call('condenser_api', 'get_conversion_requests', [account]),
+        getCollateralizedConversionRequests: (account) =>
+            this.client.call('condenser_api', 'get_collateralized_conversion_requests', [account]),
+        getSavingsWithdrawFrom: (account) =>
+            this.client.call('condenser_api', 'get_savings_withdraw_from', [account]),
+        getProposals: (options = {}) =>
+            this.client.call('condenser_api', 'list_proposals', [
+                options.start || '',
+                options.limit || 100,
+                options.order || 'by_total_votes',
+                options.order_direction || 'descending',
+                options.status || 'votable'
+            ]),
     };
 
     constructor(userConfig: ConfigInput = {}) {
@@ -1607,6 +1711,61 @@ export class Streamer {
                 sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
             });
         }
+
+        // Follow/unfollow/mute/reblog via custom_json with id 'follow'
+        if (operationType === 'custom_json' && operationData?.id === 'follow') {
+            const json = Utils.jsonParse(operationData.json);
+            if (Array.isArray(json) && json.length === 2) {
+                const [type, payload] = json;
+
+                if (type === 'follow' && payload && (this.followSubscriptions.length > 0)) {
+                    this.followSubscriptions.forEach(sub => {
+                        sub.callback(payload, blockNumber, blockId, prevBlockId, trxId, blockTime);
+                    });
+                }
+
+                if (type === 'reblog' && payload && (this.reblogSubscriptions.length > 0)) {
+                    this.reblogSubscriptions.forEach(sub => {
+                        sub.callback(payload, blockNumber, blockId, prevBlockId, trxId, blockTime);
+                    });
+                }
+            }
+        }
+
+        // Account updates
+        if (operationType === 'account_update' || operationType === 'account_update2') {
+            this.accountUpdateSubscriptions.forEach(sub => {
+                sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
+            });
+        }
+
+        // Delete comment
+        if (operationType === 'delete_comment') {
+            this.deleteCommentSubscriptions.forEach(sub => {
+                sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
+            });
+        }
+
+        // Limit orders
+        if (operationType === 'limit_order_create' || operationType === 'limit_order_create2' || operationType === 'limit_order_cancel') {
+            this.limitOrderSubscriptions.forEach(sub => {
+                sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
+            });
+        }
+
+        // Savings transfers
+        if (operationType === 'transfer_to_savings' || operationType === 'transfer_from_savings' || operationType === 'cancel_transfer_from_savings') {
+            this.savingsSubscriptions.forEach(sub => {
+                sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
+            });
+        }
+
+        // Convert operations
+        if (operationType === 'convert' || operationType === 'collateralized_convert') {
+            this.convertSubscriptions.forEach(sub => {
+                sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
+            });
+        }
     }
 
     private normalizeContractPayload(payload: any): ContractPayload | null {
@@ -2554,6 +2713,102 @@ export class Streamer {
         return Utils.getAccounts(this.client, usernames);
     }
 
+    // ─── Savings Operations ─────────────────────────────────────────────
+
+    public transferToSavings(from: string, to: string, amount: string, symbol: string, memo: string = '') {
+        return Utils.transferToSavings(this.client, this.config, from, to, amount, symbol, memo);
+    }
+
+    public transferFromSavings(from: string, to: string, amount: string, symbol: string, requestId: number = 0, memo: string = '') {
+        return Utils.transferFromSavings(this.client, this.config, from, to, amount, symbol, requestId, memo);
+    }
+
+    public cancelTransferFromSavings(from: string, requestId: number) {
+        return Utils.cancelTransferFromSavings(this.client, this.config, from, requestId);
+    }
+
+    // ─── Convert Operations ─────────────────────────────────────────────
+
+    public convert(owner: string, amount: string, requestId: number = 0) {
+        return Utils.convert(this.client, this.config, owner, amount, requestId);
+    }
+
+    public collateralizedConvert(owner: string, amount: string, requestId: number = 0) {
+        return Utils.collateralizedConvert(this.client, this.config, owner, amount, requestId);
+    }
+
+    // ─── Content Operations ─────────────────────────────────────────────
+
+    public deleteComment(author: string, permlink: string) {
+        return Utils.deleteComment(this.client, this.config, author, permlink);
+    }
+
+    public commentOptions(author: string, permlink: string, options: {
+        max_accepted_payout?: string;
+        percent_hbd?: number;
+        allow_votes?: boolean;
+        allow_curation_rewards?: boolean;
+        extensions?: any[];
+    }) {
+        return Utils.commentOptions(this.client, this.config, author, permlink, options);
+    }
+
+    // ─── Market Operations ──────────────────────────────────────────────
+
+    public limitOrderCreate(owner: string, orderId: number, amountToSell: string, minToReceive: string, fillOrKill: boolean = false, expiration?: string | Date, signingKeys?: string | string[]) {
+        return Utils.limitOrderCreate(this.client, this.config, owner, orderId, amountToSell, minToReceive, fillOrKill, expiration);
+    }
+
+    public limitOrderCancel(owner: string, orderId: number, signingKeys?: string | string[]) {
+        return Utils.limitOrderCancel(this.client, this.config, owner, orderId);
+    }
+
+    // ─── Vesting Route ──────────────────────────────────────────────────
+
+    public setWithdrawVestingRoute(fromAccount: string, toAccount: string, percent: number, autoVest: boolean = false, signingKeys?: string | string[]) {
+        return Utils.setWithdrawVestingRoute(this.client, this.config, fromAccount, toAccount, percent, autoVest, signingKeys);
+    }
+
+    // ─── Account Creation ───────────────────────────────────────────────
+
+    public claimAccount(creator: string, fee: string = '0.000 HIVE') {
+        return Utils.claimAccount(this.client, this.config, creator, fee);
+    }
+
+    public feedPublish(publisher: string, baseAmount: string, quoteAmount: string = '1.000 HIVE') {
+        return Utils.feedPublish(this.client, this.config, publisher, baseAmount, quoteAmount);
+    }
+
+    // ─── Additional Event Subscriptions ─────────────────────────────────
+
+    public onFollow(callback: (data: { follower: string; following: string; what: string[] }, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
+        this.followSubscriptions.push({ callback });
+    }
+
+    public onReblog(callback: (data: { account: string; author: string; permlink: string }, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
+        this.reblogSubscriptions.push({ callback });
+    }
+
+    public onAccountUpdate(callback: (data: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
+        this.accountUpdateSubscriptions.push({ callback });
+    }
+
+    public onDeleteComment(callback: (data: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
+        this.deleteCommentSubscriptions.push({ callback });
+    }
+
+    public onLimitOrder(callback: (data: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
+        this.limitOrderSubscriptions.push({ callback });
+    }
+
+    public onSavingsTransfer(callback: (data: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
+        this.savingsSubscriptions.push({ callback });
+    }
+
+    public onConvert(callback: (data: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
+        this.convertSubscriptions.push({ callback });
+    }
+
     // Memory management: cleanup subscriptions
     private cleanupSubscriptions(): void {
         // Limit subscription arrays to prevent memory leaks
@@ -2620,6 +2875,19 @@ export class Streamer {
         if (this.witnessVoteSubscriptions.length > this.maxSubscriptions) {
             this.witnessVoteSubscriptions = this.witnessVoteSubscriptions.slice(-this.maxSubscriptions);
             console.warn(`[Streamer] Trimmed witnessVoteSubscriptions to ${this.maxSubscriptions} items`);
+        }
+
+        const extraArrays = [
+            'followSubscriptions', 'reblogSubscriptions', 'accountUpdateSubscriptions',
+            'deleteCommentSubscriptions', 'limitOrderSubscriptions', 'savingsSubscriptions',
+            'convertSubscriptions'
+        ] as const;
+
+        for (const name of extraArrays) {
+            if (this[name].length > this.maxSubscriptions) {
+                (this as any)[name] = this[name].slice(-this.maxSubscriptions);
+                console.warn(`[Streamer] Trimmed ${name} to ${this.maxSubscriptions} items`);
+            }
         }
     }
     
