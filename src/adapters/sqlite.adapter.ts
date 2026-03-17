@@ -14,7 +14,7 @@ export class SqliteAdapter extends AdapterBase {
     
     constructor(dbPath?: string) {
         super();
-        this.dbPath = dbPath || path.resolve(__dirname, 'hive-stream.db');
+        this.dbPath = dbPath || path.resolve(process.cwd(), 'hive-stream.db');
         this.db = knex({
             client: 'better-sqlite3',
             connection: {
@@ -233,8 +233,8 @@ export class SqliteAdapter extends AdapterBase {
                     contractPayload: JSON.parse(row.contractPayload) ?? {}
                 }));
             }
-            
-            return null;
+
+            return [];
         } catch (error) {
             console.error('[SqliteAdapter] Error getting transfers:', error);
             throw error;
@@ -253,8 +253,8 @@ export class SqliteAdapter extends AdapterBase {
                     data: JSON.parse(row.data) ?? {}
                 }));
             }
-            
-            return null;
+
+            return [];
         } catch (error) {
             console.error('[SqliteAdapter] Error getting events:', error);
             throw error;
@@ -274,8 +274,8 @@ export class SqliteAdapter extends AdapterBase {
                     data: JSON.parse(row.data) ?? {}
                 }));
             }
-            
-            return null;
+
+            return [];
         } catch (error) {
             console.error('[SqliteAdapter] Error getting events by contract:', error);
             throw error;
@@ -295,8 +295,8 @@ export class SqliteAdapter extends AdapterBase {
                     data: JSON.parse(row.data) ?? {}
                 }));
             }
-            
-            return null;
+
+            return [];
         } catch (error) {
             console.error('[SqliteAdapter] Error getting events by account:', error);
             throw error;
@@ -315,8 +315,8 @@ export class SqliteAdapter extends AdapterBase {
                     contractPayload: JSON.parse(row.contractPayload) ?? {}
                 }));
             }
-            
-            return null;
+
+            return [];
         } catch (error) {
             console.error('[SqliteAdapter] Error getting transfers by contract:', error);
             throw error;
@@ -335,8 +335,8 @@ export class SqliteAdapter extends AdapterBase {
                     contractPayload: JSON.parse(row.contractPayload) ?? {}
                 }));
             }
-            
-            return null;
+
+            return [];
         } catch (error) {
             console.error('[SqliteAdapter] Error getting transfers by account:', error);
             throw error;
@@ -355,8 +355,8 @@ export class SqliteAdapter extends AdapterBase {
                     contractPayload: JSON.parse(row.contractPayload) ?? {}
                 }));
             }
-            
-            return null;
+
+            return [];
         } catch (error) {
             console.error('[SqliteAdapter] Error getting transfers by blockId:', error);
             throw error;
@@ -374,8 +374,8 @@ export class SqliteAdapter extends AdapterBase {
                     contractPayload: JSON.parse(row.contractPayload) ?? {}
                 }));
             }
-            
-            return null;
+
+            return [];
         } catch (error) {
             console.error('[SqliteAdapter] Error getting JSON:', error);
             throw error;
@@ -394,8 +394,8 @@ export class SqliteAdapter extends AdapterBase {
                     contractPayload: JSON.parse(row.contractPayload) ?? {}
                 }));
             }
-            
-            return null;
+
+            return [];
         } catch (error) {
             console.error('[SqliteAdapter] Error getting JSON by contract:', error);
             throw error;
@@ -414,8 +414,8 @@ export class SqliteAdapter extends AdapterBase {
                     contractPayload: JSON.parse(row.contractPayload) ?? {}
                 }));
             }
-            
-            return null;
+
+            return [];
         } catch (error) {
             console.error('[SqliteAdapter] Error getting JSON by account:', error);
             throw error;
@@ -434,8 +434,8 @@ export class SqliteAdapter extends AdapterBase {
                     contractPayload: JSON.parse(row.contractPayload) ?? {}
                 }));
             }
-            
-            return null;
+
+            return [];
         } catch (error) {
             console.error('[SqliteAdapter] Error getting JSON by blockId:', error);
             throw error;
@@ -452,7 +452,7 @@ export class SqliteAdapter extends AdapterBase {
             }
 
             const rows = await query;
-            return rows.length ? rows : null;
+            return rows.length ? rows : [];
         } catch (error) {
             console.error('[SqliteAdapter] Error getting exchange balances:', error);
             throw error;
@@ -481,7 +481,7 @@ export class SqliteAdapter extends AdapterBase {
             }
 
             const rows = await query;
-            return rows.length ? rows : null;
+            return rows.length ? rows : [];
         } catch (error) {
             console.error('[SqliteAdapter] Error getting exchange orders:', error);
             throw error;
@@ -508,7 +508,7 @@ export class SqliteAdapter extends AdapterBase {
             }
 
             const rows = await query;
-            return rows.length ? rows : null;
+            return rows.length ? rows : [];
         } catch (error) {
             console.error('[SqliteAdapter] Error getting exchange trades:', error);
             throw error;
@@ -542,7 +542,7 @@ export class SqliteAdapter extends AdapterBase {
                 }));
             }
 
-            return null;
+            return [];
         } catch (error) {
             console.error('[SqliteAdapter] Error getting exchange order book snapshots:', error);
             throw error;
@@ -562,7 +562,7 @@ export class SqliteAdapter extends AdapterBase {
     public async find(table: string, query: Record<string, any>) {
         try {
             const rows = await this.db(table).where(query);
-            return rows.length ? rows : null;
+            return rows.length ? rows : [];
         } catch (error) {
             console.error(`[SqliteAdapter] Error finding in table ${table}:`, error);
             throw error;

@@ -3,7 +3,7 @@
 module.exports = {
   apps: [
     {
-      name: 'steem-stream',
+      name: 'hive-stream',
       script: 'index.js',
       ignore_watch: ['node_modules'],
       env: {

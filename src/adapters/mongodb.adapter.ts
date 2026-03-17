@@ -20,7 +20,7 @@ export class MongodbAdapter extends AdapterBase {
     private blockNumber: number;
     private lastBlockNumber: number;
     private blockId: string;
-    private prevBlockId;
+    private prevBlockId: string;
     private transactionId: string;
 
     constructor(uri: string, database: string, options = {}) {
@@ -32,31 +32,23 @@ export class MongodbAdapter extends AdapterBase {
     }
 
     public async getDbInstance() {
-        try {
-            if (this.db) {
-                return this.db;
-            }
-
-            if (!this.client) {
-                this.client = new MongoClient(this.mongo.uri, this.mongo.options);
-            }
-
-            await this.client.connect();
-            this.db = this.client.db(this.mongo.database);
-
+        if (this.db) {
             return this.db;
-        } catch (e) {
-            throw e;
         }
+
+        if (!this.client) {
+            this.client = new MongoClient(this.mongo.uri, this.mongo.options);
+        }
+
+        await this.client.connect();
+        this.db = this.client.db(this.mongo.database);
+
+        return this.db;
     }
 
     public async create(): Promise<boolean> {
-        try {
-            await this.getDbInstance();
-            return true;
-        } catch (e) {
-            throw e;
-        }
+        await this.getDbInstance();
+        return true;
     }
 
     public async loadActions(): Promise<TimeAction[]> {
@@ -100,6 +92,8 @@ export class MongodbAdapter extends AdapterBase {
         } catch (e) {
             throw e;
         }
+
+        return null;
     }
 
     public async saveState(data: any): Promise<boolean> {
@@ -197,7 +191,7 @@ export class MongodbAdapter extends AdapterBase {
         const collection = this.db.collection(table);
         const documents = await collection.find(queryObject).toArray();
 
-        return documents.length ? documents : null;
+        return documents.length ? documents : [];
     }
 
     public async findOne(table: string, queryObject: any): Promise<any> {
@@ -269,7 +263,7 @@ export class MongodbAdapter extends AdapterBase {
             const collection = this.db.collection('events');
             const events = await collection.find({}).sort({ date: -1, _id: -1 }).toArray();
             
-            return events.length ? events : null;
+            return events.length ? events : [];
         } catch (error) {
             console.error('[MongodbAdapter] Error getting events:', error);
             throw error;
@@ -285,7 +279,7 @@ export class MongodbAdapter extends AdapterBase {
             const collection = this.db.collection('events');
             const events = await collection.find({ contract }).sort({ date: -1, _id: -1 }).toArray();
             
-            return events.length ? events : null;
+            return events.length ? events : [];
         } catch (error) {
             console.error('[MongodbAdapter] Error getting events by contract:', error);
             throw error;
@@ -308,7 +302,7 @@ export class MongodbAdapter extends AdapterBase {
                 ]
             }).sort({ date: -1, _id: -1 }).toArray();
             
-            return events.length ? events : null;
+            return events.length ? events : [];
         } catch (error) {
             console.error('[MongodbAdapter] Error getting events by account:', error);
             throw error;
@@ -324,7 +318,7 @@ export class MongodbAdapter extends AdapterBase {
             const collection = this.db.collection('transfers');
             const transfers = await collection.find({}).sort({ blockNumber: -1, _id: -1 }).toArray();
             
-            return transfers.length ? transfers : null;
+            return transfers.length ? transfers : [];
         } catch (error) {
             console.error('[MongodbAdapter] Error getting transfers:', error);
             throw error;
@@ -340,7 +334,7 @@ export class MongodbAdapter extends AdapterBase {
             const collection = this.db.collection('transfers');
             const transfers = await collection.find({ contractName: contract }).sort({ blockNumber: -1, _id: -1 }).toArray();
             
-            return transfers.length ? transfers : null;
+            return transfers.length ? transfers : [];
         } catch (error) {
             console.error('[MongodbAdapter] Error getting transfers by contract:', error);
             throw error;
@@ -356,7 +350,7 @@ export class MongodbAdapter extends AdapterBase {
             const collection = this.db.collection('transfers');
             const transfers = await collection.find({ sender: account }).sort({ blockNumber: -1, _id: -1 }).toArray();
             
-            return transfers.length ? transfers : null;
+            return transfers.length ? transfers : [];
         } catch (error) {
             console.error('[MongodbAdapter] Error getting transfers by account:', error);
             throw error;
@@ -372,7 +366,7 @@ export class MongodbAdapter extends AdapterBase {
             const collection = this.db.collection('transfers');
             const transfers = await collection.find({ blockId }).sort({ blockNumber: -1, _id: -1 }).toArray();
             
-            return transfers.length ? transfers : null;
+            return transfers.length ? transfers : [];
         } catch (error) {
             console.error('[MongodbAdapter] Error getting transfers by block ID:', error);
             throw error;
@@ -388,7 +382,7 @@ export class MongodbAdapter extends AdapterBase {
             const collection = this.db.collection('customJson');
             const jsons = await collection.find({}).sort({ blockNumber: -1, _id: -1 }).toArray();
             
-            return jsons.length ? jsons : null;
+            return jsons.length ? jsons : [];
         } catch (error) {
             console.error('[MongodbAdapter] Error getting JSON:', error);
             throw error;
@@ -404,7 +398,7 @@ export class MongodbAdapter extends AdapterBase {
             const collection = this.db.collection('customJson');
             const jsons = await collection.find({ contractName: contract }).sort({ blockNumber: -1, _id: -1 }).toArray();
             
-            return jsons.length ? jsons : null;
+            return jsons.length ? jsons : [];
         } catch (error) {
             console.error('[MongodbAdapter] Error getting JSON by contract:', error);
             throw error;
@@ -420,7 +414,7 @@ export class MongodbAdapter extends AdapterBase {
             const collection = this.db.collection('customJson');
             const jsons = await collection.find({ sender: account }).sort({ blockNumber: -1, _id: -1 }).toArray();
             
-            return jsons.length ? jsons : null;
+            return jsons.length ? jsons : [];
         } catch (error) {
             console.error('[MongodbAdapter] Error getting JSON by account:', error);
             throw error;
@@ -436,7 +430,7 @@ export class MongodbAdapter extends AdapterBase {
             const collection = this.db.collection('customJson');
             const jsons = await collection.find({ blockId }).sort({ blockNumber: -1, _id: -1 }).toArray();
             
-            return jsons.length ? jsons : null;
+            return jsons.length ? jsons : [];
         } catch (error) {
             console.error('[MongodbAdapter] Error getting JSON by block ID:', error);
             throw error;

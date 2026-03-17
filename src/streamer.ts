@@ -1,7 +1,7 @@
 import { AdapterBase } from './adapters/base.adapter';
 import { Api } from './api';
 import { SqliteAdapter } from './adapters/sqlite.adapter';
-import { sleep } from '@hiveio/dhive/lib/utils';
+
 import { TimeAction } from './actions';
 import { Client } from '@hiveio/dhive';
 import BigNumber from 'bignumber.js';
@@ -75,7 +75,7 @@ export class Streamer {
 
     private config: ConfigInterface = createConfig();
     private client: Client;
-    private hive;
+    private hive: any;
 
     private username: string;
     private postingKey: string;
@@ -131,6 +131,7 @@ export class Streamer {
     private accountCache = new Map<string, { data: any, timestamp: number }>();
     private readonly cacheTimeout = 300000; // 5 minutes
     private readonly maxCacheSize = 1000;
+    private lastCacheCleanup = Date.now();
 
     private utils = Utils;
     public readonly money: MoneyNamespace = {
@@ -302,6 +303,10 @@ export class Streamer {
                 has: (key: string) => store.has(key),
                 add: (key: string) => {
                     store.add(key);
+                    if (store.size > 10000) {
+                        const oldest = store.values().next().value;
+                        store.delete(oldest);
+                    }
                 }
             };
         }
@@ -1034,7 +1039,7 @@ export class Streamer {
         this.adapterInitialized = false;
         this.adapterInitializationPromise = null;
 
-        await sleep(25);
+        await Utils.sleep(25);
     }
 
     public async startApiServer(port: number = this.config.API_PORT): Promise<Api> {
@@ -1119,7 +1124,7 @@ export class Streamer {
                 console.log(`Last block number: `, this.lastBlockNumber);
             }
 
-            const BLOCKS_BEHIND = parseInt(this.config.BLOCKS_BEHIND_WARNING as any, 10);
+            const BLOCKS_BEHIND = this.config.BLOCKS_BEHIND_WARNING;
             const maxBatchSize = Math.max(1, this.config.CATCH_UP_BATCH_SIZE || 1);
             const blocksBehind = Math.max(0, props.head_block_number - this.lastBlockNumber);
             const blocksToProcess = Math.min(blocksBehind, maxBatchSize);
@@ -1196,11 +1201,11 @@ export class Streamer {
 
         this.blockId = block.block_id;
         this.previousBlockId = block.previous;
-        this.transactionId = block.transaction_ids[1];
+        this.transactionId = block.transaction_ids[0];
         this.blockTime = blockTime;
 
         if (this.adapter?.processBlock) {
-            this.adapter.processBlock(block);
+            await this.adapter.processBlock(block);
         }
 
         // Hive operations are order-sensitive, so process them sequentially.
@@ -1235,6 +1240,34 @@ export class Streamer {
 
         this.lastBlockNumber = blockNumber;
         this.saveStateThrottled();
+        this.cleanupCaches();
+    }
+
+    private cleanupCaches(): void {
+        const now = Date.now();
+        if (now - this.lastCacheCleanup < 60000) {
+            return;
+        }
+        this.lastCacheCleanup = now;
+
+        if (this.blockCache.size > 100) {
+            const entriesToRemove = this.blockCache.size - 100;
+            const iterator = this.blockCache.keys();
+            for (let i = 0; i < entriesToRemove; i++) {
+                const key = iterator.next().value;
+                this.blockCache.delete(key);
+            }
+        }
+
+        for (const [key, value] of this.accountCache) {
+            if (now - value.timestamp > this.cacheTimeout) {
+                this.accountCache.delete(key);
+            }
+        }
+
+        if (this.transactionCache.size > this.maxCacheSize) {
+            this.transactionCache.clear();
+        }
     }
 
     public async processOperation(op: [string, any], blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date): Promise<void> {
@@ -2307,13 +2340,13 @@ export class Streamer {
         return Utils.verifyTransfer(transaction, from, to, amount);
     }
 
-    public onComment(callback: any): void {
+    public onComment(callback: (data: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
         this.commentSubscriptions.push({
             callback
         });
     }
 
-    public onPost(callback: any): void {
+    public onPost(callback: (data: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
         this.postSubscriptions.push({
             callback
         });
@@ -2326,31 +2359,31 @@ export class Streamer {
         });
     }
 
-    public onCustomJson(callback: any): void {
-        this.customJsonSubscriptions.push({ callback }); 
+    public onCustomJson(callback: (data: any, info: { sender: string; isSignedWithActiveKey: boolean }, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
+        this.customJsonSubscriptions.push({ callback });
     }
 
-    public onCustomJsonId(callback: any, id: string): void {
+    public onCustomJsonId(id: string, callback: (data: any, info: { sender: string; isSignedWithActiveKey: boolean }, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
         this.customJsonIdSubscriptions.push({ callback, id });
     }
 
-    public onHiveEngine(callback: any): void {
+    public onHiveEngine(callback: (contractName: string, contractAction: string, contractPayload: any, sender: string, data: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
         this.customJsonHiveEngineSubscriptions.push({ callback });
     }
 
-    public onEscrowTransfer(callback: any): void {
+    public onEscrowTransfer(callback: (data: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
         this.escrowSubscriptions.push({ type: 'escrow_transfer', callback });
     }
 
-    public onEscrowApprove(callback: any): void {
+    public onEscrowApprove(callback: (data: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
         this.escrowSubscriptions.push({ type: 'escrow_approve', callback });
     }
 
-    public onEscrowDispute(callback: any): void {
+    public onEscrowDispute(callback: (data: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
         this.escrowSubscriptions.push({ type: 'escrow_dispute', callback });
     }
 
-    public onEscrowRelease(callback: any): void {
+    public onEscrowRelease(callback: (data: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
         this.escrowSubscriptions.push({ type: 'escrow_release', callback });
     }
     

@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import type { Server } from 'http';
 
 interface ApiOptions {
@@ -17,6 +18,7 @@ export class Api {
         this.streamer = streamer;
         this.port = options.port ?? 5001;
 
+        this.app.use(cors());
         this.setupRoutes();
     }
 

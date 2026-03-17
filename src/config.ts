@@ -99,8 +99,8 @@ export const CONFIG_KEY_ALIASES: Record<ConfigAliasKey, keyof ConfigInterface> =
 };
 
 export const Config: ConfigInterface = {
-    ACTIVE_KEY: process.env.ACTIVE_KEY,
-    POSTING_KEY: process.env.POSTING_KEY,
+    ACTIVE_KEY: '',
+    POSTING_KEY: '',
 
     JSON_ID: 'hivestream',
 
