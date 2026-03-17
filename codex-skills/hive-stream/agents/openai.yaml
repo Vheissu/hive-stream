@@ -1,0 +1,4 @@
+interface:
+  display_name: "Hive Stream"
+  short_description: "Build Hive apps with the hive-stream package."
+  default_prompt: "Use $hive-stream to implement or debug a Hive app feature on top of the hive-stream package."

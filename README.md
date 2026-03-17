@@ -36,6 +36,19 @@ console.log(getHiveStreamMetadata().writeOperations);
 
 This metadata is static runtime data (no network calls) and includes config defaults, event callback signatures, write operation signatures, adapter metadata, contract trigger info, and valid `TimeAction` values.
 
+## AI Skills
+
+This repo now includes installable AI skills for both Claude Code and Codex, tailored to building on top of `hive-stream` instead of raw Hive RPC primitives.
+
+Quick locations:
+
+- Claude bundle: `.claude/skills/hive-stream`
+- Codex bundle: `codex-skills/hive-stream`
+
+For full install and usage instructions, see [AI-SKILLS.md](AI-SKILLS.md).
+
+Both skill bundles include focused references for package surface, contracts and triggers, transfer flows and builder APIs, and the built-in contract catalog.
+
 ## Configuration
 
 The `Streamer` object can accept an object of configuration values which are all optional. However, some operations like transferring Hive Engine tokens or other operations on the blockchain that are not READ ONLY, will require the active key and/or posting keys supplied as well as a username.
