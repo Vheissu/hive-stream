@@ -1602,6 +1602,618 @@ export const Utils = {
         const encodedRedirectUri = encodeURIComponent(redirectUri);
         
         return `https://hivesigner.com/sign/transfer?to=${encodedTo}&memo=${encodedMemo}&amount=${encodedAmount}&redirect_uri=${encodedRedirectUri}`;
+    },
+
+    // ─── Social Operations ───────────────────────────────────────────────
+
+    /**
+     * Follows a Hive user by broadcasting a custom_json 'follow' operation
+     * @param client - The Hive client instance
+     * @param config - Configuration containing the posting key
+     * @param follower - The account doing the following
+     * @param following - The account to follow
+     * @returns Promise resolving to the broadcast result
+     */
+    follow(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        follower: string,
+        following: string
+    ) {
+        if (!client || !config.POSTING_KEY || !follower || !following) {
+            throw new Error('Missing required parameters for follow operation');
+        }
+
+        const json = JSON.stringify(['follow', {
+            follower,
+            following,
+            what: ['blog']
+        }]);
+
+        const key = PrivateKey.fromString(config.POSTING_KEY);
+
+        return client.broadcast.json({
+            required_auths: [],
+            required_posting_auths: [follower],
+            id: 'follow',
+            json
+        }, key);
+    },
+
+    /**
+     * Unfollows a Hive user by broadcasting a custom_json 'follow' operation with empty what
+     * @param client - The Hive client instance
+     * @param config - Configuration containing the posting key
+     * @param follower - The account doing the unfollowing
+     * @param following - The account to unfollow
+     * @returns Promise resolving to the broadcast result
+     */
+    unfollow(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        follower: string,
+        following: string
+    ) {
+        if (!client || !config.POSTING_KEY || !follower || !following) {
+            throw new Error('Missing required parameters for unfollow operation');
+        }
+
+        const json = JSON.stringify(['follow', {
+            follower,
+            following,
+            what: []
+        }]);
+
+        const key = PrivateKey.fromString(config.POSTING_KEY);
+
+        return client.broadcast.json({
+            required_auths: [],
+            required_posting_auths: [follower],
+            id: 'follow',
+            json
+        }, key);
+    },
+
+    /**
+     * Mutes a Hive user by broadcasting a custom_json 'follow' operation with 'ignore'
+     * @param client - The Hive client instance
+     * @param config - Configuration containing the posting key
+     * @param follower - The account doing the muting
+     * @param following - The account to mute
+     * @returns Promise resolving to the broadcast result
+     */
+    mute(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        follower: string,
+        following: string
+    ) {
+        if (!client || !config.POSTING_KEY || !follower || !following) {
+            throw new Error('Missing required parameters for mute operation');
+        }
+
+        const json = JSON.stringify(['follow', {
+            follower,
+            following,
+            what: ['ignore']
+        }]);
+
+        const key = PrivateKey.fromString(config.POSTING_KEY);
+
+        return client.broadcast.json({
+            required_auths: [],
+            required_posting_auths: [follower],
+            id: 'follow',
+            json
+        }, key);
+    },
+
+    /**
+     * Reblogs (resteems) a post on Hive
+     * @param client - The Hive client instance
+     * @param config - Configuration containing the posting key
+     * @param account - The account performing the reblog
+     * @param author - The original post author
+     * @param permlink - The permlink of the post to reblog
+     * @returns Promise resolving to the broadcast result
+     */
+    reblog(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        account: string,
+        author: string,
+        permlink: string
+    ) {
+        if (!client || !config.POSTING_KEY || !account || !author || !permlink) {
+            throw new Error('Missing required parameters for reblog operation');
+        }
+
+        const json = JSON.stringify(['reblog', {
+            account,
+            author,
+            permlink
+        }]);
+
+        const key = PrivateKey.fromString(config.POSTING_KEY);
+
+        return client.broadcast.json({
+            required_auths: [],
+            required_posting_auths: [account],
+            id: 'follow',
+            json
+        }, key);
+    },
+
+    // ─── Staking Operations ─────────────────────────────────────────────
+
+    /**
+     * Powers up HIVE to Hive Power (VESTS) for an account
+     * @param client - The Hive client instance
+     * @param config - Configuration containing the active key
+     * @param from - The account providing the HIVE
+     * @param to - The account receiving the Hive Power (can be same as from)
+     * @param amount - The amount of HIVE to power up
+     * @returns Promise resolving to the broadcast result
+     */
+    powerUp(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        from: string,
+        to: string,
+        amount: string
+    ) {
+        if (!client || !config.ACTIVE_KEY || !from || !to || !amount) {
+            throw new Error('Missing required parameters for power up operation');
+        }
+
+        const formattedAmount = this.formatAssetAmount(amount, 'HIVE');
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+
+        const operation: [string, any] = ['transfer_to_vesting', {
+            from,
+            to,
+            amount: formattedAmount
+        }];
+
+        return this.broadcastOperations(client, [operation], key);
+    },
+
+    /**
+     * Initiates a power down (withdrawal of vesting shares) for an account
+     * @param client - The Hive client instance
+     * @param config - Configuration containing the active key
+     * @param account - The account to power down
+     * @param vestingShares - The amount of VESTS to power down (e.g. '1000.000000 VESTS')
+     * @returns Promise resolving to the broadcast result
+     */
+    powerDown(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        account: string,
+        vestingShares: string
+    ) {
+        if (!client || !config.ACTIVE_KEY || !account || !vestingShares) {
+            throw new Error('Missing required parameters for power down operation');
+        }
+
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+
+        const operation: [string, any] = ['withdraw_vesting', {
+            account,
+            vesting_shares: vestingShares.includes('VESTS') ? vestingShares : `${vestingShares} VESTS`
+        }];
+
+        return this.broadcastOperations(client, [operation], key);
+    },
+
+    /**
+     * Cancels an active power down by setting vesting shares to 0
+     * @param client - The Hive client instance
+     * @param config - Configuration containing the active key
+     * @param account - The account to cancel power down for
+     * @returns Promise resolving to the broadcast result
+     */
+    cancelPowerDown(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        account: string
+    ) {
+        if (!client || !config.ACTIVE_KEY || !account) {
+            throw new Error('Missing required parameters for cancel power down operation');
+        }
+
+        return this.powerDown(client, config, account, '0.000000 VESTS');
+    },
+
+    /**
+     * Delegates vesting shares (Hive Power) to another account
+     * @param client - The Hive client instance
+     * @param config - Configuration containing the active key
+     * @param delegator - The account delegating HP
+     * @param delegatee - The account receiving the delegation
+     * @param vestingShares - The amount of VESTS to delegate (e.g. '1000.000000 VESTS')
+     * @returns Promise resolving to the broadcast result
+     */
+    delegateVestingShares(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        delegator: string,
+        delegatee: string,
+        vestingShares: string
+    ) {
+        if (!client || !config.ACTIVE_KEY || !delegator || !delegatee || !vestingShares) {
+            throw new Error('Missing required parameters for delegate vesting shares operation');
+        }
+
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+
+        const operation: [string, any] = ['delegate_vesting_shares', {
+            delegator,
+            delegatee,
+            vesting_shares: vestingShares.includes('VESTS') ? vestingShares : `${vestingShares} VESTS`
+        }];
+
+        return this.broadcastOperations(client, [operation], key);
+    },
+
+    /**
+     * Removes a vesting shares delegation by delegating 0 VESTS
+     * @param client - The Hive client instance
+     * @param config - Configuration containing the active key
+     * @param delegator - The account removing the delegation
+     * @param delegatee - The account to remove delegation from
+     * @returns Promise resolving to the broadcast result
+     */
+    undelegateVestingShares(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        delegator: string,
+        delegatee: string
+    ) {
+        if (!client || !config.ACTIVE_KEY || !delegator || !delegatee) {
+            throw new Error('Missing required parameters for undelegate vesting shares operation');
+        }
+
+        return this.delegateVestingShares(client, config, delegator, delegatee, '0.000000 VESTS');
+    },
+
+    // ─── Account Operations ─────────────────────────────────────────────
+
+    /**
+     * Claims pending rewards for an account
+     * @param client - The Hive client instance
+     * @param config - Configuration containing the posting key
+     * @param account - The account to claim rewards for
+     * @param rewardHive - HIVE rewards to claim (e.g. '0.000 HIVE')
+     * @param rewardHbd - HBD rewards to claim (e.g. '0.000 HBD')
+     * @param rewardVests - VESTS rewards to claim (e.g. '0.000000 VESTS')
+     * @returns Promise resolving to the broadcast result
+     */
+    claimRewards(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        account: string,
+        rewardHive: string,
+        rewardHbd: string,
+        rewardVests: string
+    ) {
+        if (!client || !config.POSTING_KEY || !account) {
+            throw new Error('Missing required parameters for claim rewards operation');
+        }
+
+        const key = PrivateKey.fromString(config.POSTING_KEY);
+
+        const operation: [string, any] = ['claim_reward_balance', {
+            account,
+            reward_hive: rewardHive || '0.000 HIVE',
+            reward_hbd: rewardHbd || '0.000 HBD',
+            reward_vests: rewardVests || '0.000000 VESTS'
+        }];
+
+        return this.broadcastOperations(client, [operation], key);
+    },
+
+    /**
+     * Votes for or unvotes a witness
+     * @param client - The Hive client instance
+     * @param config - Configuration containing the active key
+     * @param account - The account casting the witness vote
+     * @param witness - The witness account to vote for
+     * @param approve - true to vote, false to remove vote
+     * @returns Promise resolving to the broadcast result
+     */
+    witnessVote(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        account: string,
+        witness: string,
+        approve: boolean = true
+    ) {
+        if (!client || !config.ACTIVE_KEY || !account || !witness) {
+            throw new Error('Missing required parameters for witness vote operation');
+        }
+
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+
+        const operation: [string, any] = ['account_witness_vote', {
+            account,
+            witness,
+            approve
+        }];
+
+        return this.broadcastOperations(client, [operation], key);
+    },
+
+    /**
+     * Sets a governance proxy for an account (delegates witness voting to another account)
+     * @param client - The Hive client instance
+     * @param config - Configuration containing the active key
+     * @param account - The account setting the proxy
+     * @param proxy - The account to proxy votes to
+     * @returns Promise resolving to the broadcast result
+     */
+    setProxy(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        account: string,
+        proxy: string
+    ) {
+        if (!client || !config.ACTIVE_KEY || !account || !proxy) {
+            throw new Error('Missing required parameters for set proxy operation');
+        }
+
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+
+        const operation: [string, any] = ['account_witness_proxy', {
+            account,
+            proxy
+        }];
+
+        return this.broadcastOperations(client, [operation], key);
+    },
+
+    /**
+     * Clears the governance proxy for an account
+     * @param client - The Hive client instance
+     * @param config - Configuration containing the active key
+     * @param account - The account clearing the proxy
+     * @returns Promise resolving to the broadcast result
+     */
+    clearProxy(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        account: string
+    ) {
+        if (!client || !config.ACTIVE_KEY || !account) {
+            throw new Error('Missing required parameters for clear proxy operation');
+        }
+
+        return this.setProxy(client, config, account, '');
+    },
+
+    /**
+     * Updates an account's profile metadata using account_update2
+     * @param client - The Hive client instance
+     * @param config - Configuration containing the posting key
+     * @param account - The account to update
+     * @param profile - Profile data (name, about, location, website, profile_image, cover_image)
+     * @returns Promise resolving to the broadcast result
+     */
+    async updateProfile(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        account: string,
+        profile: {
+            name?: string;
+            about?: string;
+            location?: string;
+            website?: string;
+            profile_image?: string;
+            cover_image?: string;
+            [key: string]: any;
+        }
+    ) {
+        if (!client || !config.POSTING_KEY || !account) {
+            throw new Error('Missing required parameters for update profile operation');
+        }
+
+        const accounts = await client.database.getAccounts([account]);
+        const existingAccount = Array.isArray(accounts) ? accounts[0] : null;
+
+        if (!existingAccount) {
+            throw new Error(`Unable to load account '${account}' for profile update`);
+        }
+
+        let existingMeta: any = {};
+        try {
+            existingMeta = JSON.parse(existingAccount.posting_json_metadata || '{}');
+        } catch {
+            existingMeta = {};
+        }
+
+        const updatedMeta = {
+            ...existingMeta,
+            profile: {
+                ...(existingMeta.profile || {}),
+                ...profile
+            }
+        };
+
+        const key = PrivateKey.fromString(config.POSTING_KEY);
+
+        const operation: [string, any] = ['account_update2', {
+            account,
+            json_metadata: existingAccount.json_metadata || '',
+            posting_json_metadata: JSON.stringify(updatedMeta),
+            extensions: []
+        }];
+
+        return this.broadcastOperations(client, [operation], key);
+    },
+
+    /**
+     * Fetches account data for a single account
+     * @param client - The Hive client instance
+     * @param username - The account name to look up
+     * @returns Promise resolving to the account data, or null if not found
+     */
+    async getAccount(client: Client, username: string): Promise<any> {
+        if (!client || !username) {
+            throw new Error('Client and username are required');
+        }
+
+        const accounts = await client.database.getAccounts([username]);
+
+        return Array.isArray(accounts) && accounts.length > 0 ? accounts[0] : null;
+    },
+
+    /**
+     * Fetches account data for multiple accounts
+     * @param client - The Hive client instance
+     * @param usernames - Array of account names to look up
+     * @returns Promise resolving to array of account data
+     */
+    async getAccounts(client: Client, usernames: string[]): Promise<any[]> {
+        if (!client || !Array.isArray(usernames) || usernames.length === 0) {
+            throw new Error('Client and at least one username are required');
+        }
+
+        if (usernames.length > MAX_ACCOUNTS_CHECK) {
+            throw new Error(`Cannot look up more than ${MAX_ACCOUNTS_CHECK} accounts at once`);
+        }
+
+        const accounts = await client.database.getAccounts(usernames);
+
+        return Array.isArray(accounts) ? accounts : [];
+    },
+
+    // ─── Blockchain Helpers ─────────────────────────────────────────────
+
+    /**
+     * Converts raw Hive reputation value to a human-readable score (roughly 25-75 range)
+     * @param rawReputation - The raw reputation value from the blockchain (can be string or number)
+     * @returns The human-readable reputation score
+     */
+    calculateReputation(rawReputation: string | number): number {
+        const rep = new BigNumber(rawReputation);
+
+        if (rep.isZero()) {
+            return 25;
+        }
+
+        const negative = rep.isNegative();
+        const absRep = rep.abs();
+        let score = absRep.toNumber();
+
+        score = Math.log10(score);
+        score = (score - 9) * 9 + 25;
+
+        if (negative) {
+            score = 50 - (score - 50);
+        }
+
+        return Math.floor(score * 100) / 100;
+    },
+
+    /**
+     * Converts VESTS to Hive Power (HP)
+     * @param vests - The amount of VESTS (as string or number)
+     * @param totalVestingFundHive - Total vesting fund in HIVE from dynamic global properties
+     * @param totalVestingShares - Total vesting shares from dynamic global properties
+     * @returns The equivalent Hive Power amount as a string with 3 decimal places
+     */
+    vestToHP(
+        vests: string | number,
+        totalVestingFundHive: string | number,
+        totalVestingShares: string | number
+    ): string {
+        const vestsValue = new BigNumber(String(vests).replace(' VESTS', ''));
+        const fundValue = new BigNumber(String(totalVestingFundHive).replace(' HIVE', ''));
+        const sharesValue = new BigNumber(String(totalVestingShares).replace(' VESTS', ''));
+
+        if (vestsValue.isNaN() || fundValue.isNaN() || sharesValue.isNaN()) {
+            throw new Error('Invalid numeric input for VESTS to HP conversion');
+        }
+
+        if (sharesValue.isZero()) {
+            throw new Error('Total vesting shares cannot be zero');
+        }
+
+        return vestsValue.multipliedBy(fundValue).dividedBy(sharesValue).toFixed(3);
+    },
+
+    /**
+     * Converts Hive Power (HP) to VESTS
+     * @param hp - The amount of HP (as string or number)
+     * @param totalVestingFundHive - Total vesting fund in HIVE from dynamic global properties
+     * @param totalVestingShares - Total vesting shares from dynamic global properties
+     * @returns The equivalent VESTS amount as a string with 6 decimal places
+     */
+    hpToVest(
+        hp: string | number,
+        totalVestingFundHive: string | number,
+        totalVestingShares: string | number
+    ): string {
+        const hpValue = new BigNumber(String(hp).replace(' HIVE', ''));
+        const fundValue = new BigNumber(String(totalVestingFundHive).replace(' HIVE', ''));
+        const sharesValue = new BigNumber(String(totalVestingShares).replace(' VESTS', ''));
+
+        if (hpValue.isNaN() || fundValue.isNaN() || sharesValue.isNaN()) {
+            throw new Error('Invalid numeric input for HP to VESTS conversion');
+        }
+
+        if (fundValue.isZero()) {
+            throw new Error('Total vesting fund cannot be zero');
+        }
+
+        return hpValue.multipliedBy(sharesValue).dividedBy(fundValue).toFixed(6);
+    },
+
+    /**
+     * Parses Hive account profile metadata from json_metadata or posting_json_metadata
+     * @param jsonMetadata - The raw JSON metadata string from the account
+     * @returns Parsed profile object, or empty object if parsing fails
+     */
+    parseProfileMetadata(jsonMetadata: string): {
+        name?: string;
+        about?: string;
+        location?: string;
+        website?: string;
+        profile_image?: string;
+        cover_image?: string;
+        [key: string]: any;
+    } {
+        if (!jsonMetadata || typeof jsonMetadata !== 'string') {
+            return {};
+        }
+
+        try {
+            const parsed = JSON.parse(jsonMetadata);
+
+            if (parsed && typeof parsed === 'object' && parsed.profile && typeof parsed.profile === 'object') {
+                return parsed.profile;
+            }
+
+            return {};
+        } catch {
+            return {};
+        }
+    },
+
+    /**
+     * Converts a Hive Power (HP) amount to a formatted VESTS string suitable for delegation/power down
+     * @param hp - The amount of HP
+     * @param totalVestingFundHive - Total vesting fund in HIVE
+     * @param totalVestingShares - Total vesting shares
+     * @returns Formatted VESTS string (e.g. '1234.567890 VESTS')
+     */
+    hpToVestString(
+        hp: string | number,
+        totalVestingFundHive: string | number,
+        totalVestingShares: string | number
+    ): string {
+        const vests = this.hpToVest(hp, totalVestingFundHive, totalVestingShares);
+        return `${vests} VESTS`;
     }
 
 };

@@ -426,6 +426,73 @@ export interface VoteBuilder {
     send(): any;
 }
 
+export interface FollowBuilder {
+    follower(account: string): this;
+    following(account: string): this;
+    send(): any;
+}
+
+export interface ReblogBuilder {
+    account(account: string): this;
+    author(account: string): this;
+    permlink(value: string): this;
+    send(): any;
+}
+
+export interface PowerUpBuilder {
+    from(account: string): this;
+    to(account: string): this;
+    amount(amount: string | number): this;
+    send(): any;
+}
+
+export interface PowerDownBuilder {
+    account(account: string): this;
+    vestingShares(amount: string): this;
+    send(): any;
+}
+
+export interface DelegateBuilder {
+    delegator(account: string): this;
+    delegatee(account: string): this;
+    vestingShares(amount: string): this;
+    send(): any;
+}
+
+export interface ClaimRewardsBuilder {
+    account(account: string): this;
+    rewardHive(amount: string): this;
+    rewardHbd(amount: string): this;
+    rewardVests(amount: string): this;
+    send(): any;
+}
+
+export interface WitnessVoteBuilder {
+    account(account: string): this;
+    witness(account: string): this;
+    approve(value?: boolean): this;
+    unapprove(): this;
+    send(): any;
+}
+
+export interface SetProxyBuilder {
+    account(account: string): this;
+    proxy(account: string): this;
+    send(): any;
+}
+
+export interface UpdateProfileBuilder {
+    account(account: string): this;
+    name(value: string): this;
+    about(value: string): this;
+    location(value: string): this;
+    website(value: string): this;
+    profileImage(url: string): this;
+    coverImage(url: string): this;
+    set(key: string, value: any): this;
+    send(): any;
+}
+
 export interface MoneyNamespace {
     parseAssetAmount(rawAmount: string): ParsedAssetAmount;
     formatAmount(amount: string | number, precision?: number): string;
@@ -450,6 +517,20 @@ export interface OpsNamespace {
     removeProposals(): RemoveProposalsBuilder;
     upvote(): VoteBuilder;
     downvote(): VoteBuilder;
+    follow(): FollowBuilder;
+    unfollow(): FollowBuilder;
+    mute(): FollowBuilder;
+    reblog(): ReblogBuilder;
+    powerUp(): PowerUpBuilder;
+    powerDown(): PowerDownBuilder;
+    cancelPowerDown(): PowerDownBuilder;
+    delegate(): DelegateBuilder;
+    undelegate(): DelegateBuilder;
+    claimRewards(): ClaimRewardsBuilder;
+    witnessVote(): WitnessVoteBuilder;
+    setProxy(): SetProxyBuilder;
+    clearProxy(): SetProxyBuilder;
+    updateProfile(): UpdateProfileBuilder;
 }
 
 export interface FlowNamespace {

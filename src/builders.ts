@@ -3,6 +3,8 @@ import type { Streamer } from './streamer';
 import type {
     AutoRouteIncomingTransfersOptions,
     BurnOperationBuilder,
+    ClaimRewardsBuilder,
+    DelegateBuilder,
     EscrowTransferBuilder,
     FlowAllocationInput,
     FlowDedupeStore,
@@ -11,18 +13,25 @@ import type {
     FlowMemoInput,
     FlowRoute,
     FlowSubscriptionHandle,
+    FollowBuilder,
     HiveEngineBurnBuilder,
     HiveEngineIssueBuilder,
     HiveEngineTransferBuilder,
     IncomingTransferFlowBuilder,
     PlannedIncomingTransferRoutes,
+    PowerDownBuilder,
+    PowerUpBuilder,
     ProposalBuilder,
     ProposalVotesBuilder,
+    ReblogBuilder,
     RemoveProposalsBuilder,
     RecurrentTransferBuilder,
+    SetProxyBuilder,
     TransferEvent,
     TransferOperationBuilder,
-    VoteBuilder
+    UpdateProfileBuilder,
+    VoteBuilder,
+    WitnessVoteBuilder
 } from './types/hive-stream';
 
 interface BuilderAllocation {
@@ -982,5 +991,383 @@ export class HiveVoteBuilder implements VoteBuilder {
             this.state.username,
             this.state.permlink
         );
+    }
+}
+
+export class HiveFollowBuilder implements FollowBuilder {
+    private state: {
+        follower?: string;
+        following?: string;
+    } = {};
+
+    constructor(
+        private readonly streamer: Streamer,
+        private readonly mode: 'follow' | 'unfollow' | 'mute'
+    ) {}
+
+    public follower(account: string): this {
+        this.state.follower = account;
+        return this;
+    }
+
+    public following(account: string): this {
+        this.state.following = account;
+        return this;
+    }
+
+    public send(): any {
+        if (!this.state.follower || !this.state.following) {
+            throw new Error(`${this.mode}() builder requires follower and following before send()`);
+        }
+
+        if (this.mode === 'follow') {
+            return this.streamer.follow(this.state.follower, this.state.following);
+        }
+
+        if (this.mode === 'mute') {
+            return this.streamer.mute(this.state.follower, this.state.following);
+        }
+
+        return this.streamer.unfollow(this.state.follower, this.state.following);
+    }
+}
+
+export class HiveReblogBuilder implements ReblogBuilder {
+    private state: {
+        account?: string;
+        author?: string;
+        permlink?: string;
+    } = {};
+
+    constructor(private readonly streamer: Streamer) {}
+
+    public account(account: string): this {
+        this.state.account = account;
+        return this;
+    }
+
+    public author(account: string): this {
+        this.state.author = account;
+        return this;
+    }
+
+    public permlink(value: string): this {
+        this.state.permlink = value;
+        return this;
+    }
+
+    public send(): any {
+        if (!this.state.account || !this.state.author || !this.state.permlink) {
+            throw new Error('reblog() builder requires account, author, and permlink before send()');
+        }
+
+        return this.streamer.reblog(this.state.account, this.state.author, this.state.permlink);
+    }
+}
+
+export class HivePowerUpBuilder implements PowerUpBuilder {
+    private state: {
+        from?: string;
+        to?: string;
+        amount?: string;
+    } = {};
+
+    constructor(private readonly streamer: Streamer) {}
+
+    public from(account: string): this {
+        this.state.from = account;
+        return this;
+    }
+
+    public to(account: string): this {
+        this.state.to = account;
+        return this;
+    }
+
+    public amount(amount: string | number): this {
+        this.state.amount = Utils.formatAmount(amount);
+        return this;
+    }
+
+    public send(): any {
+        if (!this.state.from || !this.state.amount) {
+            throw new Error('powerUp() builder requires from and amount before send()');
+        }
+
+        return this.streamer.powerUp(
+            this.state.from,
+            this.state.to || this.state.from,
+            this.state.amount
+        );
+    }
+}
+
+export class HivePowerDownBuilder implements PowerDownBuilder {
+    private state: {
+        account?: string;
+        vestingShares?: string;
+    } = {};
+
+    constructor(
+        private readonly streamer: Streamer,
+        private readonly cancel: boolean = false
+    ) {}
+
+    public account(account: string): this {
+        this.state.account = account;
+        return this;
+    }
+
+    public vestingShares(amount: string): this {
+        this.state.vestingShares = amount;
+        return this;
+    }
+
+    public send(): any {
+        if (!this.state.account) {
+            throw new Error('powerDown() builder requires account before send()');
+        }
+
+        if (this.cancel) {
+            return this.streamer.cancelPowerDown(this.state.account);
+        }
+
+        if (!this.state.vestingShares) {
+            throw new Error('powerDown() builder requires vestingShares before send()');
+        }
+
+        return this.streamer.powerDown(this.state.account, this.state.vestingShares);
+    }
+}
+
+export class HiveDelegateBuilder implements DelegateBuilder {
+    private state: {
+        delegator?: string;
+        delegatee?: string;
+        vestingShares?: string;
+    } = {};
+
+    constructor(
+        private readonly streamer: Streamer,
+        private readonly undelegate: boolean = false
+    ) {}
+
+    public delegator(account: string): this {
+        this.state.delegator = account;
+        return this;
+    }
+
+    public delegatee(account: string): this {
+        this.state.delegatee = account;
+        return this;
+    }
+
+    public vestingShares(amount: string): this {
+        this.state.vestingShares = amount;
+        return this;
+    }
+
+    public send(): any {
+        if (!this.state.delegator || !this.state.delegatee) {
+            throw new Error('delegate() builder requires delegator and delegatee before send()');
+        }
+
+        if (this.undelegate) {
+            return this.streamer.undelegateVestingShares(this.state.delegator, this.state.delegatee);
+        }
+
+        if (!this.state.vestingShares) {
+            throw new Error('delegate() builder requires vestingShares before send()');
+        }
+
+        return this.streamer.delegateVestingShares(
+            this.state.delegator,
+            this.state.delegatee,
+            this.state.vestingShares
+        );
+    }
+}
+
+export class HiveClaimRewardsBuilder implements ClaimRewardsBuilder {
+    private state: {
+        account?: string;
+        rewardHive?: string;
+        rewardHbd?: string;
+        rewardVests?: string;
+    } = {};
+
+    constructor(private readonly streamer: Streamer) {}
+
+    public account(account: string): this {
+        this.state.account = account;
+        return this;
+    }
+
+    public rewardHive(amount: string): this {
+        this.state.rewardHive = amount;
+        return this;
+    }
+
+    public rewardHbd(amount: string): this {
+        this.state.rewardHbd = amount;
+        return this;
+    }
+
+    public rewardVests(amount: string): this {
+        this.state.rewardVests = amount;
+        return this;
+    }
+
+    public send(): any {
+        if (!this.state.account) {
+            throw new Error('claimRewards() builder requires account before send()');
+        }
+
+        return this.streamer.claimRewards(
+            this.state.account,
+            this.state.rewardHive || '0.000 HIVE',
+            this.state.rewardHbd || '0.000 HBD',
+            this.state.rewardVests || '0.000000 VESTS'
+        );
+    }
+}
+
+export class HiveWitnessVoteBuilder implements WitnessVoteBuilder {
+    private state: {
+        account?: string;
+        witness?: string;
+        approve?: boolean;
+    } = {};
+
+    constructor(private readonly streamer: Streamer) {}
+
+    public account(account: string): this {
+        this.state.account = account;
+        return this;
+    }
+
+    public witness(account: string): this {
+        this.state.witness = account;
+        return this;
+    }
+
+    public approve(value: boolean = true): this {
+        this.state.approve = value;
+        return this;
+    }
+
+    public unapprove(): this {
+        return this.approve(false);
+    }
+
+    public send(): any {
+        if (!this.state.account || !this.state.witness) {
+            throw new Error('witnessVote() builder requires account and witness before send()');
+        }
+
+        return this.streamer.witnessVote(
+            this.state.account,
+            this.state.witness,
+            this.state.approve !== false
+        );
+    }
+}
+
+export class HiveSetProxyBuilder implements SetProxyBuilder {
+    private state: {
+        account?: string;
+        proxy?: string;
+    } = {};
+
+    constructor(
+        private readonly streamer: Streamer,
+        private readonly clear: boolean = false
+    ) {}
+
+    public account(account: string): this {
+        this.state.account = account;
+        return this;
+    }
+
+    public proxy(account: string): this {
+        this.state.proxy = account;
+        return this;
+    }
+
+    public send(): any {
+        if (!this.state.account) {
+            throw new Error('setProxy() builder requires account before send()');
+        }
+
+        if (this.clear) {
+            return this.streamer.clearProxy(this.state.account);
+        }
+
+        if (!this.state.proxy) {
+            throw new Error('setProxy() builder requires proxy before send()');
+        }
+
+        return this.streamer.setProxy(this.state.account, this.state.proxy);
+    }
+}
+
+export class HiveUpdateProfileBuilder implements UpdateProfileBuilder {
+    private state: {
+        account?: string;
+        profile: Record<string, any>;
+    } = { profile: {} };
+
+    constructor(private readonly streamer: Streamer) {}
+
+    public account(account: string): this {
+        this.state.account = account;
+        return this;
+    }
+
+    public name(value: string): this {
+        this.state.profile.name = value;
+        return this;
+    }
+
+    public about(value: string): this {
+        this.state.profile.about = value;
+        return this;
+    }
+
+    public location(value: string): this {
+        this.state.profile.location = value;
+        return this;
+    }
+
+    public website(value: string): this {
+        this.state.profile.website = value;
+        return this;
+    }
+
+    public profileImage(url: string): this {
+        this.state.profile.profile_image = url;
+        return this;
+    }
+
+    public coverImage(url: string): this {
+        this.state.profile.cover_image = url;
+        return this;
+    }
+
+    public set(key: string, value: any): this {
+        this.state.profile[key] = value;
+        return this;
+    }
+
+    public send(): any {
+        if (!this.state.account) {
+            throw new Error('updateProfile() builder requires account before send()');
+        }
+
+        if (Object.keys(this.state.profile).length === 0) {
+            throw new Error('updateProfile() builder requires at least one profile field before send()');
+        }
+
+        return this.streamer.updateProfile(this.state.account, this.state.profile);
     }
 }

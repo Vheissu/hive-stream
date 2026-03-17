@@ -435,6 +435,185 @@ When the built-in API server is running, the following endpoints are available:
 
 ---
 
+## Social Operations
+
+Follow, unfollow, mute, and reblog users directly from the streamer:
+
+```typescript
+// Direct methods
+await streamer.follow('myaccount', 'targetuser');
+await streamer.unfollow('myaccount', 'targetuser');
+await streamer.mute('myaccount', 'spammer');
+await streamer.reblog('myaccount', 'author', 'great-post');
+
+// Or use builders
+await streamer.ops.follow().follower('myaccount').following('targetuser').send();
+await streamer.ops.unfollow().follower('myaccount').following('targetuser').send();
+await streamer.ops.mute().follower('myaccount').following('spammer').send();
+await streamer.ops.reblog().account('myaccount').author('author').permlink('great-post').send();
+```
+
+---
+
+## Staking Operations
+
+Power up, power down, delegate, and undelegate Hive Power:
+
+```typescript
+// Power up HIVE to HP
+await streamer.powerUp('myaccount', 'myaccount', '100.000');
+await streamer.ops.powerUp().from('myaccount').to('myaccount').amount(100).send();
+
+// Power down (withdraw vesting)
+await streamer.powerDown('myaccount', '50000.000000 VESTS');
+await streamer.ops.powerDown().account('myaccount').vestingShares('50000.000000 VESTS').send();
+
+// Cancel active power down
+await streamer.cancelPowerDown('myaccount');
+await streamer.ops.cancelPowerDown().account('myaccount').send();
+
+// Delegate HP to another account
+await streamer.delegateVestingShares('myaccount', 'recipient', '10000.000000 VESTS');
+await streamer.ops.delegate().delegator('myaccount').delegatee('recipient').vestingShares('10000.000000 VESTS').send();
+
+// Remove delegation
+await streamer.undelegateVestingShares('myaccount', 'recipient');
+await streamer.ops.undelegate().delegator('myaccount').delegatee('recipient').send();
+```
+
+---
+
+## Account Operations
+
+### Claim Rewards
+```typescript
+await streamer.claimRewards('myaccount', '1.000 HIVE', '0.500 HBD', '100.000000 VESTS');
+await streamer.ops.claimRewards()
+    .account('myaccount')
+    .rewardHive('1.000 HIVE')
+    .rewardHbd('0.500 HBD')
+    .rewardVests('100.000000 VESTS')
+    .send();
+```
+
+### Witness Voting
+```typescript
+await streamer.witnessVote('myaccount', 'goodwitness', true);
+await streamer.ops.witnessVote().account('myaccount').witness('goodwitness').approve().send();
+
+// Remove witness vote
+await streamer.witnessVote('myaccount', 'badwitness', false);
+await streamer.ops.witnessVote().account('myaccount').witness('badwitness').unapprove().send();
+```
+
+### Governance Proxy
+```typescript
+await streamer.setProxy('myaccount', 'trustedvoter');
+await streamer.ops.setProxy().account('myaccount').proxy('trustedvoter').send();
+
+// Remove proxy
+await streamer.clearProxy('myaccount');
+await streamer.ops.clearProxy().account('myaccount').send();
+```
+
+### Update Profile
+```typescript
+await streamer.updateProfile('myaccount', {
+    name: 'My Display Name',
+    about: 'Hive developer',
+    location: 'Decentralized',
+    website: 'https://example.com',
+    profile_image: 'https://example.com/avatar.png',
+    cover_image: 'https://example.com/cover.png'
+});
+
+// Or use the builder
+await streamer.ops.updateProfile()
+    .account('myaccount')
+    .name('My Display Name')
+    .about('Hive developer')
+    .website('https://example.com')
+    .profileImage('https://example.com/avatar.png')
+    .set('custom_field', 'custom_value')
+    .send();
+```
+
+### Account Lookup
+```typescript
+const account = await streamer.getAccount('alice');
+const accounts = await streamer.getAccounts(['alice', 'bob', 'charlie']);
+```
+
+---
+
+## Event Subscriptions
+
+In addition to the existing `onTransfer`, `onCustomJson`, `onComment`, `onPost`, and escrow subscriptions, you can now subscribe to:
+
+```typescript
+// Watch all votes on the blockchain
+streamer.onVote((data, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+    console.log(`${data.voter} voted on @${data.author}/${data.permlink} with weight ${data.weight}`);
+});
+
+// Watch delegations
+streamer.onDelegate((data, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+    console.log(`${data.delegator} delegated ${data.vesting_shares} to ${data.delegatee}`);
+});
+
+// Watch power ups
+streamer.onPowerUp((data, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+    console.log(`${data.from} powered up ${data.amount} to ${data.to}`);
+});
+
+// Watch power downs
+streamer.onPowerDown((data, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+    console.log(`${data.account} started power down of ${data.vesting_shares}`);
+});
+
+// Watch reward claims
+streamer.onClaimRewards((data, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+    console.log(`${data.account} claimed rewards`);
+});
+
+// Watch witness votes
+streamer.onAccountWitnessVote((data, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+    console.log(`${data.account} ${data.approve ? 'voted for' : 'unvoted'} witness ${data.witness}`);
+});
+```
+
+---
+
+## Blockchain Helpers
+
+### Reputation Score
+```typescript
+import { Utils } from 'hive-stream';
+
+// Convert raw blockchain reputation to human-readable score (25-75 range)
+const score = Utils.calculateReputation('253948692668213'); // e.g. 73.64
+```
+
+### VESTS / HP Conversion
+```typescript
+// Convert VESTS to Hive Power
+const hp = Utils.vestToHP('1000000', totalVestingFundHive, totalVestingShares); // '500.000'
+
+// Convert HP to VESTS
+const vests = Utils.hpToVest('500', totalVestingFundHive, totalVestingShares); // '1000000.000000'
+
+// Get formatted VESTS string for delegation/power down
+const vestsStr = Utils.hpToVestString('500', totalVestingFundHive, totalVestingShares); // '1000000.000000 VESTS'
+```
+
+### Parse Profile Metadata
+```typescript
+const profile = Utils.parseProfileMetadata(account.posting_json_metadata);
+// { name: 'Alice', about: '...', location: '...', website: '...', profile_image: '...', cover_image: '...' }
+```
+
+---
+
 ## Utilities
 The library includes helpers for JSON parsing, randomness, and transfer verification. See `src/utils.ts` for details.
 

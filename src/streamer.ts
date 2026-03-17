@@ -8,16 +8,25 @@ import BigNumber from 'bignumber.js';
 import { Utils } from './utils';
 import {
     HiveBurnBuilder,
+    HiveClaimRewardsBuilder,
+    HiveDelegateBuilder,
     HiveEscrowTransferBuilder,
     HiveEngineTokenBurnBuilder,
     HiveEngineTokenIssueBuilder,
     HiveEngineTokenTransferBuilder,
+    HiveFollowBuilder,
+    HivePowerDownBuilder,
+    HivePowerUpBuilder,
     HiveProposalBuilder,
     HiveProposalVotesBuilder,
+    HiveReblogBuilder,
     HiveRemoveProposalsBuilder,
     HiveRecurrentTransferBuilder,
+    HiveSetProxyBuilder,
     HiveTransferBuilder,
+    HiveUpdateProfileBuilder,
     HiveVoteBuilder,
+    HiveWitnessVoteBuilder,
     IncomingTransfersBuilder
 } from './builders';
 import { ConfigInput, ConfigInterface, createConfig, normalizeConfigInput } from './config';
@@ -70,6 +79,12 @@ export class Streamer {
     private postSubscriptions: SubscriptionCallback[] = [];
     private transferSubscriptions: TransferSubscription[] = [];
     private escrowSubscriptions: EscrowSubscription[] = [];
+    private voteSubscriptions: SubscriptionCallback[] = [];
+    private delegateSubscriptions: SubscriptionCallback[] = [];
+    private powerUpSubscriptions: SubscriptionCallback[] = [];
+    private powerDownSubscriptions: SubscriptionCallback[] = [];
+    private claimRewardsSubscriptions: SubscriptionCallback[] = [];
+    private witnessVoteSubscriptions: SubscriptionCallback[] = [];
 
     private attempts = 0;
 
@@ -166,6 +181,20 @@ export class Streamer {
         removeProposals: () => new HiveRemoveProposalsBuilder(this),
         upvote: () => new HiveVoteBuilder(this, 'upvote'),
         downvote: () => new HiveVoteBuilder(this, 'downvote'),
+        follow: () => new HiveFollowBuilder(this, 'follow'),
+        unfollow: () => new HiveFollowBuilder(this, 'unfollow'),
+        mute: () => new HiveFollowBuilder(this, 'mute'),
+        reblog: () => new HiveReblogBuilder(this),
+        powerUp: () => new HivePowerUpBuilder(this),
+        powerDown: () => new HivePowerDownBuilder(this),
+        cancelPowerDown: () => new HivePowerDownBuilder(this, true),
+        delegate: () => new HiveDelegateBuilder(this),
+        undelegate: () => new HiveDelegateBuilder(this, true),
+        claimRewards: () => new HiveClaimRewardsBuilder(this),
+        witnessVote: () => new HiveWitnessVoteBuilder(this),
+        setProxy: () => new HiveSetProxyBuilder(this),
+        clearProxy: () => new HiveSetProxyBuilder(this, true),
+        updateProfile: () => new HiveUpdateProfileBuilder(this),
     };
 
     constructor(userConfig: ConfigInput = {}) {
@@ -1536,6 +1565,48 @@ export class Streamer {
                 }
             });
         }
+
+        // Vote operations
+        if (operationType === 'vote') {
+            this.voteSubscriptions.forEach(sub => {
+                sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
+            });
+        }
+
+        // Delegation operations
+        if (operationType === 'delegate_vesting_shares') {
+            this.delegateSubscriptions.forEach(sub => {
+                sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
+            });
+        }
+
+        // Power up (transfer_to_vesting)
+        if (operationType === 'transfer_to_vesting') {
+            this.powerUpSubscriptions.forEach(sub => {
+                sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
+            });
+        }
+
+        // Power down (withdraw_vesting)
+        if (operationType === 'withdraw_vesting') {
+            this.powerDownSubscriptions.forEach(sub => {
+                sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
+            });
+        }
+
+        // Claim reward balance
+        if (operationType === 'claim_reward_balance') {
+            this.claimRewardsSubscriptions.forEach(sub => {
+                sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
+            });
+        }
+
+        // Witness vote
+        if (operationType === 'account_witness_vote') {
+            this.witnessVoteSubscriptions.forEach(sub => {
+                sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
+            });
+        }
     }
 
     private normalizeContractPayload(payload: any): ContractPayload | null {
@@ -2386,7 +2457,103 @@ export class Streamer {
     public onEscrowRelease(callback: (data: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
         this.escrowSubscriptions.push({ type: 'escrow_release', callback });
     }
-    
+
+    // ─── New Event Subscriptions ────────────────────────────────────────
+
+    public onVote(callback: (data: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
+        this.voteSubscriptions.push({ callback });
+    }
+
+    public onDelegate(callback: (data: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
+        this.delegateSubscriptions.push({ callback });
+    }
+
+    public onPowerUp(callback: (data: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
+        this.powerUpSubscriptions.push({ callback });
+    }
+
+    public onPowerDown(callback: (data: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
+        this.powerDownSubscriptions.push({ callback });
+    }
+
+    public onClaimRewards(callback: (data: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
+        this.claimRewardsSubscriptions.push({ callback });
+    }
+
+    public onAccountWitnessVote(callback: (data: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
+        this.witnessVoteSubscriptions.push({ callback });
+    }
+
+    // ─── Social Operations ──────────────────────────────────────────────
+
+    public follow(follower: string, following: string) {
+        return Utils.follow(this.client, this.config, follower, following);
+    }
+
+    public unfollow(follower: string, following: string) {
+        return Utils.unfollow(this.client, this.config, follower, following);
+    }
+
+    public mute(follower: string, following: string) {
+        return Utils.mute(this.client, this.config, follower, following);
+    }
+
+    public reblog(account: string, author: string, permlink: string) {
+        return Utils.reblog(this.client, this.config, account, author, permlink);
+    }
+
+    // ─── Staking Operations ─────────────────────────────────────────────
+
+    public powerUp(from: string, to: string, amount: string) {
+        return Utils.powerUp(this.client, this.config, from, to, amount);
+    }
+
+    public powerDown(account: string, vestingShares: string) {
+        return Utils.powerDown(this.client, this.config, account, vestingShares);
+    }
+
+    public cancelPowerDown(account: string) {
+        return Utils.cancelPowerDown(this.client, this.config, account);
+    }
+
+    public delegateVestingShares(delegator: string, delegatee: string, vestingShares: string) {
+        return Utils.delegateVestingShares(this.client, this.config, delegator, delegatee, vestingShares);
+    }
+
+    public undelegateVestingShares(delegator: string, delegatee: string) {
+        return Utils.undelegateVestingShares(this.client, this.config, delegator, delegatee);
+    }
+
+    // ─── Account Operations ─────────────────────────────────────────────
+
+    public claimRewards(account: string, rewardHive: string, rewardHbd: string, rewardVests: string) {
+        return Utils.claimRewards(this.client, this.config, account, rewardHive, rewardHbd, rewardVests);
+    }
+
+    public witnessVote(account: string, witness: string, approve: boolean = true) {
+        return Utils.witnessVote(this.client, this.config, account, witness, approve);
+    }
+
+    public setProxy(account: string, proxy: string) {
+        return Utils.setProxy(this.client, this.config, account, proxy);
+    }
+
+    public clearProxy(account: string) {
+        return Utils.clearProxy(this.client, this.config, account);
+    }
+
+    public updateProfile(account: string, profile: Record<string, any>) {
+        return Utils.updateProfile(this.client, this.config, account, profile);
+    }
+
+    public getAccount(username: string) {
+        return Utils.getAccount(this.client, username);
+    }
+
+    public getAccounts(usernames: string[]) {
+        return Utils.getAccounts(this.client, usernames);
+    }
+
     // Memory management: cleanup subscriptions
     private cleanupSubscriptions(): void {
         // Limit subscription arrays to prevent memory leaks
@@ -2423,6 +2590,36 @@ export class Streamer {
         if (this.escrowSubscriptions.length > this.maxSubscriptions) {
             this.escrowSubscriptions = this.escrowSubscriptions.slice(-this.maxSubscriptions);
             console.warn(`[Streamer] Trimmed escrowSubscriptions to ${this.maxSubscriptions} items`);
+        }
+
+        if (this.voteSubscriptions.length > this.maxSubscriptions) {
+            this.voteSubscriptions = this.voteSubscriptions.slice(-this.maxSubscriptions);
+            console.warn(`[Streamer] Trimmed voteSubscriptions to ${this.maxSubscriptions} items`);
+        }
+
+        if (this.delegateSubscriptions.length > this.maxSubscriptions) {
+            this.delegateSubscriptions = this.delegateSubscriptions.slice(-this.maxSubscriptions);
+            console.warn(`[Streamer] Trimmed delegateSubscriptions to ${this.maxSubscriptions} items`);
+        }
+
+        if (this.powerUpSubscriptions.length > this.maxSubscriptions) {
+            this.powerUpSubscriptions = this.powerUpSubscriptions.slice(-this.maxSubscriptions);
+            console.warn(`[Streamer] Trimmed powerUpSubscriptions to ${this.maxSubscriptions} items`);
+        }
+
+        if (this.powerDownSubscriptions.length > this.maxSubscriptions) {
+            this.powerDownSubscriptions = this.powerDownSubscriptions.slice(-this.maxSubscriptions);
+            console.warn(`[Streamer] Trimmed powerDownSubscriptions to ${this.maxSubscriptions} items`);
+        }
+
+        if (this.claimRewardsSubscriptions.length > this.maxSubscriptions) {
+            this.claimRewardsSubscriptions = this.claimRewardsSubscriptions.slice(-this.maxSubscriptions);
+            console.warn(`[Streamer] Trimmed claimRewardsSubscriptions to ${this.maxSubscriptions} items`);
+        }
+
+        if (this.witnessVoteSubscriptions.length > this.maxSubscriptions) {
+            this.witnessVoteSubscriptions = this.witnessVoteSubscriptions.slice(-this.maxSubscriptions);
+            console.warn(`[Streamer] Trimmed witnessVoteSubscriptions to ${this.maxSubscriptions} items`);
         }
     }
     
