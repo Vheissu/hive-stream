@@ -87,11 +87,11 @@ describe('MongodbAdapter', () => {
             expect(mockDb.collection).toHaveBeenCalledWith('params');
         });
 
-        test('returns undefined when no state exists', async () => {
+        test('returns null when no state exists', async () => {
             mockCollection.findOne.mockResolvedValueOnce(null);
             await adapter.create();
             const state = await adapter.loadState();
-            expect(state).toBeUndefined();
+            expect(state).toBeNull();
         });
     });
 
@@ -203,14 +203,14 @@ describe('MongodbAdapter', () => {
             expect(mockCollection.find).toHaveBeenCalledWith({ key: 'val' });
         });
 
-        test('returns null for empty results', async () => {
+        test('returns empty array for no results', async () => {
             mockCollection.find.mockReturnValueOnce({
                 toArray: jest.fn().mockResolvedValue([]),
             });
             await adapter.create();
 
             const result = await adapter.find('table', {});
-            expect(result).toBeNull();
+            expect(result).toEqual([]);
         });
     });
 
@@ -293,10 +293,10 @@ describe('MongodbAdapter', () => {
             expect(result).toEqual(events);
         });
 
-        test('returns null for no events', async () => {
+        test('returns empty array for no events', async () => {
             await adapter.create();
             const result = await adapter.getEvents();
-            expect(result).toBeNull();
+            expect(result).toEqual([]);
         });
     });
 
@@ -354,10 +354,10 @@ describe('MongodbAdapter', () => {
             expect(mockDb.collection).toHaveBeenCalledWith('transfers');
         });
 
-        test('returns null for no transfers', async () => {
+        test('returns empty array for no transfers', async () => {
             await adapter.create();
             const result = await adapter.getTransfers();
-            expect(result).toBeNull();
+            expect(result).toEqual([]);
         });
     });
 

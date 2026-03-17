@@ -315,8 +315,8 @@ describe('Hive chain features', () => {
             const matching = jest.fn();
             const nonMatching = jest.fn();
 
-            streamer.onCustomJsonId(matching, 'target-id');
-            streamer.onCustomJsonId(nonMatching, 'other-id');
+            streamer.onCustomJsonId('target-id', matching);
+            streamer.onCustomJsonId('other-id', nonMatching);
 
             await streamer.processOperation([
                 'custom_json',

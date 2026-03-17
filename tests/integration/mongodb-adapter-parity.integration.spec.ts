@@ -31,7 +31,7 @@ describeIfMongo('MongoDB adapter parity', () => {
         try {
             await adapter.create();
 
-            expect(await adapter.find('profiles', { id: 'missing' })).toBeNull();
+            expect(await adapter.find('profiles', { id: 'missing' })).toEqual([]);
             expect(await adapter.findOne('profiles', { id: 'missing' })).toBeNull();
 
             expect(await adapter.insert('profiles', {

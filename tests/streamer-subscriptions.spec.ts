@@ -50,7 +50,7 @@ describe('Streamer Subscriptions & Operation Processing', () => {
 
         test('onCustomJsonId registers with id', () => {
             const cb = jest.fn();
-            sut.onCustomJsonId(cb, 'ssc-mainnet-hive');
+            sut.onCustomJsonId('ssc-mainnet-hive', cb);
             expect(sut['customJsonIdSubscriptions']).toHaveLength(1);
             expect(sut['customJsonIdSubscriptions'][0].id).toBe('ssc-mainnet-hive');
         });
@@ -97,8 +97,8 @@ describe('Streamer Subscriptions & Operation Processing', () => {
         });
 
         test('removeCustomJsonIdSubscription removes by id', () => {
-            sut.onCustomJsonId(jest.fn(), 'id-1');
-            sut.onCustomJsonId(jest.fn(), 'id-2');
+            sut.onCustomJsonId('id-1', jest.fn());
+            sut.onCustomJsonId('id-2', jest.fn());
             sut.removeCustomJsonIdSubscription('id-1');
             expect(sut['customJsonIdSubscriptions']).toHaveLength(1);
             expect(sut['customJsonIdSubscriptions'][0].id).toBe('id-2');
@@ -198,8 +198,8 @@ describe('Streamer Subscriptions & Operation Processing', () => {
         test('fires custom_json id subscription only for matching id', async () => {
             const matchCb = jest.fn();
             const noMatchCb = jest.fn();
-            sut.onCustomJsonId(matchCb, 'my-app');
-            sut.onCustomJsonId(noMatchCb, 'other-app');
+            sut.onCustomJsonId('my-app', matchCb);
+            sut.onCustomJsonId('other-app', noMatchCb);
 
             await sut.processOperation(
                 ['custom_json', {
