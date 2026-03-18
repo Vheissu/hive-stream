@@ -1958,7 +1958,7 @@ export const Utils = {
         account: string,
         proxy: string
     ) {
-        if (!client || !config.ACTIVE_KEY || !account || !proxy) {
+        if (!client || !config.ACTIVE_KEY || !account || proxy === undefined || proxy === null) {
             throw new Error('Missing required parameters for set proxy operation');
         }
 
