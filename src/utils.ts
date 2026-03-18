@@ -2043,7 +2043,7 @@ export const Utils = {
 
         const operation: [string, any] = ['account_update2', {
             account,
-            json_metadata: existingAccount.json_metadata || '',
+            json_metadata: '',
             posting_json_metadata: JSON.stringify(updatedMeta),
             extensions: []
         }];

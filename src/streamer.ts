@@ -2398,8 +2398,28 @@ export class Streamer {
     }
 
     public broadcastOperations(operations: Array<[string, any]>, signingKeys?: string | string[]) {
-        const keys = signingKeys || this.config.ACTIVE_KEY || this.config.POSTING_KEY;
-        return Utils.broadcastOperations(this.client, operations, keys);
+        if (signingKeys) {
+            return Utils.broadcastOperations(this.client, operations, signingKeys);
+        }
+
+        // Auto-detect key: use posting key for posting-level ops, active key for active-level ops
+        const activeOps = new Set([
+            'transfer', 'transfer_to_vesting', 'withdraw_vesting', 'delegate_vesting_shares',
+            'transfer_to_savings', 'transfer_from_savings', 'cancel_transfer_from_savings',
+            'convert', 'collateralized_convert', 'limit_order_create', 'limit_order_create2',
+            'limit_order_cancel', 'escrow_transfer', 'escrow_approve', 'escrow_dispute',
+            'escrow_release', 'account_update', 'account_witness_vote', 'account_witness_proxy',
+            'set_withdraw_vesting_route', 'claim_account', 'create_claimed_account',
+            'create_proposal', 'update_proposal_votes', 'remove_proposal', 'recurrent_transfer',
+            'feed_publish'
+        ]);
+
+        const needsActive = operations.some(([opType]) => activeOps.has(opType));
+        const key = needsActive
+            ? (this.config.ACTIVE_KEY || this.config.POSTING_KEY)
+            : (this.config.POSTING_KEY || this.config.ACTIVE_KEY);
+
+        return Utils.broadcastOperations(this.client, operations, key);
     }
 
     public broadcastMultiSigOperations(operations: Array<[string, any]>, signingKeys: string[]) {
