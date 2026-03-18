@@ -652,6 +652,55 @@ export interface OpsNamespace {
     cancelOrder(): CancelOrderBuilder;
     withdrawRoute(): WithdrawRouteBuilder;
     commentOptions(): CommentOptionsBuilder;
+    post(): PostBuilder;
+}
+
+export interface PostBuilder {
+    author(account: string): this;
+    title(value: string): this;
+    body(value: string): this;
+    permlink(value: string): this;
+    tags(...tags: string[]): this;
+    community(name: string): this;
+    parentAuthor(account: string): this;
+    parentPermlink(value: string): this;
+    beneficiary(account: string, weight: number): this;
+    maxAcceptedPayout(amount: string | number, symbol?: string): this;
+    percentHbd(value: number): this;
+    allowVotes(value?: boolean): this;
+    allowCurationRewards(value?: boolean): this;
+    app(name: string): this;
+    format(value: string): this;
+    description(value: string): this;
+    image(...urls: string[]): this;
+    metadata(key: string, value: any): this;
+    send(): any;
+}
+
+export interface BatchBuilder {
+    add(operation: [string, any]): this;
+    transfer(from: string, to: string, amount: string, memo?: string): this;
+    vote(voter: string, author: string, permlink: string, weight: number): this;
+    customJson(id: string, json: any, postingAuth?: string, activeAuth?: string): this;
+    comment(author: string, permlink: string, parentAuthor: string, parentPermlink: string, title: string, body: string, jsonMetadata?: string): this;
+    send(signingKeys?: string | string[]): any;
+}
+
+export interface PowerDownScheduleEntry {
+    week: number;
+    date: Date;
+    amount: string;
+    vestingShares: string;
+}
+
+export interface AccountValueResult {
+    hive: number;
+    hbd: number;
+    savings_hive: number;
+    savings_hbd: number;
+    hp: number;
+    total_hive: number;
+    total_usd: number;
 }
 
 export interface FlowNamespace {

@@ -35,6 +35,8 @@ import {
     HiveVoteBuilder,
     HiveWitnessVoteBuilder,
     HiveWithdrawRouteBuilder,
+    HivePostBuilder,
+    HiveBatchBuilder,
     IncomingTransfersBuilder
 } from './builders';
 import { ConfigInput, ConfigInterface, createConfig, normalizeConfigInput } from './config';
@@ -55,6 +57,7 @@ import {
     FlowRoute,
     FlowRouteMode,
     FlowTransferGroupRoute,
+    BatchBuilder,
     FlowNamespace,
     FlowSubscriptionHandle,
     OpsNamespace,
@@ -220,6 +223,7 @@ export class Streamer {
         cancelOrder: () => new HiveCancelOrderBuilder(this),
         withdrawRoute: () => new HiveWithdrawRouteBuilder(this),
         commentOptions: () => new HiveCommentOptionsBuilder(this),
+        post: () => new HivePostBuilder(this),
     };
     public readonly query: QueryNamespace = {
         getDynamicGlobalProperties: () => this.client.database.getDynamicGlobalProperties(),
@@ -2394,7 +2398,8 @@ export class Streamer {
     }
 
     public broadcastOperations(operations: Array<[string, any]>, signingKeys?: string | string[]) {
-        return Utils.broadcastOperations(this.client, operations, signingKeys || this.config.ACTIVE_KEY);
+        const keys = signingKeys || this.config.ACTIVE_KEY || this.config.POSTING_KEY;
+        return Utils.broadcastOperations(this.client, operations, keys);
     }
 
     public broadcastMultiSigOperations(operations: Array<[string, any]>, signingKeys: string[]) {
@@ -2777,6 +2782,26 @@ export class Streamer {
 
     public feedPublish(publisher: string, baseAmount: string, quoteAmount: string = '1.000 HIVE') {
         return Utils.feedPublish(this.client, this.config, publisher, baseAmount, quoteAmount);
+    }
+
+    // ─── Batch Builder ────────────────────────────────────────────────
+
+    public batch(): BatchBuilder {
+        return new HiveBatchBuilder(this);
+    }
+
+    // ─── Authority Management ───────────────────────────────────────────
+
+    public hasPostingAuth(account: string, authAccount: string) {
+        return Utils.hasPostingAuth(this.client, account, authAccount);
+    }
+
+    public grantPostingAuth(account: string, authAccount: string, signingKeys?: string | string[]) {
+        return Utils.grantPostingAuth(this.client, this.config, account, authAccount, signingKeys);
+    }
+
+    public revokePostingAuth(account: string, authAccount: string, signingKeys?: string | string[]) {
+        return Utils.revokePostingAuth(this.client, this.config, account, authAccount, signingKeys);
     }
 
     // ─── Additional Event Subscriptions ─────────────────────────────────

@@ -923,8 +923,212 @@ const decoded = Utils.decodeMemo(privateMemoKey, encodedMemo);
 
 ---
 
+## Post Builder
+
+The post builder is the easiest way to create posts and replies on Hive. It atomically combines `comment` + `comment_options` in a single transaction, handling beneficiaries, metadata, communities, and more.
+
+```typescript
+// Create a post with beneficiaries
+await streamer.ops.post()
+    .author('alice')
+    .title('My First dApp Post')
+    .body('Hello from hive-stream!')
+    .tags('hive', 'dev', 'tutorial')
+    .community('hive-169321')
+    .beneficiary('devfund', 500)     // 5%
+    .beneficiary('alice-savings', 1000)  // 10%
+    .maxAcceptedPayout(100, 'HBD')
+    .percentHbd(5000)                // 50% HBD
+    .app('my-app/1.0')
+    .image('https://example.com/hero.png')
+    .description('A tutorial on building dApps')
+    .metadata('canonical_url', 'https://myapp.com/posts/1')
+    .send();
+
+// Reply to a post
+await streamer.ops.post()
+    .author('bob')
+    .parentAuthor('alice')
+    .parentPermlink('my-first-dapp-post')
+    .body('Great post! Very helpful.')
+    .send();
+
+// Post with zero payout (decline rewards)
+await streamer.ops.post()
+    .author('alice')
+    .title('PSA: Important Announcement')
+    .body('This is a community announcement.')
+    .tags('psa')
+    .maxAcceptedPayout(0, 'HBD')
+    .send();
+```
+
+---
+
+## Batch Operations
+
+Batch multiple operations into a single atomic transaction:
+
+```typescript
+// Vote + comment in one transaction
+await streamer.batch()
+    .vote('alice', 'bob', 'great-post', 10000)
+    .comment('alice', 're-great-post-reply', 'bob', 'great-post', '', 'Love this!', '{}')
+    .send();
+
+// Multiple transfers in one transaction
+await streamer.batch()
+    .transfer('alice', 'bob', '1.000 HIVE', 'payment 1')
+    .transfer('alice', 'carol', '2.000 HIVE', 'payment 2')
+    .transfer('alice', 'dave', '3.000 HIVE', 'payment 3')
+    .send();
+
+// Mix different operation types
+await streamer.batch()
+    .add(['transfer', { from: 'alice', to: 'bob', amount: '1.000 HIVE', memo: '' }])
+    .customJson('myapp', { action: 'register' }, 'alice')
+    .send();
+```
+
+---
+
+## Authority Management
+
+Manage posting authority for Hive apps:
+
+```typescript
+// Check if an app has posting authority
+const hasAuth = await streamer.hasPostingAuth('alice', 'myapp');
+
+// Grant posting authority to an app
+await streamer.grantPostingAuth('alice', 'myapp');
+
+// Revoke posting authority
+await streamer.revokePostingAuth('alice', 'myapp');
+```
+
+---
+
+## Power Down Schedule
+
+Calculate when power down payments arrive:
+
+```typescript
+const schedule = Utils.calculatePowerDownSchedule(account);
+// [
+//   { week: 1, date: 2026-03-25T..., amount: '1000.000000', vestingShares: '1000.000000 VESTS' },
+//   { week: 2, date: 2026-04-01T..., amount: '1000.000000', vestingShares: '1000.000000 VESTS' },
+//   ...up to 13 weeks
+// ]
+```
+
+---
+
+## HBD Savings Interest
+
+```typescript
+const interest = Utils.calculateHbdInterest(
+    account.savings_hbd_balance,  // '1000.000 HBD'
+    account.savings_hbd_last_interest_payment,
+    15  // current APR %
+);
+// '12.328' (pending interest in HBD)
+```
+
+---
+
+## Payout Helpers
+
+```typescript
+// Is the post still earning?
+Utils.isInPayoutWindow(post);  // true/false
+
+// How long until payout?
+Utils.timeUntilPayout(post);  // milliseconds (0 if already paid)
+
+// What's the payout value?
+Utils.getPendingPayout(post);  // '10.500' (HBD)
+```
+
+---
+
+## Account Value Calculator
+
+```typescript
+const value = Utils.calculateAccountValue(
+    account,
+    hivePrice,           // e.g. 0.40 USD
+    hbdPrice,            // e.g. 1.00 USD
+    totalVestingFundHive,
+    totalVestingShares
+);
+// {
+//   hive: 100,           // liquid HIVE
+//   hbd: 50,             // liquid HBD
+//   savings_hive: 200,   // savings HIVE
+//   savings_hbd: 100,    // savings HBD
+//   hp: 500,             // Hive Power (HP)
+//   total_hive: 800,     // total in HIVE terms
+//   total_usd: 470.0     // total in USD
+// }
+```
+
+---
+
+## Content Extraction
+
+```typescript
+// Extract all images from a post body (for thumbnails, galleries)
+const images = Utils.extractImagesFromBody(post.body);
+// ['https://example.com/img1.png', 'https://example.com/img2.jpg']
+
+// Extract all hyperlinks (excluding images)
+const links = Utils.extractLinksFromBody(post.body);
+
+// Generate a plain-text summary (for previews, SEO)
+const summary = Utils.generatePostSummary(post.body, 200);
+// 'Hello world. This is a great post about...'
+```
+
+---
+
+## Hivesigner URLs
+
+```typescript
+// Generate signing URLs for any operation
+const transferUrl = Utils.getTransferUrl('bob', 'thanks', '1.000 HIVE', 'https://myapp.com');
+const voteUrl = Utils.getVoteUrl('alice', 'bob', 'great-post', 10000);
+const delegateUrl = Utils.getDelegateUrl('alice', 'bob', '1000.000000 VESTS');
+const followUrl = Utils.getFollowUrl('alice', 'bob');
+
+// Generic signing URL for any operation type
+const url = Utils.getHivesignerSignUrl('transfer', {
+    from: 'alice', to: 'bob', amount: '1.000 HIVE'
+}, 'https://myapp.com/callback');
+```
+
+---
+
+## Transfer Memo Helpers
+
+```typescript
+// Check if a memo is encrypted
+Utils.isEncryptedMemo('#encrypted-content');  // true
+Utils.isEncryptedMemo('regular memo');        // false
+
+// Create structured JSON memos (for exchanges, apps)
+const memo = Utils.createJsonMemo({ action: 'deposit', orderId: 12345 });
+
+// Parse JSON memos from transfers
+const data = Utils.parseJsonMemo('{"action":"deposit","orderId":12345}');
+// { action: 'deposit', orderId: 12345 }
+Utils.parseJsonMemo('regular memo');  // null
+```
+
+---
+
 ## Utilities
-The library includes helpers for JSON parsing, randomness, and transfer verification. See `src/utils.ts` for details.
+The library includes additional helpers for JSON parsing, randomness, seeded RNG, and transfer verification. See `src/utils.ts` for the complete API.
 
 ---
 

@@ -2836,6 +2836,470 @@ export const Utils = {
         } catch {
             throw new Error('Memo decoding requires @hiveio/dhive with Memo support');
         }
+    },
+
+    // ─── Authority Management ───────────────────────────────────────────
+
+    /**
+     * Checks if an account has granted posting authority to an app/account
+     */
+    async hasPostingAuth(client: Client, account: string, authAccount: string): Promise<boolean> {
+        const acc = await this.getAccount(client, account);
+        if (!acc || !acc.posting || !Array.isArray(acc.posting.account_auths)) {
+            return false;
+        }
+
+        return acc.posting.account_auths.some(([name]: [string, number]) => name === authAccount);
+    },
+
+    /**
+     * Grants posting authority to an app/account
+     */
+    async grantPostingAuth(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        account: string,
+        authAccount: string,
+        signingKeys?: HiveKeyInput | HiveKeyInput[]
+    ) {
+        const acc = await this.getAccount(client, account);
+        if (!acc) {
+            throw new Error(`Account '${account}' not found`);
+        }
+
+        const existing = acc.posting.account_auths || [];
+        if (existing.some(([name]: [string, number]) => name === authAccount)) {
+            return; // Already authorized
+        }
+
+        const newAuths = [...existing, [authAccount, 1]].sort((a: any, b: any) => a[0].localeCompare(b[0]));
+
+        const keys = signingKeys || config.ACTIVE_KEY;
+        if (!keys) {
+            throw new Error('Active key is required to grant posting authority');
+        }
+
+        const operation: [string, any] = ['account_update', {
+            account,
+            memo_key: acc.memo_key,
+            json_metadata: acc.json_metadata || '',
+            posting: {
+                ...acc.posting,
+                account_auths: newAuths
+            }
+        }];
+
+        return this.broadcastOperations(client, [operation], keys);
+    },
+
+    /**
+     * Revokes posting authority from an app/account
+     */
+    async revokePostingAuth(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        account: string,
+        authAccount: string,
+        signingKeys?: HiveKeyInput | HiveKeyInput[]
+    ) {
+        const acc = await this.getAccount(client, account);
+        if (!acc) {
+            throw new Error(`Account '${account}' not found`);
+        }
+
+        const existing = acc.posting.account_auths || [];
+        const filtered = existing.filter(([name]: [string, number]) => name !== authAccount);
+
+        if (filtered.length === existing.length) {
+            return; // Was not authorized
+        }
+
+        const keys = signingKeys || config.ACTIVE_KEY;
+        if (!keys) {
+            throw new Error('Active key is required to revoke posting authority');
+        }
+
+        const operation: [string, any] = ['account_update', {
+            account,
+            memo_key: acc.memo_key,
+            json_metadata: acc.json_metadata || '',
+            posting: {
+                ...acc.posting,
+                account_auths: filtered
+            }
+        }];
+
+        return this.broadcastOperations(client, [operation], keys);
+    },
+
+    // ─── Power Down Schedule ────────────────────────────────────────────
+
+    /**
+     * Calculates the remaining power down schedule for an account
+     * @param account - Extended account object from getAccounts()
+     * @returns Array of weekly payment entries with dates and amounts
+     */
+    calculatePowerDownSchedule(account: any): Array<{
+        week: number;
+        date: Date;
+        amount: string;
+        vestingShares: string;
+    }> {
+        const withdrawRate = parseFloat(String(account.vesting_withdraw_rate || '0').replace(' VESTS', ''));
+        const nextDate = new Date(account.next_vesting_withdrawal + 'Z');
+        const toWithdraw = parseFloat(String(account.to_withdraw || '0'));
+        const withdrawn = parseFloat(String(account.withdrawn || '0'));
+
+        if (withdrawRate <= 0 || toWithdraw <= withdrawn) {
+            return [];
+        }
+
+        const remaining = toWithdraw - withdrawn;
+        const weeksLeft = Math.ceil(remaining / (withdrawRate * 1e6));
+        const schedule: Array<{ week: number; date: Date; amount: string; vestingShares: string }> = [];
+        let totalPaid = 0;
+
+        for (let i = 0; i < Math.min(weeksLeft, 13); i++) {
+            const isLast = i === weeksLeft - 1;
+            const weekAmount = isLast
+                ? (remaining / 1e6) - totalPaid
+                : withdrawRate;
+
+            const date = new Date(nextDate.getTime() + i * 7 * 24 * 60 * 60 * 1000);
+            totalPaid += weekAmount;
+
+            schedule.push({
+                week: i + 1,
+                date,
+                amount: weekAmount.toFixed(6),
+                vestingShares: `${weekAmount.toFixed(6)} VESTS`
+            });
+        }
+
+        return schedule;
+    },
+
+    // ─── HBD Interest Calculator ────────────────────────────────────────
+
+    /**
+     * Calculates pending HBD savings interest
+     * @param hbdBalance - HBD savings balance (e.g. '100.000 HBD')
+     * @param lastInterestPayment - Date of last interest payment
+     * @param annualRate - Annual interest rate as percentage (default: 15)
+     * @returns Pending interest amount as a string
+     */
+    calculateHbdInterest(
+        hbdBalance: string | number,
+        lastInterestPayment: string | Date,
+        annualRate: number = 15
+    ): string {
+        const balance = new BigNumber(String(hbdBalance).replace(' HBD', ''));
+        if (balance.isZero() || balance.isNaN()) {
+            return '0.000';
+        }
+
+        const lastPayment = new Date(typeof lastInterestPayment === 'string'
+            ? lastInterestPayment + (lastInterestPayment.endsWith('Z') ? '' : 'Z')
+            : lastInterestPayment);
+        const now = new Date();
+        const daysSincePayment = (now.getTime() - lastPayment.getTime()) / (1000 * 60 * 60 * 24);
+
+        if (daysSincePayment <= 0) {
+            return '0.000';
+        }
+
+        const dailyRate = annualRate / 365 / 100;
+        const interest = balance.multipliedBy(dailyRate).multipliedBy(daysSincePayment);
+
+        return interest.decimalPlaces(3, BigNumber.ROUND_DOWN).toFixed(3);
+    },
+
+    // ─── Payout Helpers ─────────────────────────────────────────────────
+
+    /**
+     * Checks if a post is still within its payout window (7 days)
+     */
+    isInPayoutWindow(post: any): boolean {
+        if (!post || !post.cashout_time) {
+            return false;
+        }
+
+        const cashout = new Date(post.cashout_time + (post.cashout_time.endsWith('Z') ? '' : 'Z'));
+        const epoch = new Date('1969-12-31T23:59:59Z');
+
+        // Posts past payout have cashout_time set to epoch
+        if (cashout.getTime() <= epoch.getTime()) {
+            return false;
+        }
+
+        return cashout.getTime() > Date.now();
+    },
+
+    /**
+     * Returns milliseconds until payout, or 0 if already paid out
+     */
+    timeUntilPayout(post: any): number {
+        if (!this.isInPayoutWindow(post)) {
+            return 0;
+        }
+
+        const cashout = new Date(post.cashout_time + (post.cashout_time.endsWith('Z') ? '' : 'Z'));
+
+        return Math.max(0, cashout.getTime() - Date.now());
+    },
+
+    /**
+     * Calculates the pending payout value of a post in HBD
+     */
+    getPendingPayout(post: any): string {
+        if (!post) {
+            return '0.000';
+        }
+
+        const pending = parseFloat(String(post.pending_payout_value || '0').replace(' HBD', ''));
+        const total = parseFloat(String(post.total_payout_value || '0').replace(' HBD', ''));
+        const curator = parseFloat(String(post.curator_payout_value || '0').replace(' HBD', ''));
+
+        if (pending > 0) {
+            return pending.toFixed(3);
+        }
+
+        return (total + curator).toFixed(3);
+    },
+
+    // ─── Account Value Calculator ───────────────────────────────────────
+
+    /**
+     * Calculates total account value breakdown
+     * @param account - Extended account object
+     * @param hivePrice - Current HIVE price in USD
+     * @param hbdPrice - Current HBD price in USD (usually ~1.00)
+     * @param totalVestingFundHive - From dynamic global properties
+     * @param totalVestingShares - From dynamic global properties
+     * @returns Breakdown of account value
+     */
+    calculateAccountValue(
+        account: any,
+        hivePrice: number,
+        hbdPrice: number = 1.0,
+        totalVestingFundHive: string | number = '0',
+        totalVestingShares: string | number = '1'
+    ): {
+        hive: number;
+        hbd: number;
+        savings_hive: number;
+        savings_hbd: number;
+        hp: number;
+        total_hive: number;
+        total_usd: number;
+    } {
+        const hive = parseFloat(String(account.balance || '0').replace(' HIVE', ''));
+        const hbd = parseFloat(String(account.hbd_balance || '0').replace(' HBD', ''));
+        const savingsHive = parseFloat(String(account.savings_balance || '0').replace(' HIVE', ''));
+        const savingsHbd = parseFloat(String(account.savings_hbd_balance || '0').replace(' HBD', ''));
+
+        const effectiveVests = this.getEffectiveVestingShares(account);
+        const hp = parseFloat(this.vestToHP(String(effectiveVests), totalVestingFundHive, totalVestingShares));
+
+        const totalHive = hive + savingsHive + hp;
+        const totalHbd = hbd + savingsHbd;
+        const totalUsd = (totalHive * hivePrice) + (totalHbd * hbdPrice);
+
+        return {
+            hive,
+            hbd,
+            savings_hive: savingsHive,
+            savings_hbd: savingsHbd,
+            hp,
+            total_hive: totalHive,
+            total_usd: Math.round(totalUsd * 1000) / 1000
+        };
+    },
+
+    // ─── Content Helpers ────────────────────────────────────────────────
+
+    /**
+     * Extracts all image URLs from a post body (markdown/HTML)
+     */
+    extractImagesFromBody(body: string): string[] {
+        if (!body || typeof body !== 'string') {
+            return [];
+        }
+
+        const images: string[] = [];
+        const seen = new Set<string>();
+
+        // Markdown images: ![alt](url)
+        const mdRegex = /!\[.*?\]\((https?:\/\/[^)\s]+)\)/g;
+        let match: RegExpExecArray | null;
+        while ((match = mdRegex.exec(body)) !== null) {
+            if (!seen.has(match[1])) {
+                seen.add(match[1]);
+                images.push(match[1]);
+            }
+        }
+
+        // HTML images: <img src="url">
+        const htmlRegex = /<img[^>]+src=["'](https?:\/\/[^"']+)["']/gi;
+        while ((match = htmlRegex.exec(body)) !== null) {
+            if (!seen.has(match[1])) {
+                seen.add(match[1]);
+                images.push(match[1]);
+            }
+        }
+
+        return images;
+    },
+
+    /**
+     * Extracts all hyperlinks from a post body
+     */
+    extractLinksFromBody(body: string): string[] {
+        if (!body || typeof body !== 'string') {
+            return [];
+        }
+
+        const links: string[] = [];
+        const seen = new Set<string>();
+
+        // Markdown links: [text](url) but NOT images
+        const mdRegex = /(?<!!)\[.*?\]\((https?:\/\/[^)\s]+)\)/g;
+        let match: RegExpExecArray | null;
+        while ((match = mdRegex.exec(body)) !== null) {
+            if (!seen.has(match[1])) {
+                seen.add(match[1]);
+                links.push(match[1]);
+            }
+        }
+
+        // HTML links: <a href="url">
+        const htmlRegex = /<a[^>]+href=["'](https?:\/\/[^"']+)["']/gi;
+        while ((match = htmlRegex.exec(body)) !== null) {
+            if (!seen.has(match[1])) {
+                seen.add(match[1]);
+                links.push(match[1]);
+            }
+        }
+
+        return links;
+    },
+
+    /**
+     * Generates a plain-text summary from a post body by stripping markdown/HTML
+     */
+    generatePostSummary(body: string, maxLength: number = 200): string {
+        if (!body || typeof body !== 'string') {
+            return '';
+        }
+
+        let text = body
+            // Remove images
+            .replace(/!\[.*?\]\(.*?\)/g, '')
+            // Convert links to text
+            .replace(/\[([^\]]+)\]\(.*?\)/g, '$1')
+            // Remove HTML tags
+            .replace(/<[^>]+>/g, '')
+            // Remove headers
+            .replace(/^#{1,6}\s+/gm, '')
+            // Remove bold/italic
+            .replace(/[*_]{1,3}([^*_]+)[*_]{1,3}/g, '$1')
+            // Remove strikethrough
+            .replace(/~~([^~]+)~~/g, '$1')
+            // Remove blockquotes
+            .replace(/^>\s+/gm, '')
+            // Remove horizontal rules
+            .replace(/^[-*_]{3,}$/gm, '')
+            // Remove code blocks
+            .replace(/```[\s\S]*?```/g, '')
+            .replace(/`([^`]+)`/g, '$1')
+            // Collapse whitespace
+            .replace(/\n+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        if (text.length > maxLength) {
+            text = text.substring(0, maxLength).replace(/\s+\S*$/, '') + '...';
+        }
+
+        return text;
+    },
+
+    // ─── Hivesigner URL Generators ──────────────────────────────────────
+
+    /**
+     * Generates a Hivesigner signing URL for any operation
+     */
+    getHivesignerSignUrl(operationType: string, params: Record<string, any>, redirectUri?: string): string {
+        const queryParams = Object.entries(params)
+            .filter(([, v]) => v !== undefined && v !== null)
+            .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+            .join('&');
+
+        let url = `https://hivesigner.com/sign/${operationType}?${queryParams}`;
+        if (redirectUri) {
+            url += `&redirect_uri=${encodeURIComponent(redirectUri)}`;
+        }
+
+        return url;
+    },
+
+    /**
+     * Generates a Hivesigner vote URL
+     */
+    getVoteUrl(voter: string, author: string, permlink: string, weight: number, redirectUri?: string): string {
+        return this.getHivesignerSignUrl('vote', { voter, author, permlink, weight }, redirectUri);
+    },
+
+    /**
+     * Generates a Hivesigner delegation URL
+     */
+    getDelegateUrl(delegator: string, delegatee: string, vestingShares: string, redirectUri?: string): string {
+        return this.getHivesignerSignUrl('delegate-vesting-shares', {
+            delegator, delegatee, vesting_shares: vestingShares
+        }, redirectUri);
+    },
+
+    /**
+     * Generates a Hivesigner follow URL
+     */
+    getFollowUrl(follower: string, following: string, redirectUri?: string): string {
+        return this.getHivesignerSignUrl('follow', { follower, following }, redirectUri);
+    },
+
+    // ─── Transfer Memo Helpers ──────────────────────────────────────────
+
+    /**
+     * Checks if a memo is encrypted (starts with #)
+     */
+    isEncryptedMemo(memo: string): boolean {
+        return typeof memo === 'string' && memo.startsWith('#');
+    },
+
+    /**
+     * Creates a JSON-encoded memo string for structured data in transfers
+     */
+    createJsonMemo(data: Record<string, any>): string {
+        return JSON.stringify(data);
+    },
+
+    /**
+     * Attempts to parse a transfer memo as JSON, returns null if not valid JSON
+     */
+    parseJsonMemo(memo: string): Record<string, any> | null {
+        if (!memo || typeof memo !== 'string') {
+            return null;
+        }
+
+        const trimmed = memo.trim();
+        if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+            return null;
+        }
+
+        try {
+            return JSON.parse(trimmed);
+        } catch {
+            return null;
+        }
     }
 
 };

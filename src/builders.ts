@@ -2,6 +2,7 @@ import { Utils } from './utils';
 import type { Streamer } from './streamer';
 import type {
     AutoRouteIncomingTransfersOptions,
+    BatchBuilder,
     BurnOperationBuilder,
     CancelOrderBuilder,
     ClaimRewardsBuilder,
@@ -25,6 +26,7 @@ import type {
     IncomingTransferFlowBuilder,
     LimitOrderBuilder,
     PlannedIncomingTransferRoutes,
+    PostBuilder,
     PowerDownBuilder,
     PowerUpBuilder,
     ProposalBuilder,
@@ -1746,5 +1748,264 @@ export class HiveCommentOptionsBuilder implements CommentOptionsBuilder {
             allow_curation_rewards: this.state.allowCurationRewards,
             extensions
         });
+    }
+}
+
+export class HivePostBuilder implements PostBuilder {
+    private state: {
+        author?: string;
+        title?: string;
+        body?: string;
+        permlink?: string;
+        tags: string[];
+        communityName?: string;
+        parentAuthor: string;
+        parentPermlink: string;
+        beneficiaries: Array<{ account: string; weight: number }>;
+        maxAcceptedPayout?: string;
+        percentHbd?: number;
+        allowVotes?: boolean;
+        allowCurationRewards?: boolean;
+        appName: string;
+        formatType: string;
+        descriptionText?: string;
+        images: string[];
+        extraMetadata: Record<string, any>;
+    } = {
+        tags: [],
+        parentAuthor: '',
+        parentPermlink: '',
+        beneficiaries: [],
+        appName: 'hive-stream',
+        formatType: 'markdown',
+        images: [],
+        extraMetadata: {}
+    };
+
+    constructor(private readonly streamer: Streamer) {}
+
+    public author(account: string): this {
+        this.state.author = account;
+        return this;
+    }
+
+    public title(value: string): this {
+        this.state.title = value;
+        return this;
+    }
+
+    public body(value: string): this {
+        this.state.body = value;
+        return this;
+    }
+
+    public permlink(value: string): this {
+        this.state.permlink = value;
+        return this;
+    }
+
+    public tags(...tags: string[]): this {
+        this.state.tags = tags.map(t => t.trim().toLowerCase()).filter(Boolean);
+        return this;
+    }
+
+    public community(name: string): this {
+        this.state.communityName = name;
+        return this;
+    }
+
+    public parentAuthor(account: string): this {
+        this.state.parentAuthor = account;
+        return this;
+    }
+
+    public parentPermlink(value: string): this {
+        this.state.parentPermlink = value;
+        return this;
+    }
+
+    public beneficiary(account: string, weight: number): this {
+        this.state.beneficiaries.push({ account, weight });
+        return this;
+    }
+
+    public maxAcceptedPayout(amount: string | number, symbol?: string): this {
+        this.state.maxAcceptedPayout = buildAssetAmount(amount, symbol || 'HBD');
+        return this;
+    }
+
+    public percentHbd(value: number): this {
+        this.state.percentHbd = value;
+        return this;
+    }
+
+    public allowVotes(value: boolean = true): this {
+        this.state.allowVotes = value;
+        return this;
+    }
+
+    public allowCurationRewards(value: boolean = true): this {
+        this.state.allowCurationRewards = value;
+        return this;
+    }
+
+    public app(name: string): this {
+        this.state.appName = name;
+        return this;
+    }
+
+    public format(value: string): this {
+        this.state.formatType = value;
+        return this;
+    }
+
+    public description(value: string): this {
+        this.state.descriptionText = value;
+        return this;
+    }
+
+    public image(...urls: string[]): this {
+        this.state.images.push(...urls);
+        return this;
+    }
+
+    public metadata(key: string, value: any): this {
+        this.state.extraMetadata[key] = value;
+        return this;
+    }
+
+    public send(): any {
+        if (!this.state.author) {
+            throw new Error('post() builder requires author before send()');
+        }
+
+        if (!this.state.body) {
+            throw new Error('post() builder requires body before send()');
+        }
+
+        const isReply = !!this.state.parentAuthor;
+
+        // Generate permlink if not provided
+        const permlink = this.state.permlink
+            || (isReply
+                ? Utils.generateReplyPermlink(this.state.parentPermlink)
+                : Utils.generatePermlink(this.state.title || 'untitled'));
+
+        // Determine parent_permlink for top-level posts
+        let parentPermlink = this.state.parentPermlink;
+        if (!isReply) {
+            if (this.state.communityName) {
+                parentPermlink = this.state.communityName;
+            } else if (this.state.tags.length > 0) {
+                parentPermlink = this.state.tags[0];
+            } else {
+                parentPermlink = 'hive-stream';
+            }
+        }
+
+        // Build json_metadata
+        const jsonMetadata = Utils.createPostMetadata({
+            tags: this.state.tags,
+            image: this.state.images.length > 0 ? this.state.images : Utils.extractImagesFromBody(this.state.body),
+            app: this.state.appName,
+            format: this.state.formatType,
+            description: this.state.descriptionText,
+            ...this.state.extraMetadata
+        });
+
+        // Build the comment operation
+        const commentOp: [string, any] = ['comment', {
+            parent_author: this.state.parentAuthor,
+            parent_permlink: parentPermlink,
+            author: this.state.author,
+            permlink,
+            title: this.state.title || '',
+            body: this.state.body,
+            json_metadata: jsonMetadata
+        }];
+
+        // Check if we need comment_options
+        const needsOptions = this.state.beneficiaries.length > 0
+            || this.state.maxAcceptedPayout !== undefined
+            || this.state.percentHbd !== undefined
+            || this.state.allowVotes !== undefined
+            || this.state.allowCurationRewards !== undefined;
+
+        if (!needsOptions) {
+            return this.streamer.broadcastOperations([commentOp]);
+        }
+
+        // Build comment_options operation
+        const extensions: any[] = [];
+        if (this.state.beneficiaries.length > 0) {
+            const sorted = [...this.state.beneficiaries].sort((a, b) => a.account.localeCompare(b.account));
+            extensions.push([0, { beneficiaries: sorted }]);
+        }
+
+        const commentOptionsOp: [string, any] = ['comment_options', {
+            author: this.state.author,
+            permlink,
+            max_accepted_payout: this.state.maxAcceptedPayout || '1000000.000 HBD',
+            percent_hbd: this.state.percentHbd !== undefined ? this.state.percentHbd : 10000,
+            allow_votes: this.state.allowVotes !== false,
+            allow_curation_rewards: this.state.allowCurationRewards !== false,
+            extensions
+        }];
+
+        // Broadcast both atomically
+        return this.streamer.broadcastOperations([commentOp, commentOptionsOp]);
+    }
+}
+
+export class HiveBatchBuilder implements BatchBuilder {
+    private operations: Array<[string, any]> = [];
+
+    constructor(private readonly streamer: Streamer) {}
+
+    public add(operation: [string, any]): this {
+        this.operations.push(operation);
+        return this;
+    }
+
+    public transfer(from: string, to: string, amount: string, memo: string = ''): this {
+        this.operations.push(['transfer', { from, to, amount, memo }]);
+        return this;
+    }
+
+    public vote(voter: string, author: string, permlink: string, weight: number): this {
+        this.operations.push(['vote', { voter, author, permlink, weight }]);
+        return this;
+    }
+
+    public customJson(id: string, json: any, postingAuth?: string, activeAuth?: string): this {
+        const jsonStr = typeof json === 'string' ? json : JSON.stringify(json);
+        this.operations.push(['custom_json', {
+            required_auths: activeAuth ? [activeAuth] : [],
+            required_posting_auths: postingAuth ? [postingAuth] : [],
+            id,
+            json: jsonStr
+        }]);
+        return this;
+    }
+
+    public comment(author: string, permlink: string, parentAuthor: string, parentPermlink: string, title: string, body: string, jsonMetadata: string = '{}'): this {
+        this.operations.push(['comment', {
+            parent_author: parentAuthor,
+            parent_permlink: parentPermlink,
+            author,
+            permlink,
+            title,
+            body,
+            json_metadata: jsonMetadata
+        }]);
+        return this;
+    }
+
+    public send(signingKeys?: string | string[]): any {
+        if (this.operations.length === 0) {
+            throw new Error('batch() builder requires at least one operation before send()');
+        }
+
+        return this.streamer.broadcastOperations(this.operations, signingKeys);
     }
 }
