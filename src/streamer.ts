@@ -37,6 +37,12 @@ import {
     HiveWithdrawRouteBuilder,
     HivePostBuilder,
     HiveBatchBuilder,
+    HiveEngineStakeBuilder,
+    HiveEngineUnstakeBuilder,
+    HiveEngineMarketOrderBuilder,
+    HiveEngineCancelOrderBuilder,
+    HiveEngineDelegateBuilder,
+    HiveCommunityOperationBuilder,
     IncomingTransfersBuilder
 } from './builders';
 import { ConfigInput, ConfigInterface, createConfig, normalizeConfigInput } from './config';
@@ -58,6 +64,7 @@ import {
     FlowRouteMode,
     FlowTransferGroupRoute,
     BatchBuilder,
+    EngineQueryNamespace,
     FlowNamespace,
     FlowSubscriptionHandle,
     OpsNamespace,
@@ -104,6 +111,8 @@ export class Streamer {
     private limitOrderSubscriptions: SubscriptionCallback[] = [];
     private savingsSubscriptions: SubscriptionCallback[] = [];
     private convertSubscriptions: SubscriptionCallback[] = [];
+    private blockSubscriptions: SubscriptionCallback[] = [];
+    private anyOperationSubscriptions: SubscriptionCallback[] = [];
 
     private attempts = 0;
 
@@ -224,6 +233,16 @@ export class Streamer {
         withdrawRoute: () => new HiveWithdrawRouteBuilder(this),
         commentOptions: () => new HiveCommentOptionsBuilder(this),
         post: () => new HivePostBuilder(this),
+        stakeEngine: () => new HiveEngineStakeBuilder(this),
+        unstakeEngine: () => new HiveEngineUnstakeBuilder(this),
+        buyEngine: () => new HiveEngineMarketOrderBuilder(this, 'buy'),
+        sellEngine: () => new HiveEngineMarketOrderBuilder(this, 'sell'),
+        cancelEngineOrder: () => new HiveEngineCancelOrderBuilder(this),
+        delegateEngine: () => new HiveEngineDelegateBuilder(this),
+        undelegateEngine: () => new HiveEngineDelegateBuilder(this, true),
+        subscribeCommunity: () => new HiveCommunityOperationBuilder(this, 'subscribe'),
+        unsubscribeCommunity: () => new HiveCommunityOperationBuilder(this, 'unsubscribe'),
+        cancelRecurrentTransfer: () => new HiveRecurrentTransferBuilder(this),
     };
     public readonly query: QueryNamespace = {
         getDynamicGlobalProperties: () => this.client.database.getDynamicGlobalProperties(),
@@ -303,6 +322,45 @@ export class Streamer {
                 options.order_direction || 'descending',
                 options.status || 'votable'
             ]),
+    };
+    public readonly engine: EngineQueryNamespace = {
+        getTokenBalances: (account) =>
+            this.hive.find('tokens', 'balances', { account }),
+        getTokenBalance: (account, symbol) =>
+            this.hive.findOne('tokens', 'balances', { account, symbol }),
+        getToken: (symbol) =>
+            this.hive.findOne('tokens', 'tokens', { symbol }),
+        getTokens: (query = {}, limit = 1000, offset = 0) =>
+            this.hive.find('tokens', 'tokens', query, limit, offset),
+        getMarketBuyBook: (symbol, limit = 100, offset = 0) =>
+            this.hive.find('market', 'buyBook', { symbol }, limit, offset, [{ index: 'priceDec', descending: true }]),
+        getMarketSellBook: (symbol, limit = 100, offset = 0) =>
+            this.hive.find('market', 'sellBook', { symbol }, limit, offset, [{ index: 'priceDec', descending: false }]),
+        getMarketHistory: (symbol, limit = 100, offset = 0) =>
+            this.hive.find('market', 'tradesHistory', { symbol }, limit, offset, [{ index: '_id', descending: true }]),
+        getMarketMetrics: (query = {}) =>
+            this.hive.find('market', 'metrics', query),
+        getNFT: (symbol) =>
+            this.hive.findOne('nft', 'nfts', { symbol }),
+        getNFTInstances: (symbol, query = {}, limit = 100, offset = 0) =>
+            this.hive.find('nft', `${symbol}instances`, query, limit, offset),
+        getNFTBalance: (account, symbol) =>
+            this.hive.find('nft', `${symbol}instances`, { account }),
+        getNFTSellBook: (symbol, limit = 100, offset = 0) =>
+            this.hive.find('nftmarket', `${symbol}sellBook`, {}, limit, offset),
+        getPendingUnstakes: (account, symbol) => {
+            const query: any = { account };
+            if (symbol) { query.symbol = symbol; }
+            return this.hive.find('tokens', 'pendingUnstakes', query);
+        },
+        getDelegations: (from, symbol) =>
+            this.hive.find('tokens', 'delegations', { from, symbol }),
+        getContractInfo: (name) =>
+            this.hive.getContractInfo(name),
+        find: (contract, table, query, limit = 1000, offset = 0) =>
+            this.hive.find(contract, table, query, limit, offset),
+        findOne: (contract, table, query) =>
+            this.hive.findOne(contract, table, query),
     };
 
     constructor(userConfig: ConfigInput = {}) {
@@ -1345,6 +1403,11 @@ export class Streamer {
             await this.adapter.processBlock(block);
         }
 
+        // Fire onBlock subscribers
+        this.blockSubscriptions.forEach(sub => {
+            sub.callback(block, this.lastBlockNumber);
+        });
+
         // Hive operations are order-sensitive, so process them sequentially.
         const transactions = block.transactions as any[];
         const transactionIds = block.transaction_ids;
@@ -1421,6 +1484,11 @@ export class Streamer {
         if (this.adapter?.processOperation) {
             await this.adapter.processOperation(op, blockNumber, blockId, prevBlockId, trxId, blockTime);
         }
+
+        // Fire onAnyOperation subscribers
+        this.anyOperationSubscriptions.forEach(sub => {
+            sub.callback(op, blockNumber, blockId, prevBlockId, trxId, blockTime);
+        });
 
         // Operation is a "comment" which could either be a post or comment
         if (operationType === 'comment') {
@@ -2852,6 +2920,54 @@ export class Streamer {
 
     public onConvert(callback: (data: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
         this.convertSubscriptions.push({ callback });
+    }
+
+    public onBlock(callback: (block: any, blockNumber: number) => void): void {
+        this.blockSubscriptions.push({ callback });
+    }
+
+    public onAnyOperation(callback: (op: [string, any], blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
+        this.anyOperationSubscriptions.push({ callback });
+    }
+
+    // ─── Hive Engine Write Operations ───────────────────────────────────
+
+    public stakeEngineTokens(from: string, to: string, symbol: string, quantity: string) {
+        return Utils.stakeEngineTokens(this.client, this.config, from, to, symbol, quantity);
+    }
+
+    public unstakeEngineTokens(from: string, symbol: string, quantity: string) {
+        return Utils.unstakeEngineTokens(this.client, this.config, from, symbol, quantity);
+    }
+
+    public buyEngineTokens(from: string, symbol: string, quantity: string, price: string) {
+        return Utils.buyEngineTokens(this.client, this.config, from, symbol, quantity, price);
+    }
+
+    public sellEngineTokens(from: string, symbol: string, quantity: string, price: string) {
+        return Utils.sellEngineTokens(this.client, this.config, from, symbol, quantity, price);
+    }
+
+    public cancelEngineOrder(from: string, type: 'buy' | 'sell', orderId: string) {
+        return Utils.cancelEngineOrder(this.client, this.config, from, type, orderId);
+    }
+
+    public delegateEngineTokens(from: string, to: string, symbol: string, quantity: string) {
+        return Utils.delegateEngineTokens(this.client, this.config, from, to, symbol, quantity);
+    }
+
+    public undelegateEngineTokens(from: string, to: string, symbol: string, quantity: string) {
+        return Utils.undelegateEngineTokens(this.client, this.config, from, to, symbol, quantity);
+    }
+
+    // ─── Community Operations ───────────────────────────────────────────
+
+    public subscribeCommunity(account: string, community: string) {
+        return Utils.subscribeCommunity(this.client, this.config, account, community);
+    }
+
+    public unsubscribeCommunity(account: string, community: string) {
+        return Utils.unsubscribeCommunity(this.client, this.config, account, community);
     }
 
     // Memory management: cleanup subscriptions

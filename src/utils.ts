@@ -3300,6 +3300,372 @@ export const Utils = {
         } catch {
             return null;
         }
+    },
+
+    // ─── Key Derivation ─────────────────────────────────────────────────
+
+    /**
+     * Derives all private and public keys from a Hive master password
+     * @param account - The Hive account name
+     * @param password - The master password
+     * @returns Object with owner, active, posting, memo keys (private and public)
+     */
+    deriveKeys(account: string, password: string): {
+        owner: string;
+        active: string;
+        posting: string;
+        memo: string;
+        ownerPublic: string;
+        activePublic: string;
+        postingPublic: string;
+        memoPublic: string;
+    } {
+        if (!account || !password) {
+            throw new Error('Account and password are required for key derivation');
+        }
+
+        const roles = ['owner', 'active', 'posting', 'memo'] as const;
+        const result: any = {};
+
+        for (const role of roles) {
+            const privateKey = PrivateKey.fromLogin(account, password, role);
+            result[role] = privateKey.toString();
+            result[`${role}Public`] = privateKey.createPublic().toString();
+        }
+
+        return result;
+    },
+
+    /**
+     * Gets the public key from a private key string
+     */
+    getPublicKey(privateKey: string): string {
+        return PrivateKey.fromString(privateKey).createPublic().toString();
+    },
+
+    // ─── Hive Engine Write Operations ───────────────────────────────────
+
+    stakeEngineTokens(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        from: string,
+        to: string,
+        symbol: string,
+        quantity: string
+    ) {
+        if (!client || !config.ACTIVE_KEY || !from || !symbol || !quantity) {
+            throw new Error('Missing required parameters for stake engine tokens');
+        }
+
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+        const json = JSON.stringify({
+            contractName: 'tokens',
+            contractAction: 'stake',
+            contractPayload: { to: to || from, symbol, quantity: String(quantity) }
+        });
+
+        return client.broadcast.json({
+            required_auths: [from],
+            required_posting_auths: [],
+            id: config.HIVE_ENGINE_ID || 'ssc-mainnet-hive',
+            json
+        }, key);
+    },
+
+    unstakeEngineTokens(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        from: string,
+        symbol: string,
+        quantity: string
+    ) {
+        if (!client || !config.ACTIVE_KEY || !from || !symbol || !quantity) {
+            throw new Error('Missing required parameters for unstake engine tokens');
+        }
+
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+        const json = JSON.stringify({
+            contractName: 'tokens',
+            contractAction: 'unstake',
+            contractPayload: { symbol, quantity: String(quantity) }
+        });
+
+        return client.broadcast.json({
+            required_auths: [from],
+            required_posting_auths: [],
+            id: config.HIVE_ENGINE_ID || 'ssc-mainnet-hive',
+            json
+        }, key);
+    },
+
+    buyEngineTokens(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        from: string,
+        symbol: string,
+        quantity: string,
+        price: string
+    ) {
+        if (!client || !config.ACTIVE_KEY || !from || !symbol || !quantity || !price) {
+            throw new Error('Missing required parameters for buy engine tokens');
+        }
+
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+        const json = JSON.stringify({
+            contractName: 'market',
+            contractAction: 'buy',
+            contractPayload: { symbol, quantity: String(quantity), price: String(price) }
+        });
+
+        return client.broadcast.json({
+            required_auths: [from],
+            required_posting_auths: [],
+            id: config.HIVE_ENGINE_ID || 'ssc-mainnet-hive',
+            json
+        }, key);
+    },
+
+    sellEngineTokens(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        from: string,
+        symbol: string,
+        quantity: string,
+        price: string
+    ) {
+        if (!client || !config.ACTIVE_KEY || !from || !symbol || !quantity || !price) {
+            throw new Error('Missing required parameters for sell engine tokens');
+        }
+
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+        const json = JSON.stringify({
+            contractName: 'market',
+            contractAction: 'sell',
+            contractPayload: { symbol, quantity: String(quantity), price: String(price) }
+        });
+
+        return client.broadcast.json({
+            required_auths: [from],
+            required_posting_auths: [],
+            id: config.HIVE_ENGINE_ID || 'ssc-mainnet-hive',
+            json
+        }, key);
+    },
+
+    cancelEngineOrder(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        from: string,
+        type: 'buy' | 'sell',
+        orderId: string
+    ) {
+        if (!client || !config.ACTIVE_KEY || !from || !type || !orderId) {
+            throw new Error('Missing required parameters for cancel engine order');
+        }
+
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+        const json = JSON.stringify({
+            contractName: 'market',
+            contractAction: 'cancel',
+            contractPayload: { type, id: orderId }
+        });
+
+        return client.broadcast.json({
+            required_auths: [from],
+            required_posting_auths: [],
+            id: config.HIVE_ENGINE_ID || 'ssc-mainnet-hive',
+            json
+        }, key);
+    },
+
+    delegateEngineTokens(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        from: string,
+        to: string,
+        symbol: string,
+        quantity: string
+    ) {
+        if (!client || !config.ACTIVE_KEY || !from || !to || !symbol || !quantity) {
+            throw new Error('Missing required parameters for delegate engine tokens');
+        }
+
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+        const json = JSON.stringify({
+            contractName: 'tokens',
+            contractAction: 'delegate',
+            contractPayload: { to, symbol, quantity: String(quantity) }
+        });
+
+        return client.broadcast.json({
+            required_auths: [from],
+            required_posting_auths: [],
+            id: config.HIVE_ENGINE_ID || 'ssc-mainnet-hive',
+            json
+        }, key);
+    },
+
+    undelegateEngineTokens(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        from: string,
+        to: string,
+        symbol: string,
+        quantity: string
+    ) {
+        if (!client || !config.ACTIVE_KEY || !from || !to || !symbol || !quantity) {
+            throw new Error('Missing required parameters for undelegate engine tokens');
+        }
+
+        const key = PrivateKey.fromString(config.ACTIVE_KEY);
+        const json = JSON.stringify({
+            contractName: 'tokens',
+            contractAction: 'undelegate',
+            contractPayload: { from: to, symbol, quantity: String(quantity) }
+        });
+
+        return client.broadcast.json({
+            required_auths: [from],
+            required_posting_auths: [],
+            id: config.HIVE_ENGINE_ID || 'ssc-mainnet-hive',
+            json
+        }, key);
+    },
+
+    // ─── Community Operations ───────────────────────────────────────────
+
+    subscribeCommunity(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        account: string,
+        community: string
+    ) {
+        if (!client || !config.POSTING_KEY || !account || !community) {
+            throw new Error('Missing required parameters for subscribe to community');
+        }
+
+        const key = PrivateKey.fromString(config.POSTING_KEY);
+        const json = JSON.stringify(['subscribe', { community }]);
+
+        return client.broadcast.json({
+            required_auths: [],
+            required_posting_auths: [account],
+            id: 'community',
+            json
+        }, key);
+    },
+
+    unsubscribeCommunity(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        account: string,
+        community: string
+    ) {
+        if (!client || !config.POSTING_KEY || !account || !community) {
+            throw new Error('Missing required parameters for unsubscribe from community');
+        }
+
+        const key = PrivateKey.fromString(config.POSTING_KEY);
+        const json = JSON.stringify(['unsubscribe', { community }]);
+
+        return client.broadcast.json({
+            required_auths: [],
+            required_posting_auths: [account],
+            id: 'community',
+            json
+        }, key);
+    },
+
+    pinCommunityPost(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        account: string,
+        community: string,
+        author: string,
+        permlink: string
+    ) {
+        if (!client || !config.POSTING_KEY || !account || !community || !author || !permlink) {
+            throw new Error('Missing required parameters for pin community post');
+        }
+
+        const key = PrivateKey.fromString(config.POSTING_KEY);
+        const json = JSON.stringify(['pinPost', { community, account: author, permlink }]);
+
+        return client.broadcast.json({
+            required_auths: [],
+            required_posting_auths: [account],
+            id: 'community',
+            json
+        }, key);
+    },
+
+    unpinCommunityPost(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        account: string,
+        community: string,
+        author: string,
+        permlink: string
+    ) {
+        if (!client || !config.POSTING_KEY || !account || !community || !author || !permlink) {
+            throw new Error('Missing required parameters for unpin community post');
+        }
+
+        const key = PrivateKey.fromString(config.POSTING_KEY);
+        const json = JSON.stringify(['unpinPost', { community, account: author, permlink }]);
+
+        return client.broadcast.json({
+            required_auths: [],
+            required_posting_auths: [account],
+            id: 'community',
+            json
+        }, key);
+    },
+
+    muteCommunityUser(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        account: string,
+        community: string,
+        targetAccount: string,
+        notes: string = ''
+    ) {
+        if (!client || !config.POSTING_KEY || !account || !community || !targetAccount) {
+            throw new Error('Missing required parameters for mute community user');
+        }
+
+        const key = PrivateKey.fromString(config.POSTING_KEY);
+        const json = JSON.stringify(['mutePost', { community, account: targetAccount, notes }]);
+
+        return client.broadcast.json({
+            required_auths: [],
+            required_posting_auths: [account],
+            id: 'community',
+            json
+        }, key);
+    },
+
+    unmuteCommunityUser(
+        client: Client,
+        config: Partial<ConfigInterface>,
+        account: string,
+        community: string,
+        targetAccount: string,
+        notes: string = ''
+    ) {
+        if (!client || !config.POSTING_KEY || !account || !community || !targetAccount) {
+            throw new Error('Missing required parameters for unmute community user');
+        }
+
+        const key = PrivateKey.fromString(config.POSTING_KEY);
+        const json = JSON.stringify(['unmutePost', { community, account: targetAccount, notes }]);
+
+        return client.broadcast.json({
+            required_auths: [],
+            required_posting_auths: [account],
+            id: 'community',
+            json
+        }, key);
     }
 
 };

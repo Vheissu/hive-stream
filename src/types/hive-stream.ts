@@ -653,6 +653,16 @@ export interface OpsNamespace {
     withdrawRoute(): WithdrawRouteBuilder;
     commentOptions(): CommentOptionsBuilder;
     post(): PostBuilder;
+    stakeEngine(): EngineStakeBuilder;
+    unstakeEngine(): EngineUnstakeBuilder;
+    buyEngine(): EngineMarketOrderBuilder;
+    sellEngine(): EngineMarketOrderBuilder;
+    cancelEngineOrder(): EngineCancelOrderBuilder;
+    delegateEngine(): EngineDelegateBuilder;
+    undelegateEngine(): EngineDelegateBuilder;
+    subscribeCommunity(): CommunityOperationBuilder;
+    unsubscribeCommunity(): CommunityOperationBuilder;
+    cancelRecurrentTransfer(): RecurrentTransferBuilder;
 }
 
 export interface PostBuilder {
@@ -701,6 +711,81 @@ export interface AccountValueResult {
     hp: number;
     total_hive: number;
     total_usd: number;
+}
+
+export interface EngineQueryNamespace {
+    getTokenBalances(account: string): Promise<any[]>;
+    getTokenBalance(account: string, symbol: string): Promise<any>;
+    getToken(symbol: string): Promise<any>;
+    getTokens(query?: Record<string, any>, limit?: number, offset?: number): Promise<any[]>;
+    getMarketBuyBook(symbol: string, limit?: number, offset?: number): Promise<any[]>;
+    getMarketSellBook(symbol: string, limit?: number, offset?: number): Promise<any[]>;
+    getMarketHistory(symbol: string, limit?: number, offset?: number): Promise<any[]>;
+    getMarketMetrics(query?: Record<string, any>): Promise<any[]>;
+    getNFT(symbol: string): Promise<any>;
+    getNFTInstances(symbol: string, query?: Record<string, any>, limit?: number, offset?: number): Promise<any[]>;
+    getNFTBalance(account: string, symbol: string): Promise<any[]>;
+    getNFTSellBook(symbol: string, limit?: number, offset?: number): Promise<any[]>;
+    getPendingUnstakes(account: string, symbol?: string): Promise<any[]>;
+    getDelegations(from: string, symbol: string): Promise<any[]>;
+    getContractInfo(name: string): Promise<any>;
+    find(contract: string, table: string, query: Record<string, any>, limit?: number, offset?: number): Promise<any[]>;
+    findOne(contract: string, table: string, query: Record<string, any>): Promise<any>;
+}
+
+export interface EngineStakeBuilder {
+    from(account: string): this;
+    to(account: string): this;
+    symbol(symbol: string): this;
+    quantity(quantity: string | number): this;
+    send(): any;
+}
+
+export interface EngineUnstakeBuilder {
+    from(account: string): this;
+    symbol(symbol: string): this;
+    quantity(quantity: string | number): this;
+    send(): any;
+}
+
+export interface EngineMarketOrderBuilder {
+    from(account: string): this;
+    symbol(symbol: string): this;
+    quantity(quantity: string | number): this;
+    price(price: string | number): this;
+    send(): any;
+}
+
+export interface EngineCancelOrderBuilder {
+    from(account: string): this;
+    type(type: 'buy' | 'sell'): this;
+    orderId(id: string): this;
+    send(): any;
+}
+
+export interface EngineDelegateBuilder {
+    from(account: string): this;
+    to(account: string): this;
+    symbol(symbol: string): this;
+    quantity(quantity: string | number): this;
+    send(): any;
+}
+
+export interface CommunityOperationBuilder {
+    account(account: string): this;
+    community(name: string): this;
+    send(): any;
+}
+
+export interface DerivedKeys {
+    owner: string;
+    active: string;
+    posting: string;
+    memo: string;
+    ownerPublic: string;
+    activePublic: string;
+    postingPublic: string;
+    memoPublic: string;
 }
 
 export interface FlowNamespace {

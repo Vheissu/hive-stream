@@ -4,6 +4,12 @@ import type {
     AutoRouteIncomingTransfersOptions,
     BatchBuilder,
     BurnOperationBuilder,
+    CommunityOperationBuilder,
+    EngineCancelOrderBuilder,
+    EngineDelegateBuilder,
+    EngineMarketOrderBuilder,
+    EngineStakeBuilder,
+    EngineUnstakeBuilder,
     CancelOrderBuilder,
     ClaimRewardsBuilder,
     CollateralizedConvertBuilder,
@@ -2007,5 +2013,118 @@ export class HiveBatchBuilder implements BatchBuilder {
         }
 
         return this.streamer.broadcastOperations(this.operations, signingKeys);
+    }
+}
+
+export class HiveEngineStakeBuilder implements EngineStakeBuilder {
+    private state: { from?: string; to?: string; symbol?: string; quantity?: string } = {};
+
+    constructor(private readonly streamer: Streamer) {}
+
+    public from(account: string): this { this.state.from = account; return this; }
+    public to(account: string): this { this.state.to = account; return this; }
+    public symbol(symbol: string): this { this.state.symbol = symbol; return this; }
+    public quantity(quantity: string | number): this { this.state.quantity = String(quantity); return this; }
+
+    public send(): any {
+        if (!this.state.from || !this.state.symbol || !this.state.quantity) {
+            throw new Error('stakeEngine() builder requires from, symbol, and quantity before send()');
+        }
+        return this.streamer.stakeEngineTokens(this.state.from, this.state.to || this.state.from, this.state.symbol, this.state.quantity);
+    }
+}
+
+export class HiveEngineUnstakeBuilder implements EngineUnstakeBuilder {
+    private state: { from?: string; symbol?: string; quantity?: string } = {};
+
+    constructor(private readonly streamer: Streamer) {}
+
+    public from(account: string): this { this.state.from = account; return this; }
+    public symbol(symbol: string): this { this.state.symbol = symbol; return this; }
+    public quantity(quantity: string | number): this { this.state.quantity = String(quantity); return this; }
+
+    public send(): any {
+        if (!this.state.from || !this.state.symbol || !this.state.quantity) {
+            throw new Error('unstakeEngine() builder requires from, symbol, and quantity before send()');
+        }
+        return this.streamer.unstakeEngineTokens(this.state.from, this.state.symbol, this.state.quantity);
+    }
+}
+
+export class HiveEngineMarketOrderBuilder implements EngineMarketOrderBuilder {
+    private state: { from?: string; symbol?: string; quantity?: string; price?: string } = {};
+
+    constructor(private readonly streamer: Streamer, private readonly side: 'buy' | 'sell') {}
+
+    public from(account: string): this { this.state.from = account; return this; }
+    public symbol(symbol: string): this { this.state.symbol = symbol; return this; }
+    public quantity(quantity: string | number): this { this.state.quantity = String(quantity); return this; }
+    public price(price: string | number): this { this.state.price = String(price); return this; }
+
+    public send(): any {
+        if (!this.state.from || !this.state.symbol || !this.state.quantity || !this.state.price) {
+            throw new Error(`${this.side}Engine() builder requires from, symbol, quantity, and price before send()`);
+        }
+        if (this.side === 'buy') {
+            return this.streamer.buyEngineTokens(this.state.from, this.state.symbol, this.state.quantity, this.state.price);
+        }
+        return this.streamer.sellEngineTokens(this.state.from, this.state.symbol, this.state.quantity, this.state.price);
+    }
+}
+
+export class HiveEngineCancelOrderBuilder implements EngineCancelOrderBuilder {
+    private state: { from?: string; type?: 'buy' | 'sell'; orderId?: string } = {};
+
+    constructor(private readonly streamer: Streamer) {}
+
+    public from(account: string): this { this.state.from = account; return this; }
+    public type(type: 'buy' | 'sell'): this { this.state.type = type; return this; }
+    public orderId(id: string): this { this.state.orderId = id; return this; }
+
+    public send(): any {
+        if (!this.state.from || !this.state.type || !this.state.orderId) {
+            throw new Error('cancelEngineOrder() builder requires from, type, and orderId before send()');
+        }
+        return this.streamer.cancelEngineOrder(this.state.from, this.state.type, this.state.orderId);
+    }
+}
+
+export class HiveEngineDelegateBuilder implements EngineDelegateBuilder {
+    private state: { from?: string; to?: string; symbol?: string; quantity?: string } = {};
+
+    constructor(private readonly streamer: Streamer, private readonly undelegate: boolean = false) {}
+
+    public from(account: string): this { this.state.from = account; return this; }
+    public to(account: string): this { this.state.to = account; return this; }
+    public symbol(symbol: string): this { this.state.symbol = symbol; return this; }
+    public quantity(quantity: string | number): this { this.state.quantity = String(quantity); return this; }
+
+    public send(): any {
+        if (!this.state.from || !this.state.to || !this.state.symbol || !this.state.quantity) {
+            throw new Error(`${this.undelegate ? 'undelegateEngine' : 'delegateEngine'}() builder requires from, to, symbol, and quantity before send()`);
+        }
+        if (this.undelegate) {
+            return this.streamer.undelegateEngineTokens(this.state.from, this.state.to, this.state.symbol, this.state.quantity);
+        }
+        return this.streamer.delegateEngineTokens(this.state.from, this.state.to, this.state.symbol, this.state.quantity);
+    }
+}
+
+export class HiveCommunityOperationBuilder implements CommunityOperationBuilder {
+    private state: { account?: string; community?: string } = {};
+
+    constructor(private readonly streamer: Streamer, private readonly action: 'subscribe' | 'unsubscribe') {}
+
+    public account(account: string): this { this.state.account = account; return this; }
+    public community(name: string): this { this.state.community = name; return this; }
+
+    public send(): any {
+        if (!this.state.account || !this.state.community) {
+            throw new Error(`${this.action}Community() builder requires account and community before send()`);
+        }
+        if (this.action === 'subscribe') {
+            return this.streamer.subscribeCommunity(this.state.account, this.state.community);
+        }
+        return this.streamer.unsubscribeCommunity(this.state.account, this.state.community);
     }
 }
