@@ -299,6 +299,7 @@ export const TipJar = defineContract({
 - `createTokenContract` - SQL-backed fungible tokens
 - `createNFTContract` - SQL-backed NFTs
 - `createRpsContract` - Rock/Paper/Scissors
+- `createRouletteContract` - Roulette with straight, color, parity, dozen, column, and low/high bets
 - `createPollContract` - Polls and votes
 - `createTipJarContract` - Tip jar + message log
 - `createExchangeContract` - Deposits/withdrawals/orders/matching (SQL)
@@ -337,6 +338,7 @@ export const TipJar = defineContract({
 Quick-start snippets live in `examples/contracts/`:
 
 - `examples/contracts/rps.ts`
+- `examples/contracts/roulette.ts`
 - `examples/contracts/poll.ts`
 - `examples/contracts/tipjar.ts`
 - `examples/contracts/exchange.ts`

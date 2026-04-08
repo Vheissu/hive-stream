@@ -542,6 +542,7 @@ export const HIVE_STREAM_METADATA: Readonly<HiveStreamMetadata> = deepFreeze({
             'createTokenContract',
             'createNFTContract',
             'createRpsContract',
+            'createRouletteContract',
             'createPollContract',
             'createTipJarContract',
             'createExchangeContract',

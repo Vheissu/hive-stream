@@ -13,4 +13,8 @@ describe('package root exports', () => {
         expect(HiveStream.HafProvider).toBeDefined();
         expect(HiveStream.HafClient).toBeDefined();
     });
+
+    test('exposes roulette contract factory from the root entrypoint', () => {
+        expect(HiveStream.createRouletteContract).toBeDefined();
+    });
 });

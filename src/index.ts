@@ -26,6 +26,7 @@ export { createCoinflipContract } from './contracts/coinflip.contract';
 export { createTokenContract } from './contracts/token.contract';
 export { createNFTContract, NFTContract } from './contracts/nft.contract';
 export { createRpsContract } from './contracts/rps.contract';
+export { createRouletteContract } from './contracts/roulette.contract';
 export { createPollContract } from './contracts/poll.contract';
 export { createTipJarContract } from './contracts/tipjar.contract';
 export { createExchangeContract } from './contracts/exchange.contract';

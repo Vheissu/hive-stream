@@ -147,6 +147,7 @@ describe('metadata exports', () => {
     test('keeps helper exports aligned with the expanded contract catalog', () => {
         expect(HIVE_STREAM_METADATA.contracts.helperExports).toEqual(
             expect.arrayContaining([
+                'createRouletteContract',
                 'createInsurancePoolContract',
                 'createOracleBountyContract',
                 'createGrantRoundsContract',

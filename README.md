@@ -559,6 +559,7 @@ The library includes several built-in contract examples in the `src/contracts` f
 - `createTokenContract` - A contract for token operations
 - `createNFTContract` - A contract for NFT operations
 - `createRpsContract` - A rock-paper-scissors game contract
+- `createRouletteContract` - A roulette game contract with straight, color, parity, dozen, column, and low/high bets
 - `createPollContract` - A poll/voting contract
 - `createTipJarContract` - A tip jar + message board contract
 - `createExchangeContract` - A basic exchange with deposits, withdrawals, balances, and order matching (SQL adapter required)
@@ -595,7 +596,7 @@ The library includes several built-in contract examples in the `src/contracts` f
 These can be imported and used as examples for building your own contracts:
 
 ```javascript
-import { createDiceContract, createCoinflipContract, createLottoContract } from 'hive-stream';
+import { createDiceContract, createCoinflipContract, createLottoContract, createRouletteContract } from 'hive-stream';
 ```
 
 Most built-in contracts in `src/contracts` persist SQL tables internally, so they require a SQL-capable adapter such as SQLite or PostgreSQL. MongoDB remains supported for streamer persistence and custom contracts that do not depend on raw SQL queries.
@@ -605,6 +606,7 @@ Most built-in contracts in `src/contracts` persist SQL tables internally, so the
 Sample snippets for the newest contracts live in `examples/contracts/`:
 
 - `examples/contracts/rps.ts`
+- `examples/contracts/roulette.ts`
 - `examples/contracts/poll.ts`
 - `examples/contracts/tipjar.ts`
 - `examples/contracts/exchange.ts`
