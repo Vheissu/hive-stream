@@ -59,6 +59,7 @@ export { createProposalTimelockContract } from './contracts/proposaltimelock.con
 export { createBundleMarketplaceContract } from './contracts/bundlemarketplace.contract';
 export { createTicketingContract } from './contracts/ticketing.contract';
 export { createFanClubContract } from './contracts/fanclub.contract';
+export { createCheckpointContract } from './contracts/checkpoint.contract';
 
 // Types
 export * from './types/hive-stream';

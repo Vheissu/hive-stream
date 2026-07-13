@@ -4,7 +4,7 @@ A Node.js layer for Hive that allows you to watch for specific actions on the Hi
 
 ## Scaffold a new app
 
-The fastest way to start is the bundled CLI. It scaffolds a ready-to-run Hive app — game, exchange, social platform, blog, token/NFT project, or a minimal starter — wired up with the storage adapter of your choice:
+The fastest way to start is the bundled CLI. It scaffolds a ready-to-run Hive app — game, exchange, social platform, blog, token/NFT project, non-custodial asset platform, or a minimal starter — wired up with the storage adapter of your choice:
 
 ```shell
 npx hive-stream new my-app
@@ -18,7 +18,7 @@ npx hive-stream new my-exchange --template exchange --adapter postgresql --api
 npx hive-stream list   # see all templates and adapters
 ```
 
-Templates: `minimal`, `game` (dice, coinflip, roulette, RPS), `exchange` (order book + matching engine), `social` (fan clubs, subscriptions, tips), `blog` (paywall, tips, post streaming), `token` (tokens + NFTs). Adapters: `sqlite`, `mongodb`, `postgresql`.
+Templates: `minimal`, `game` (dice, coinflip, roulette, RPS), `exchange` (order book + matching engine), `social` (fan clubs, subscriptions, tips), `blog` (paywall, tips, post streaming), `token` (tokens + NFTs), `assets` (non-custodial NFTs, event tickets, peer-to-peer sales, on-chain state checkpoints). Adapters: `sqlite`, `mongodb`, `postgresql`.
 
 ## Install
 

@@ -42,8 +42,15 @@ Representative exports:
 - `createBundleMarketplaceContract`
 - `createTicketingContract`
 - `createFanClubContract`
+- `createCheckpointContract`
 
 Use `src/index.ts` as the source of truth for the current export list and names.
+
+Non-custodial asset notes:
+
+- `createNFTContract` supports `mintBatchNFT` (numbered editions or explicit token lists) and `buyNFTDirect` (buyer pays the seller directly; the contract verifies the recipient and flips ownership — no funds through the app account). Its default registered name is `hivenft`; scaffolded apps register it as `nft`.
+- `createTicketingContract` tickets are transferable (`transferTicket`) and resellable peer-to-peer (`listTicket`, `unlistTicket`, `buyTicketDirect`).
+- `createCheckpointContract({ account, tables })` publishes deterministic state hashes on-chain (pair with a `TimeAction` calling `publishCheckpoint`) and verifies other operators' hashes via `recordCheckpoint`.
 
 Good practice:
 

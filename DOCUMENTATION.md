@@ -26,7 +26,7 @@ Run `new` without options for interactive prompts, or pass flags for non-interac
 
 | Flag | Description |
 | --- | --- |
-| `-t, --template <id>` | `minimal`, `game`, `exchange`, `social`, `blog`, or `token` |
+| `-t, --template <id>` | `minimal`, `game`, `exchange`, `social`, `blog`, `token`, or `assets` |
 | `-a, --adapter <id>` | `sqlite` (default), `mongodb`, or `postgresql` |
 | `-u, --username <name>` | Hive account the app runs as |
 | `--api` | Enable the built-in HTTP API server |
@@ -354,8 +354,9 @@ export const TipJar = defineContract({
 - `createPayrollContract` - Recurring payroll budgets with scheduled runs and recipient balances
 - `createProposalTimelockContract` - Timelock approval queues for delayed governance-style actions
 - `createBundleMarketplaceContract` - Bundle storefronts with inventory, purchases, and fulfillment tracking
-- `createTicketingContract` - Event ticket sales with check-ins, refunds, and capacity limits
+- `createTicketingContract` - Event ticket sales with check-ins, refunds, capacity limits, transfers, and peer-to-peer resale
 - `createFanClubContract` - Paid clubs with member renewals, points, and perk redemptions
+- `createCheckpointContract` - Periodic on-chain state hashes so independent operators can verify they derive identical state
 
 ### Example Snippets
 
@@ -458,6 +459,60 @@ When the built-in API server is running, the following endpoints are available:
 - `GET /exchange/orders` (query `account`, `base`, `quote`, `status`)
 - `GET /exchange/trades` (query `account`, `base`, `quote`)
 - `GET /exchange/orderbook` (query `base`, `quote`, `limit`)
+
+---
+
+## Non-Custodial Assets Guide
+
+The NFT and ticketing contracts support fully non-custodial trading: buyers pay sellers **directly**, and the contract only verifies the on-chain payment and flips ownership. Funds never pass through the app account.
+
+### Direct NFT sales
+
+1. The owner lists with `listNFT` (custom_json): `{"collectionSymbol":"ART","tokenId":"piece-1","price":"10.000","currency":"HIVE"}`.
+2. The buyer sends the exact price **to the seller's account** with the memo `{"hive_stream":{"contract":"nft","action":"buyNFTDirect","payload":{"collectionSymbol":"ART","tokenId":"piece-1"}}}`.
+3. The contract verifies the transfer recipient is the seller and the amount/currency match the listing, then transfers ownership.
+
+The examples above assume the contract was registered as `createNFTContract({ name: 'nft' })` (what scaffolded apps do); the default registered name is `hivenft`.
+
+Royalties cannot be enforced on a peer-to-peer payment; `buyNFTDirect` records the royalty owed (`royaltyDue`, `royaltyRecipient`) in the emitted event so marketplaces and sellers can honour them. The custodial `buyNFT` flow (payment to the app account, which pays out the seller and royalties) remains available.
+
+### Batch minting
+
+`mintBatchNFT` (custom_json, collection creator only) mints many tokens in one operation, either as numbered editions or an explicit list:
+
+```json
+{"collectionSymbol":"TICKETS","to":"some-account","editions":{"baseTokenId":"GA","count":100}}
+{"collectionSymbol":"TICKETS","to":"some-account","tokens":[{"tokenId":"VIP-1","metadata":"{\"seat\":\"A1\"}"}]}
+```
+
+Editions mint `GA-1` … `GA-100` (up to 1,000 per operation); explicit lists allow up to 50 tokens with per-token metadata. Both respect the collection's maximum supply atomically.
+
+### Ticket transfers and resale
+
+Tickets from the ticketing contract are bearer assets:
+
+- `transferTicket` (custom_json, owner only): `{"ticketId":"ticket-1","to":"friend-account"}`
+- `listTicket` / `unlistTicket` (custom_json, owner only): `{"ticketId":"ticket-1","price":"3.000"}` — asset defaults to the event's asset
+- `buyTicketDirect` (transfer memo): buyer pays the listed price **directly to the seller** with `{"hive_stream":{"contract":"ticketing","action":"buyTicketDirect","payload":{"ticketId":"ticket-1"}}}`
+
+Transferring a ticket deactivates any active resale listing, and stale listings (where the seller no longer owns the ticket) are rejected at purchase time.
+
+### State checkpoints
+
+Because contract state is derived off-chain, anyone can verify an app by replaying the chain. `createCheckpointContract` makes that verification cheap: it periodically publishes a deterministic sha256 hash of your contract tables as a custom_json operation, and records other operators' published hashes with a match/mismatch verdict.
+
+```ts
+import { createCheckpointContract, TimeAction } from 'hive-stream';
+
+await streamer.registerContract(createCheckpointContract({
+    account: 'my-app-account',
+    tables: ['nft_collections', 'nft_tokens', 'nft_listings']
+}));
+
+await streamer.registerAction(new TimeAction('1h', 'state-checkpoint', 'checkpoint', 'publishCheckpoint', {}));
+```
+
+The hash is order-independent (rows are hashed individually and sorted), so any adapter backend that holds the same logical state produces the same digest. Publishing requires a posting key for the configured account. Results land in the `state_checkpoints` table; a `matched = 0` row means your node's state diverges from the publisher's (or the hash was computed after state moved on — recompute at the same cadence to confirm).
 
 ---
 

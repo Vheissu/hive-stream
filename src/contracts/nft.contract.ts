@@ -326,6 +326,149 @@ export class NFTContract {
         }
     }
 
+    private async mintBatchNFT(payload: {
+        collectionSymbol: string;
+        to: string;
+        tokens?: { tokenId: string; metadata?: string; attributes?: string }[];
+        editions?: { baseTokenId: string; count: number; startAt?: number };
+        metadata?: string;
+        attributes?: string;
+    }, { sender }) {
+        try {
+            const { collectionSymbol, to, tokens, editions, metadata = '', attributes = '' } = payload;
+
+            if ((!tokens && !editions) || (tokens && editions)) {
+                throw new Error('Provide either tokens or editions, not both');
+            }
+
+            const mintList: { tokenId: string; metadata: string; attributes: string }[] = [];
+
+            if (tokens) {
+                if (!Array.isArray(tokens) || tokens.length < 1 || tokens.length > 50) {
+                    throw new Error('Tokens must be a list of 1 to 50 entries');
+                }
+
+                for (const token of tokens) {
+                    mintList.push({
+                        tokenId: token.tokenId,
+                        metadata: token.metadata ?? metadata,
+                        attributes: token.attributes ?? attributes
+                    });
+                }
+            }
+
+            if (editions) {
+                const { baseTokenId, count, startAt = 1 } = editions;
+
+                if (!Number.isInteger(count) || count < 1 || count > 1000) {
+                    throw new Error('Edition count must be between 1 and 1,000');
+                }
+
+                if (!Number.isInteger(startAt) || startAt < 1) {
+                    throw new Error('Edition startAt must be a positive integer');
+                }
+
+                if (!baseTokenId.match(/^[A-Za-z0-9_-]{1,42}$/)) {
+                    throw new Error('Base token ID must be 1-42 alphanumeric characters (including _ and -)');
+                }
+
+                for (let i = 0; i < count; i++) {
+                    mintList.push({
+                        tokenId: `${baseTokenId}-${startAt + i}`,
+                        metadata,
+                        attributes
+                    });
+                }
+            }
+
+            const seen = new Set<string>();
+            for (const token of mintList) {
+                if (!token.tokenId.match(/^[A-Za-z0-9_-]{1,50}$/)) {
+                    throw new Error(`Token ID ${token.tokenId} must be 1-50 alphanumeric characters (including _ and -)`);
+                }
+
+                if (seen.has(token.tokenId)) {
+                    throw new Error(`Duplicate token ID ${token.tokenId} in batch`);
+                }
+
+                seen.add(token.tokenId);
+
+                if (token.metadata && token.metadata.length > 2000) {
+                    throw new Error('Metadata must be 2000 characters or less');
+                }
+
+                if (token.attributes && token.attributes.length > 1000) {
+                    throw new Error('Attributes must be 1000 characters or less');
+                }
+            }
+
+            await this.withTransaction(async (adapter) => {
+                const collection = await adapter.query(
+                    'SELECT * FROM nft_collections WHERE symbol = ?',
+                    [collectionSymbol]
+                );
+
+                if (!collection || collection.length === 0) {
+                    throw new Error(`Collection ${collectionSymbol} does not exist`);
+                }
+
+                const collectionData = collection[0];
+
+                if (collectionData.creator !== sender) {
+                    throw new Error('Only the collection creator can mint NFTs');
+                }
+
+                if (collectionData.max_supply && Number(collectionData.current_supply) + mintList.length > Number(collectionData.max_supply)) {
+                    throw new Error('Batch would exceed the collection maximum supply');
+                }
+
+                const placeholders = mintList.map(() => '?').join(', ');
+                const existing = await adapter.query(
+                    `SELECT token_id FROM nft_tokens WHERE collection_symbol = ? AND token_id IN (${placeholders})`,
+                    [collectionSymbol, ...mintList.map(token => token.tokenId)]
+                );
+
+                if (existing && existing.length > 0) {
+                    throw new Error(`Token ${existing[0].token_id} already exists in collection ${collectionSymbol}`);
+                }
+
+                for (const token of mintList) {
+                    await adapter.query(`
+                        INSERT INTO nft_tokens (token_id, collection_symbol, owner, metadata, attributes, minted_at, minted_by)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    `, [token.tokenId, collectionSymbol, to, token.metadata, token.attributes, new Date(), sender]);
+
+                    await adapter.query(`
+                        INSERT INTO nft_transfers (token_id, collection_symbol, from_account, to_account, transfer_type, block_number, transaction_id, timestamp)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    `, [token.tokenId, collectionSymbol, 'null', to, 'mint', this.blockNumber, this.transactionId, new Date()]);
+                }
+
+                await adapter.query(
+                    'UPDATE nft_collections SET current_supply = current_supply + ? WHERE symbol = ?',
+                    [mintList.length, collectionSymbol]
+                );
+
+                await adapter.addEvent(new Date(), CONTRACT_NAME, 'mintBatchNFT', payload, {
+                    action: 'nft_batch_minted',
+                    data: {
+                        collectionSymbol,
+                        to,
+                        mintedBy: sender,
+                        count: mintList.length,
+                        tokenIds: mintList.map(token => token.tokenId)
+                    }
+                });
+            });
+
+            console.log(`[NFTContract] Batch of ${mintList.length} NFTs minted in collection ${collectionSymbol} to ${to}`);
+
+        } catch (error) {
+            console.error('[NFTContract] Error batch minting NFTs:', error);
+            throw error;
+        }
+    }
+
     private async updateNFT(payload: {
         collectionSymbol: string;
         tokenId: string;
@@ -770,6 +913,98 @@ export class NFTContract {
         }
     }
 
+    private async buyNFTDirect(payload: {
+        collectionSymbol: string;
+        tokenId: string;
+    }, { sender, recipient, amount, asset }) {
+        try {
+            const { collectionSymbol, tokenId } = payload;
+
+            const listing = await this.adapter.query(
+                'SELECT * FROM nft_listings WHERE token_id = ? AND collection_symbol = ? AND active = TRUE',
+                [tokenId, collectionSymbol]
+            );
+
+            if (!listing || listing.length === 0) {
+                throw new Error(`No active listing found for token ${tokenId}`);
+            }
+
+            const listingData = listing[0];
+
+            if (listingData.seller === sender) {
+                throw new Error('Cannot buy your own NFT');
+            }
+
+            // Non-custodial: payment must go straight to the seller, never the contract account
+            if (recipient !== listingData.seller) {
+                throw new Error(`Payment must be sent directly to the seller ${listingData.seller}`);
+            }
+
+            const requiredPrice = new BigNumber(listingData.price);
+            const paidAmount = new BigNumber(amount);
+
+            if (!paidAmount.eq(requiredPrice)) {
+                throw new Error(`Incorrect payment amount. Required: ${listingData.price} ${listingData.currency}`);
+            }
+
+            if (asset !== listingData.currency) {
+                throw new Error(`Incorrect currency. Required: ${listingData.currency}`);
+            }
+
+            const collection = await this.adapter.query(
+                'SELECT royalty, creator FROM nft_collections WHERE symbol = ?',
+                [collectionSymbol]
+            );
+
+            let royaltyDue = new BigNumber(0);
+            let royaltyRecipient: string | null = null;
+
+            if (collection && collection.length > 0 && collection[0].royalty > 0 && collection[0].creator !== listingData.seller) {
+                royaltyDue = paidAmount.multipliedBy(collection[0].royalty);
+                royaltyRecipient = collection[0].creator;
+            }
+
+            await this.withTransaction(async (adapter) => {
+                await adapter.query(
+                    'UPDATE nft_tokens SET owner = ? WHERE token_id = ? AND collection_symbol = ?',
+                    [sender, tokenId, collectionSymbol]
+                );
+
+                await adapter.query(
+                    'UPDATE nft_listings SET active = FALSE WHERE token_id = ? AND collection_symbol = ?',
+                    [tokenId, collectionSymbol]
+                );
+
+                await adapter.query(`
+                    INSERT INTO nft_transfers (token_id, collection_symbol, from_account, to_account, transfer_type, price, currency, block_number, transaction_id, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `, [tokenId, collectionSymbol, listingData.seller, sender, 'sale', amount, asset, this.blockNumber, this.transactionId, new Date()]);
+
+                await adapter.addEvent(new Date(), CONTRACT_NAME, 'buyNFTDirect', payload, {
+                    action: 'nft_sold_direct',
+                    data: {
+                        tokenId,
+                        collectionSymbol,
+                        seller: listingData.seller,
+                        buyer: sender,
+                        price: amount,
+                        currency: asset,
+                        // Royalties cannot be enforced on a direct peer-to-peer payment;
+                        // they are recorded here so sellers/marketplaces can honour them.
+                        royaltyDue: royaltyDue.toFixed(3),
+                        royaltyRecipient
+                    }
+                });
+            });
+
+            console.log(`[NFTContract] NFT ${tokenId} sold directly to ${sender} for ${amount} ${asset} (paid to ${listingData.seller})`);
+
+        } catch (error) {
+            console.error('[NFTContract] Error processing direct NFT sale:', error);
+            throw error;
+        }
+    }
+
     private async getTokenInfo(payload: {
         collectionSymbol: string;
         tokenId: string;
@@ -915,6 +1150,9 @@ export function createNFTContract(options: NFTContractOptions = {}) {
             mintNFT: action((payload, ctx) => callWithContext(payload, ctx, (instance as any).mintNFT.bind(instance), { sender: ctx.sender }), {
                 trigger: 'custom_json'
             }),
+            mintBatchNFT: action((payload, ctx) => callWithContext(payload, ctx, (instance as any).mintBatchNFT.bind(instance), { sender: ctx.sender }), {
+                trigger: 'custom_json'
+            }),
             updateNFT: action((payload, ctx) => callWithContext(payload, ctx, (instance as any).updateNFT.bind(instance), { sender: ctx.sender }), {
                 trigger: 'custom_json'
             }),
@@ -944,6 +1182,18 @@ export function createNFTContract(options: NFTContractOptions = {}) {
 
                 return callWithContext(payload, ctx, (instance as any).buyNFT.bind(instance), {
                     sender: ctx.sender,
+                    amount: parsedAmount.amount,
+                    asset: parsedAmount.asset
+                });
+            }, {
+                trigger: 'transfer'
+            }),
+            buyNFTDirect: action((payload, ctx) => {
+                const parsedAmount = parseBlockchainAmount(ctx.transfer?.rawAmount || '');
+
+                return callWithContext(payload, ctx, (instance as any).buyNFTDirect.bind(instance), {
+                    sender: ctx.sender,
+                    recipient: ctx.transfer?.to,
                     amount: parsedAmount.amount,
                     asset: parsedAmount.asset
                 });

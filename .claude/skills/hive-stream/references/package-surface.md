@@ -4,7 +4,7 @@
 
 The package ships a CLI (`npx hive-stream`) for starting new apps. Prefer it over hand-writing boilerplate when the task is "create a new Hive app":
 
-- `npx hive-stream new <name> --template <minimal|game|exchange|social|blog|token> --adapter <sqlite|mongodb|postgresql> --username <account> [--api] [--install] [--yes]`
+- `npx hive-stream new <name> --template <minimal|game|exchange|social|blog|token|assets> --adapter <sqlite|mongodb|postgresql> --username <account> [--api] [--install] [--yes]`
 - `npx hive-stream list` shows templates and adapters.
 - Generated apps use `new Streamer({ env: true })` and read `HIVE_USERNAME`, `HIVE_POSTING_KEY`, and `HIVE_ACTIVE_KEY` from `.env`.
 - CLI source lives in `src/cli/` (`templates.ts` for the registry, `scaffold.ts` for pure file generation).

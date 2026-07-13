@@ -1,4 +1,4 @@
-export type TemplateId = 'minimal' | 'game' | 'exchange' | 'social' | 'blog' | 'token';
+export type TemplateId = 'minimal' | 'game' | 'exchange' | 'social' | 'blog' | 'token' | 'assets';
 export type AdapterId = 'sqlite' | 'mongodb' | 'postgresql';
 
 export interface UsageExample {
@@ -218,7 +218,7 @@ export const TEMPLATES: TemplateDefinition[] = [
         imports: ['createNFTContract', 'createTokenContract'],
         registrations: [
             `await streamer.registerContract(createTokenContract());`,
-            `await streamer.registerContract(createNFTContract());`
+            `await streamer.registerContract(createNFTContract({ name: 'nft' }));`
         ],
         setup: [],
         usage: [
@@ -236,6 +236,77 @@ export const TEMPLATES: TemplateDefinition[] = [
                 title: 'Create an NFT collection',
                 description: 'Broadcast a custom_json operation with id `hivestream`:',
                 payload: wrap('nft', 'createCollection', '{"symbol":"MYNFT","name":"My Collection"}')
+            }
+        ]
+    },
+    {
+        id: 'assets',
+        label: 'Assets & Tickets',
+        description: 'Non-custodial NFTs and event tickets: batch minting, direct peer-to-peer sales, and on-chain state checkpoints.',
+        imports: [
+            'createCheckpointContract',
+            'createNFTContract',
+            'createTicketingContract',
+            'TimeAction'
+        ],
+        registrations: [
+            `await streamer.registerContract(createNFTContract({ name: 'nft' }));`,
+            `await streamer.registerContract(createTicketingContract());`,
+            `await streamer.registerContract(createCheckpointContract({`,
+            `    account: HIVE_USERNAME,`,
+            `    tables: ['nft_collections', 'nft_tokens', 'nft_listings', 'ticket_events', 'tickets', 'ticket_listings']`,
+            `}));`
+        ],
+        setup: [
+            `// Publish a verifiable state hash on-chain every hour so anyone running`,
+            `// this open-source app can confirm they derive the same state`,
+            `await streamer.registerAction(new TimeAction('1h', 'state-checkpoint', 'checkpoint', 'publishCheckpoint', {}));`
+        ],
+        usage: [
+            {
+                title: 'Create an NFT collection',
+                description: 'Broadcast a custom_json operation with id `hivestream`:',
+                payload: wrap('nft', 'createCollection', '{"symbol":"TICKETS","name":"Event Tickets","maxSupply":1000}')
+            },
+            {
+                title: 'Batch mint numbered editions',
+                description: 'Broadcast a custom_json operation with id `hivestream` (collection creator only):',
+                payload: wrap('nft', 'mintBatchNFT', '{"collectionSymbol":"TICKETS","to":"some-account","editions":{"baseTokenId":"GA","count":100}}')
+            },
+            {
+                title: 'List an NFT for sale',
+                description: 'Broadcast a custom_json operation with id `hivestream` (token owner only):',
+                payload: wrap('nft', 'listNFT', '{"collectionSymbol":"TICKETS","tokenId":"GA-1","price":"5.000","currency":"HIVE"}')
+            },
+            {
+                title: 'Buy an NFT non-custodially',
+                description: 'Send the exact price directly to the seller with this transfer memo (funds never touch the app account):',
+                payload: wrap('nft', 'buyNFTDirect', '{"collectionSymbol":"TICKETS","tokenId":"GA-1"}')
+            },
+            {
+                title: 'Create a ticketed event',
+                description: 'Broadcast a custom_json operation with id `hivestream`:',
+                payload: wrap('ticketing', 'createEvent', '{"eventId":"launch-party","title":"Launch Party","venue":"Online","startsAt":"2026-12-01T18:00:00Z","ticketPrice":"2.000","asset":"HBD","capacity":500}')
+            },
+            {
+                title: 'Buy a ticket',
+                description: 'Send the ticket price to your app account with this transfer memo:',
+                payload: wrap('ticketing', 'purchaseTicket', '{"eventId":"launch-party","ticketId":"launch-party:1"}')
+            },
+            {
+                title: 'Transfer a ticket',
+                description: 'Broadcast a custom_json operation with id `hivestream` (ticket owner only):',
+                payload: wrap('ticketing', 'transferTicket', '{"ticketId":"launch-party:1","to":"friend-account"}')
+            },
+            {
+                title: 'List a ticket for resale',
+                description: 'Broadcast a custom_json operation with id `hivestream` (ticket owner only):',
+                payload: wrap('ticketing', 'listTicket', '{"ticketId":"launch-party:1","price":"3.000"}')
+            },
+            {
+                title: 'Buy a resale ticket non-custodially',
+                description: 'Send the resale price directly to the seller with this transfer memo (funds never touch the app account):',
+                payload: wrap('ticketing', 'buyTicketDirect', '{"ticketId":"launch-party:1"}')
             }
         ]
     }
