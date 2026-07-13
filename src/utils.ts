@@ -1,3 +1,4 @@
+import { getLogger } from './logger';
 import BigNumber from 'bignumber.js';
 import { HiveRates } from './hive-rates';
 import { Client, SignedTransaction, PrivateKey } from '@hiveio/dhive';
@@ -446,7 +447,7 @@ export const Utils = {
             return Utils.roundPrecision(total, 3);
         } catch (error) {
             if (Config.DEBUG_MODE) {
-                console.error('[Utils] Failed to convert Hive amount:', error);
+                getLogger().error('[Utils] Failed to convert Hive amount:', error);
             }
             return 0;
         }
@@ -467,7 +468,7 @@ export const Utils = {
         } catch (e) {
             if (Config.DEBUG_MODE) {
                 const error = e instanceof Error ? e : new Error(String(e));
-                console.warn(`[Utils] JSON parse failed: ${error.message}`, {
+                getLogger().warn(`[Utils] JSON parse failed: ${error.message}`, {
                     input: str.substring(0, 100) + (str.length > 100 ? '...' : ''),
                     stack: error.stack
                 });
@@ -508,7 +509,7 @@ export const Utils = {
             return block.transactions[index] as SignedTransaction;
         } catch (error) {
             if (Config.DEBUG_MODE) {
-                console.error('[Utils] Failed to get transaction:', error);
+                getLogger().error('[Utils] Failed to get transaction:', error);
             }
             throw error;
         }
@@ -532,7 +533,7 @@ export const Utils = {
             return (operation.from === from && operation.to === to && operation.amount === amount);
         } catch (error) {
             if (Config.DEBUG_MODE) {
-                console.error('[Utils] Failed to verify transfer:', error);
+                getLogger().error('[Utils] Failed to verify transfer:', error);
             }
             return false;
         }
@@ -933,7 +934,7 @@ export const Utils = {
                 }
             } catch (error) {
                 if (Config.DEBUG_MODE) {
-                    console.error(`[Utils] Failed to transfer to ${to}:`, error);
+                    getLogger().error(`[Utils] Failed to transfer to ${to}:`, error);
                 }
                 // Continue with other transfers even if one fails
             }
@@ -973,7 +974,7 @@ export const Utils = {
                     arr.push(transaction);
                 } catch (error) {
                     if (Config.DEBUG_MODE) {
-                        console.warn('[Utils] Failed to process transfer:', error);
+                        getLogger().warn('[Utils] Failed to process transfer:', error);
                     }
                 }
     
@@ -981,7 +982,7 @@ export const Utils = {
             }, []);
         } catch (error) {
             if (Config.DEBUG_MODE) {
-                console.error('[Utils] Failed to get account transfers:', error);
+                getLogger().error('[Utils] Failed to get account transfers:', error);
             }
             return [];
         }
@@ -1013,7 +1014,7 @@ export const Utils = {
                     arr.push(transaction);
                 } catch (error) {
                     if (Config.DEBUG_MODE) {
-                        console.warn('[Utils] Failed to process custom JSON:', error);
+                        getLogger().warn('[Utils] Failed to process custom JSON:', error);
                     }
                 }
     
@@ -1021,7 +1022,7 @@ export const Utils = {
             }, []);
         } catch (error) {
             if (Config.DEBUG_MODE) {
-                console.error('[Utils] Failed to get API JSON:', error);
+                getLogger().error('[Utils] Failed to get API JSON:', error);
             }
             return [];
         }
@@ -1174,7 +1175,7 @@ export const Utils = {
                 }
             } catch (error) {
                 if (Config.DEBUG_MODE) {
-                    console.error('[Utils] Failed to transfer Hive Engine tokens batch:', error);
+                    getLogger().error('[Utils] Failed to transfer Hive Engine tokens batch:', error);
                 }
                 throw error;
             }
@@ -1219,7 +1220,7 @@ export const Utils = {
         };
 
         if (Config.DEBUG_MODE) {
-            console.log('[Utils] Issuing Hive Engine Token:', json);
+            getLogger().debug('[Utils] Issuing Hive Engine Token:', json);
         }
 
         return client.broadcast.json({
@@ -1311,7 +1312,7 @@ export const Utils = {
                 }
             } catch (error) {
                 if (Config.DEBUG_MODE) {
-                    console.error('[Utils] Failed to issue Hive Engine tokens batch:', error);
+                    getLogger().error('[Utils] Failed to issue Hive Engine tokens batch:', error);
                 }
                 throw error;
             }

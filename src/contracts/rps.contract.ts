@@ -1,3 +1,4 @@
+import { getLogger } from '../logger';
 import BigNumber from 'bignumber.js';
 import seedrandom from 'seedrandom';
 import { v4 as uuidv4 } from 'uuid';
@@ -77,7 +78,7 @@ export function createRpsContract(options: RpsContractOptions = {}) {
                 return amount;
             }
         } catch (error) {
-            console.error('[RpsContract] Error fetching balance:', error);
+            getLogger().error('[RpsContract] Error fetching balance:', error);
             if (state.balanceCache) {
                 return state.balanceCache.balance;
             }
@@ -110,7 +111,7 @@ export function createRpsContract(options: RpsContractOptions = {}) {
                 try {
                     await nextBet();
                 } catch (error) {
-                    console.error('[RpsContract] Queue processing error:', error);
+                    getLogger().error('[RpsContract] Queue processing error:', error);
                 }
             }
         }
@@ -225,7 +226,7 @@ export function createRpsContract(options: RpsContractOptions = {}) {
             }
         } catch (e) {
             const error = e instanceof Error ? e : new Error(String(e));
-            console.error('[RpsContract] Play processing error:', {
+            getLogger().error('[RpsContract] Play processing error:', {
                 sender,
                 amount: amountRaw,
                 payload,
@@ -240,7 +241,7 @@ export function createRpsContract(options: RpsContractOptions = {}) {
                     debitCachedBalance(parsedAmount.value);
                 }
             } catch (refundError) {
-                console.error('[RpsContract] Refund failed:', refundError);
+                getLogger().error('[RpsContract] Refund failed:', refundError);
             }
 
             throw error;

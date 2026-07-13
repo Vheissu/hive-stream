@@ -63,3 +63,7 @@ typings/
 dist
 
 .env.test
+
+# VitePress
+docs/.vitepress/cache
+docs/.vitepress/dist

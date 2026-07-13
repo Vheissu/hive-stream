@@ -2,6 +2,8 @@
 
 A Node.js layer for Hive that allows you to watch for specific actions on the Hive blockchain.
 
+**Documentation:** [vheissu.github.io/hive-stream](https://vheissu.github.io/hive-stream/) — guides, contract reference, testing, and production docs. Run it locally with `npm run docs:dev`.
+
 ## Scaffold a new app
 
 The fastest way to start is the bundled CLI. It scaffolds a ready-to-run Hive app — game, exchange, social platform, blog, token/NFT project, non-custodial asset platform, or a minimal starter — wired up with the storage adapter of your choice:
@@ -24,6 +26,13 @@ Templates: `minimal`, `game` (dice, coinflip, roulette, RPS), `exchange` (order 
 
 ```shell
 npm install hive-stream
+```
+
+Hive Stream works in both module systems — `import` and `require` resolve to the same implementation, so classes and `instanceof` checks are always consistent:
+
+```javascript
+import { Streamer } from 'hive-stream';        // ESM / TypeScript
+const { Streamer } = require('hive-stream');   // CommonJS
 ```
 
 ## Quick Usage
@@ -170,9 +179,9 @@ ss.onCustomJson((op, { sender, isSignedWithActiveKey }, blockNumber, blockId, pr
 
 #### Watch for custom JSON operations (with a specific ID)
 ```javascript
-ss.onCustomJsonId((op, { sender, isSignedWithActiveKey }, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+ss.onCustomJsonId('your-custom-json-id', (op, { sender, isSignedWithActiveKey }, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
   
-}, 'your-custom-json-id');
+});
 ```
 
 #### Watch for Hive Engine custom JSON operations
@@ -508,6 +517,46 @@ downvote(votePercentage = '100.0', username, permlink) {
 }
 ```
 
+## Testing your app
+
+Hive Stream ships a testing kit at `hive-stream/testing` so you can test contracts and subscriptions with no network, no keys, and no files on disk. Blocks come from an in-memory provider, broadcasts are captured instead of sent, and state lives in an in-memory SQLite database — so the built-in SQL contracts work too.
+
+```javascript
+import { createTestStreamer, hive } from 'hive-stream/testing';
+import { defineContract, action } from 'hive-stream';
+
+const ts = await createTestStreamer({ username: 'myapp' });
+
+await ts.streamer.registerContract(myContract);
+
+// Simulate a player paying 1 HIVE into your contract
+await ts.contractTransfer({
+    from: 'alice',
+    contract: 'mygame',
+    action: 'play',
+    payload: { choice: 'heads' },
+    amount: hive(1)
+});
+
+// Assert on what your contract broadcast back (e.g. payouts)
+console.log(ts.outgoingTransfers); // [{ from: 'myapp', to: 'alice', amount: '2.000 HIVE', memo: '...' }]
+
+// Fast-forward time to fire TimeActions — no real waiting
+await ts.advanceTime('1h');
+
+await ts.stop();
+```
+
+The kit exports:
+
+- `createTestStreamer(options)` — boots a real `Streamer` against simulated infrastructure. All regular streamer config options are accepted.
+- `TestStreamer` helpers — `transfer()`, `contractTransfer()`, `customJson()`, `contractJson()`, `sendOperations()` for raw ops, `advanceBlocks(n)`, `advanceTime('30s' | '5m' | '1h' | ms)`, `getEvents()`, and `outgoingTransfers`/`broadcasts` for asserting on what your app sent.
+- `MemoryBlockProvider` — an in-memory `BlockProvider` you can also use directly.
+- `FakeHiveClient` — records broadcasts and answers reads from fixtures (`onCall()`, `setAccount()`).
+- `hive(n)` / `hbd(n)` — asset string formatters (`hive(1)` → `'1.000 HIVE'`).
+
+See `DOCUMENTATION.md` for a full guide.
+
 ## Contracts
 
 Hive Stream allows you to register contract definitions that execute when a transfer memo or custom JSON operation includes a contract wrapper. The payload lives under the `PAYLOAD_IDENTIFIER` key (default: `hive_stream`).
@@ -745,6 +794,26 @@ await streamer.registerAdapter(adapter);
 When creating an adapter, at a minimum your adapter requires two methods: `loadState` and `saveState`. It must also extend `AdapterBase` which is exported from the package.
 
 You can see a few adapters that ship with Hive Stream in the `src/adapters` directory.
+
+## Production
+
+Hive Stream ships production plumbing out of the box:
+
+```javascript
+const streamer = new Streamer({
+  env: true,
+  logger: pino()                       // pluggable structured logging (console by default)
+});
+
+streamer.enableGracefulShutdown();     // clean stop on SIGINT/SIGTERM
+
+streamer.getHealth();                  // { status: 'ok'|'behind'|'stalled'|'stopped', blocksBehind, ... }
+// Also served at GET /health (200/503) and /status by the built-in API
+
+await streamer.replayBlocks(from, to); // reprocess a historical range (backfills, debugging)
+```
+
+See the [production guide](https://vheissu.github.io/hive-stream/guide/production) for details.
 
 ## Permanently running with PM2
 

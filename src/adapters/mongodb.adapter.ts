@@ -1,3 +1,4 @@
+import { getLogger } from '../logger';
 import { TimeAction } from './../actions';
 import { ContractPayload, TransferMetadata, CustomJsonMetadata } from './../types/hive-stream';
 import { AdapterBase } from './base.adapter';
@@ -64,12 +65,12 @@ export class MongodbAdapter extends AdapterBase {
                     try {
                         return TimeAction.fromJSON(actionData);
                     } catch (error) {
-                        console.warn(`[MongodbAdapter] Failed to restore action ${actionData?.id || 'unknown'}:`, error);
+                        getLogger().warn(`[MongodbAdapter] Failed to restore action ${actionData?.id || 'unknown'}:`, error);
                         return null;
                     }
                 }).filter(Boolean) as TimeAction[];
             } catch (error) {
-                console.error('[MongodbAdapter] Error loading actions:', error);
+                getLogger().error('[MongodbAdapter] Error loading actions:', error);
                 return [];
             }
         }
@@ -114,7 +115,7 @@ export class MongodbAdapter extends AdapterBase {
 
             return true;
         } catch (e) {
-            console.error('[MongodbAdapter] Error saving state:', e);
+            getLogger().error('[MongodbAdapter] Error saving state:', e);
             throw e;
         }
     }
@@ -249,7 +250,7 @@ export class MongodbAdapter extends AdapterBase {
             
             return true;
         } catch (error) {
-            console.error('[MongodbAdapter] Error adding event:', error);
+            getLogger().error('[MongodbAdapter] Error adding event:', error);
             throw error;
         }
     }
@@ -265,7 +266,7 @@ export class MongodbAdapter extends AdapterBase {
             
             return events.length ? events : [];
         } catch (error) {
-            console.error('[MongodbAdapter] Error getting events:', error);
+            getLogger().error('[MongodbAdapter] Error getting events:', error);
             throw error;
         }
     }
@@ -281,7 +282,7 @@ export class MongodbAdapter extends AdapterBase {
             
             return events.length ? events : [];
         } catch (error) {
-            console.error('[MongodbAdapter] Error getting events by contract:', error);
+            getLogger().error('[MongodbAdapter] Error getting events by contract:', error);
             throw error;
         }
     }
@@ -304,7 +305,7 @@ export class MongodbAdapter extends AdapterBase {
             
             return events.length ? events : [];
         } catch (error) {
-            console.error('[MongodbAdapter] Error getting events by account:', error);
+            getLogger().error('[MongodbAdapter] Error getting events by account:', error);
             throw error;
         }
     }
@@ -320,7 +321,7 @@ export class MongodbAdapter extends AdapterBase {
             
             return transfers.length ? transfers : [];
         } catch (error) {
-            console.error('[MongodbAdapter] Error getting transfers:', error);
+            getLogger().error('[MongodbAdapter] Error getting transfers:', error);
             throw error;
         }
     }
@@ -336,7 +337,7 @@ export class MongodbAdapter extends AdapterBase {
             
             return transfers.length ? transfers : [];
         } catch (error) {
-            console.error('[MongodbAdapter] Error getting transfers by contract:', error);
+            getLogger().error('[MongodbAdapter] Error getting transfers by contract:', error);
             throw error;
         }
     }
@@ -352,7 +353,7 @@ export class MongodbAdapter extends AdapterBase {
             
             return transfers.length ? transfers : [];
         } catch (error) {
-            console.error('[MongodbAdapter] Error getting transfers by account:', error);
+            getLogger().error('[MongodbAdapter] Error getting transfers by account:', error);
             throw error;
         }
     }
@@ -368,7 +369,7 @@ export class MongodbAdapter extends AdapterBase {
             
             return transfers.length ? transfers : [];
         } catch (error) {
-            console.error('[MongodbAdapter] Error getting transfers by block ID:', error);
+            getLogger().error('[MongodbAdapter] Error getting transfers by block ID:', error);
             throw error;
         }
     }
@@ -384,7 +385,7 @@ export class MongodbAdapter extends AdapterBase {
             
             return jsons.length ? jsons : [];
         } catch (error) {
-            console.error('[MongodbAdapter] Error getting JSON:', error);
+            getLogger().error('[MongodbAdapter] Error getting JSON:', error);
             throw error;
         }
     }
@@ -400,7 +401,7 @@ export class MongodbAdapter extends AdapterBase {
             
             return jsons.length ? jsons : [];
         } catch (error) {
-            console.error('[MongodbAdapter] Error getting JSON by contract:', error);
+            getLogger().error('[MongodbAdapter] Error getting JSON by contract:', error);
             throw error;
         }
     }
@@ -416,7 +417,7 @@ export class MongodbAdapter extends AdapterBase {
             
             return jsons.length ? jsons : [];
         } catch (error) {
-            console.error('[MongodbAdapter] Error getting JSON by account:', error);
+            getLogger().error('[MongodbAdapter] Error getting JSON by account:', error);
             throw error;
         }
     }
@@ -432,7 +433,7 @@ export class MongodbAdapter extends AdapterBase {
             
             return jsons.length ? jsons : [];
         } catch (error) {
-            console.error('[MongodbAdapter] Error getting JSON by block ID:', error);
+            getLogger().error('[MongodbAdapter] Error getting JSON by block ID:', error);
             throw error;
         }
     }

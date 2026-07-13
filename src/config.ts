@@ -21,6 +21,8 @@ export interface ConfigInterface {
 
 import { config as loadDotenv } from 'dotenv';
 import { BlockProvider } from './providers/block-provider';
+import type { Client } from '@hiveio/dhive';
+import type { Logger } from './logger';
 
 export interface EnvConfigOptions {
     path?: string | string[];
@@ -29,6 +31,8 @@ export interface EnvConfigOptions {
 
 export interface ConfigInput extends Partial<ConfigInterface> {
     blockProvider?: BlockProvider;
+    client?: Client;
+    logger?: Logger;
     env?: boolean | EnvConfigOptions;
     activeKey?: ConfigInterface['ACTIVE_KEY'];
     postingKey?: ConfigInterface['POSTING_KEY'];
@@ -52,7 +56,7 @@ export interface ConfigInput extends Partial<ConfigInterface> {
     debugMode?: ConfigInterface['DEBUG_MODE'];
 }
 
-type ConfigAliasKey = keyof Omit<ConfigInput, keyof ConfigInterface | 'blockProvider' | 'env'>;
+type ConfigAliasKey = keyof Omit<ConfigInput, keyof ConfigInterface | 'blockProvider' | 'client' | 'logger' | 'env'>;
 
 const CONFIG_KEYS: Array<keyof ConfigInterface> = [
     'ACTIVE_KEY',

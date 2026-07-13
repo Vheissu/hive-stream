@@ -16,7 +16,7 @@
  * - Delegate 0.000001 VESTS + undelegate (reversible)
  * - Power up 0.001 HIVE (irreversible but trivial)
  *
- * Run with: npx jest --watchman=false tests/integration/live-broadcast.integration.spec.ts
+ * Run with: RUN_LIVE_TESTS=1 npx jest --watchman=false tests/integration/live-broadcast.integration.spec.ts
  */
 
 import * as dotenv from 'dotenv';
@@ -30,7 +30,9 @@ const TEST_POSTING_KEY = process.env.TEST_POSTING_KEY;
 const TEST_ACTIVE_KEY = process.env.TEST_ACTIVE_KEY;
 const TEST_TARGET = process.env.TEST_TARGET_ACCOUNT || 'beggars';
 
-const SKIP = !TEST_ACCOUNT || !TEST_POSTING_KEY || !TEST_ACTIVE_KEY;
+// Broadcasting costs Resource Credits on a real account, so these tests
+// require RUN_LIVE_TESTS=1 on top of credentials being present.
+const SKIP = !TEST_ACCOUNT || !TEST_POSTING_KEY || !TEST_ACTIVE_KEY || process.env.RUN_LIVE_TESTS !== '1';
 
 const describeIf = SKIP ? describe.skip : describe;
 

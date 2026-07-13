@@ -1,3 +1,4 @@
+import { getLogger } from '../logger';
 import BigNumber from 'bignumber.js';
 import seedrandom from 'seedrandom';
 import { z } from 'zod';
@@ -81,7 +82,7 @@ export function createDiceContract(options: DiceContractOptions = {}) {
                 return amount;
             }
         } catch (error) {
-            console.error('[DiceContract] Error fetching balance:', error);
+            getLogger().error('[DiceContract] Error fetching balance:', error);
             if (state.balanceCache) {
                 return state.balanceCache.balance;
             }
@@ -103,7 +104,7 @@ export function createDiceContract(options: DiceContractOptions = {}) {
                 try {
                     await nextBet();
                 } catch (error) {
-                    console.error('[DiceContract] Queue processing error:', error);
+                    getLogger().error('[DiceContract] Queue processing error:', error);
                 }
             }
         }
@@ -188,7 +189,7 @@ export function createDiceContract(options: DiceContractOptions = {}) {
             }
         } catch (e) {
             const error = e instanceof Error ? e : new Error(String(e));
-            console.error('[DiceContract] Roll processing error:', {
+            getLogger().error('[DiceContract] Roll processing error:', {
                 sender,
                 amount: amountRaw,
                 payload,
@@ -204,7 +205,7 @@ export function createDiceContract(options: DiceContractOptions = {}) {
                     }
                 }
             } catch (refundError) {
-                console.error('[DiceContract] Failed to refund after error:', refundError);
+                getLogger().error('[DiceContract] Failed to refund after error:', refundError);
             }
 
             throw error;
@@ -244,7 +245,7 @@ export function createDiceContract(options: DiceContractOptions = {}) {
                 trigger: 'transfer'
             }),
             testauto: action(() => {
-                console.log('[DiceContract] test');
+                getLogger().debug('[DiceContract] test');
             }, {
                 trigger: 'time'
             })

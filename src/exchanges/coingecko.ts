@@ -1,3 +1,4 @@
+import { getLogger } from '../logger';
 import { Exchange } from './exchange';
 import { ValidationError, NetworkError, RateConfig } from '../types/rates';
 
@@ -28,7 +29,7 @@ export class CoinGeckoExchange extends Exchange {
             this.rateUsdHive = usdHiveRate;
             this.rateUsdHbd = usdHbdRate;
 
-            console.log(
+            getLogger().debug(
                 `CoinGecko rates updated: HIVE=$${usdHiveRate.toFixed(6)}, HBD=$${usdHbdRate.toFixed(6)}`
             );
 

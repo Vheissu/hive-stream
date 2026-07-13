@@ -1,3 +1,4 @@
+import { getLogger, setLogger } from './logger';
 import { AdapterBase } from './adapters/base.adapter';
 import { Api } from './api';
 import { SqliteAdapter } from './adapters/sqlite.adapter';
@@ -138,6 +139,10 @@ export class Streamer {
     private latestBlockchainTime: Date;
     private disableAllProcessing = false;
     private isStarted = false;
+    private isInitialized = false;
+    private hasInjectedClient = false;
+    private startedAt: number | null = null;
+    private lastProcessedAt: number | null = null;
 
     private contracts: ContractDefinition[] = [];
     private blockProvider: BlockProvider;
@@ -366,6 +371,10 @@ export class Streamer {
     constructor(userConfig: ConfigInput = {}) {
         this.config = createConfig(userConfig);
 
+        if (userConfig.logger) {
+            setLogger(userConfig.logger);
+        }
+
         this.lastBlockNumber = this.config.LAST_BLOCK_NUMBER;
 
         this.username = this.config.USERNAME;
@@ -373,7 +382,8 @@ export class Streamer {
         this.activeKey = this.config.ACTIVE_KEY;
 
         this.hive = new hivejs(this.config.HIVE_ENGINE_API);
-        this.client = new Client(this.config.API_NODES);
+        this.hasInjectedClient = Boolean(userConfig.client);
+        this.client = userConfig.client ?? new Client(this.config.API_NODES);
         this.adapter = new SqliteAdapter();
 
         if (userConfig.blockProvider) {
@@ -896,7 +906,7 @@ export class Streamer {
             try {
                 await this.adapter.destroy();
             } catch (error) {
-                console.warn('[Streamer] Error destroying existing adapter:', error);
+                getLogger().warn('[Streamer] Error destroying existing adapter:', error);
             }
         }
 
@@ -910,6 +920,14 @@ export class Streamer {
 
     public getAdapter(): AdapterBase {
         return this.adapter;
+    }
+
+    public getClient(): Client {
+        return this.client;
+    }
+
+    public getConfig(): Readonly<ConfigInterface> {
+        return this.config;
     }
 
     /**
@@ -932,7 +950,7 @@ export class Streamer {
                     const restoredAction = TimeAction.fromJSON(a);
                     this.actions.push(restoredAction);
                 } catch (error) {
-                    console.warn(`[Streamer] Failed to restore action ${a.id}:`, error);
+                    getLogger().warn(`[Streamer] Failed to restore action ${a.id}:`, error);
                 }
             }
         }
@@ -946,11 +964,11 @@ export class Streamer {
             await this.saveActionsToDisk();
             
             if (this.config.DEBUG_MODE) {
-                console.log(`[Streamer] Registered time-based action: ${action.id} (${action.timeValue})`);
+                getLogger().debug(`[Streamer] Registered time-based action: ${action.id} (${action.timeValue})`);
             }
         } else {
             if (this.config.DEBUG_MODE) {
-                console.warn(`[Streamer] Action with ID ${action.id} already exists, skipping registration`);
+                getLogger().warn(`[Streamer] Action with ID ${action.id} already exists, skipping registration`);
             }
         }
     }
@@ -997,7 +1015,7 @@ export class Streamer {
             await this.saveActionsToDisk();
             
             if (this.config.DEBUG_MODE) {
-                console.log(`[Streamer] Removed time-based action: ${actionId}`);
+                getLogger().debug(`[Streamer] Removed time-based action: ${actionId}`);
             }
             
             return true;
@@ -1036,7 +1054,7 @@ export class Streamer {
             await this.saveActionsToDisk();
             
             if (this.config.DEBUG_MODE) {
-                console.log(`[Streamer] Action ${actionId} ${enabled ? 'enabled' : 'disabled'}`);
+                getLogger().debug(`[Streamer] Action ${actionId} ${enabled ? 'enabled' : 'disabled'}`);
             }
             
             return true;
@@ -1058,7 +1076,7 @@ export class Streamer {
             }
         } catch (error) {
             if (error?.code !== 'SQLITE_MISUSE') {
-                console.error('[Streamer] Failed to save actions to disk:', error);
+                getLogger().error('[Streamer] Failed to save actions to disk:', error);
             }
         }
     }
@@ -1074,7 +1092,7 @@ export class Streamer {
             await this.saveActionsToDisk();
             
             if (this.config.DEBUG_MODE) {
-                console.log(`[Streamer] Reset action: ${id}`);
+                getLogger().debug(`[Streamer] Reset action: ${id}`);
             }
             
             return true;
@@ -1130,7 +1148,8 @@ export class Streamer {
             ...normalizedInput,
             env: config.env,
         });
-        const shouldRecreateClient = JSON.stringify(this.config.API_NODES) !== JSON.stringify(nextConfig.API_NODES);
+        const shouldRecreateClient = !this.hasInjectedClient &&
+            JSON.stringify(this.config.API_NODES) !== JSON.stringify(nextConfig.API_NODES);
         const shouldRecreateHiveEngine = this.config.HIVE_ENGINE_API !== nextConfig.HIVE_ENGINE_API;
         const shouldSyncApiServer = this.config.API_ENABLED !== nextConfig.API_ENABLED || this.config.API_PORT !== nextConfig.API_PORT;
 
@@ -1159,7 +1178,7 @@ export class Streamer {
                 : this.stopApiServer();
 
             syncApiServer.catch((error) => {
-                console.error('[Streamer] Failed to sync API server after config update:', error);
+                getLogger().error('[Streamer] Failed to sync API server after config update:', error);
             });
         }
 
@@ -1172,25 +1191,28 @@ export class Streamer {
      * Starts the streamer bot to get blocks from the Hive API
      *
      */
-    public async start(): Promise<Streamer> {
-        if (this.isStarted) {
+    /**
+     * Init
+     *
+     * Prepares the streamer for processing without starting any timers or
+     * polling loops: initializes the adapter, block provider, and contracts,
+     * then restores persisted state. `start()` calls this automatically, but
+     * it can also be used standalone with `processPendingBlocks()` for
+     * timer-free block processing (tests, replays, serverless environments).
+     */
+    public async init(): Promise<Streamer> {
+        if (this.isInitialized) {
             return this;
         }
 
-        if (this.config.DEBUG_MODE) {
-            console.log('Starting to stream the Hive blockchain');
-        }
-
-        this.disableAllProcessing = false;
         await this.ensureAdapterReady();
         await this.blockProvider.create?.();
         await this.initializeContracts();
-        this.startSubscriptionCleanupInterval();
 
         const state = await this.adapter.loadState();
 
         if (this.config.DEBUG_MODE) {
-            console.log(`Restoring state from file`);
+            getLogger().debug(`Restoring state from file`);
         }
 
         if (this.config.RESUME_FROM_STATE && state?.lastBlockNumber) {
@@ -1198,6 +1220,24 @@ export class Streamer {
         } else if (this.config.LAST_BLOCK_NUMBER) {
             this.lastBlockNumber = this.config.LAST_BLOCK_NUMBER;
         }
+
+        this.isInitialized = true;
+
+        return this;
+    }
+
+    public async start(): Promise<Streamer> {
+        if (this.isStarted) {
+            return this;
+        }
+
+        if (this.config.DEBUG_MODE) {
+            getLogger().debug('Starting to stream the Hive blockchain');
+        }
+
+        this.disableAllProcessing = false;
+        await this.init();
+        this.startSubscriptionCleanupInterval();
 
         if (this.config.API_ENABLED) {
             await this.startApiServer(this.config.API_PORT);
@@ -1208,6 +1248,8 @@ export class Streamer {
 
         this.latestBlockTimer = setInterval(() => { this.getLatestBlock(); }, this.config.BLOCK_CHECK_INTERVAL);
         this.isStarted = true;
+        this.startedAt = Date.now();
+        this.lastProcessedAt = Date.now();
 
         return this;
     }
@@ -1233,6 +1275,7 @@ export class Streamer {
 
         this.adapterInitialized = false;
         this.adapterInitializationPromise = null;
+        this.isInitialized = false;
 
         await Utils.sleep(25);
     }
@@ -1277,6 +1320,62 @@ export class Streamer {
         return this.blockProvider;
     }
 
+    /**
+     * Process Pending Blocks
+     *
+     * Processes blocks from the last processed block up to the provider's
+     * current head, without scheduling any timers. Useful for tests, block
+     * replays, and environments where polling is driven externally.
+     *
+     * Returns the number of blocks processed.
+     */
+    public async processPendingBlocks(maxBlocks: number = Infinity): Promise<number> {
+        if (this.isPollingBlock) {
+            return 0;
+        }
+
+        await this.init();
+
+        this.isPollingBlock = true;
+
+        try {
+            const props = await this.blockProvider.getDynamicGlobalProperties();
+
+            if (!props) {
+                return 0;
+            }
+
+            this.headBlockNumber = props.head_block_number;
+            this.latestBlockchainTime = new Date(`${props.time}Z`);
+
+            if (this.lastBlockNumber === 0) {
+                this.lastBlockNumber = props.head_block_number - 1;
+            }
+
+            let processed = 0;
+
+            while (
+                this.lastBlockNumber < props.head_block_number &&
+                processed < maxBlocks &&
+                !this.disableAllProcessing
+            ) {
+                const target = this.lastBlockNumber + 1;
+                await this.loadBlock(target);
+
+                if (this.lastBlockNumber < target) {
+                    // The provider could not supply the block; stop rather than spin.
+                    break;
+                }
+
+                processed++;
+            }
+
+            return processed;
+        } finally {
+            this.isPollingBlock = false;
+        }
+    }
+
     private async getLatestBlock() {
         try {
             const props = await this.blockProvider.getDynamicGlobalProperties();
@@ -1285,7 +1384,7 @@ export class Streamer {
                 this.latestBlockchainTime = new Date(`${props.time}Z`);
             }
         } catch (error) {
-            console.error('[Streamer] Error getting latest block:', error);
+            getLogger().error('[Streamer] Error getting latest block:', error);
             // Continue with cached time if available
         }
     }
@@ -1315,8 +1414,8 @@ export class Streamer {
             }
 
             if (this.config.DEBUG_MODE) {
-                console.log(`Head block number: `, props.head_block_number);
-                console.log(`Last block number: `, this.lastBlockNumber);
+                getLogger().debug(`Head block number: `, props.head_block_number);
+                getLogger().debug(`Last block number: `, this.lastBlockNumber);
             }
 
             const BLOCKS_BEHIND = this.config.BLOCKS_BEHIND_WARNING;
@@ -1325,7 +1424,7 @@ export class Streamer {
             const blocksToProcess = Math.min(blocksBehind, maxBatchSize);
 
             if (blocksBehind >= BLOCKS_BEHIND && this.config.DEBUG_MODE) {
-                console.log(`[Streamer] ${blocksBehind} blocks behind head (${props.head_block_number}). Catching up...`);
+                getLogger().debug(`[Streamer] ${blocksBehind} blocks behind head (${props.head_block_number}). Catching up...`);
             }
 
             if (!this.disableAllProcessing) {
@@ -1342,7 +1441,7 @@ export class Streamer {
             }
         } catch (e) {
             const error = e instanceof Error ? e : new Error(String(e));
-            console.error(`[Streamer] Block processing error: ${error.message}`, {
+            getLogger().error(`[Streamer] Block processing error: ${error.message}`, {
                 stack: error.stack,
                 blockNumber: this.lastBlockNumber + 1
             });
@@ -1390,7 +1489,7 @@ export class Streamer {
 
         if (this.lastBlockNumber !== blockNumber) {
             this.processActions().catch(error => {
-                console.error('[Streamer] Error processing actions:', error);
+                getLogger().error('[Streamer] Error processing actions:', error);
             });
         }
 
@@ -1429,7 +1528,7 @@ export class Streamer {
                         blockTime
                     );
                 } catch (error) {
-                    console.error('[Streamer] Operation processing error:', error, {
+                    getLogger().error('[Streamer] Operation processing error:', error, {
                         blockNumber,
                         transactionIndex: i,
                         operationIndex: opIndex
@@ -1439,6 +1538,7 @@ export class Streamer {
         }
 
         this.lastBlockNumber = blockNumber;
+        this.lastProcessedAt = Date.now();
         this.saveStateThrottled();
         this.cleanupCaches();
     }
@@ -1661,7 +1761,7 @@ export class Streamer {
                     const logs = txInfo && txInfo.logs ? Utils.jsonParse(txInfo.logs) : null;
                     hasVerificationErrors = Boolean(txInfo && logs && typeof logs.errors !== 'undefined');
                 } catch (e) {
-                    console.error(e);
+                    getLogger().error(e);
                 }
 
                 if (!hasVerificationErrors) {
@@ -1855,7 +1955,7 @@ export class Streamer {
         }
 
         if (!payload.contract && payload.name && this.config.DEBUG_MODE) {
-            console.warn('[Streamer] Legacy contract payload detected (name/action). Please migrate to { contract, action, payload }.');
+            getLogger().warn('[Streamer] Legacy contract payload detected (name/action). Please migrate to { contract, action, payload }.');
         }
 
         return {
@@ -1933,7 +2033,7 @@ export class Streamer {
             this.contracts.find(c => c.name === payload.contract);
 
         if (!contract) {
-            console.warn(`[Streamer] Contract '${payload.contract}' not found for action '${payload.action}'`);
+            getLogger().warn(`[Streamer] Contract '${payload.contract}' not found for action '${payload.action}'`);
             return;
         }
 
@@ -1944,19 +2044,19 @@ export class Streamer {
         const actionDefinition = contract.actions?.[payload.action];
 
         if (!actionDefinition || typeof actionDefinition.handler !== 'function') {
-            console.warn(`[Streamer] Action '${payload.action}' not found in contract '${payload.contract}'`);
+            getLogger().warn(`[Streamer] Action '${payload.action}' not found in contract '${payload.contract}'`);
             return;
         }
 
         if (!this.isActionTriggerAllowed(actionDefinition, context.trigger)) {
-            console.warn(`[Streamer] Action '${payload.action}' does not allow trigger '${context.trigger}'`);
+            getLogger().warn(`[Streamer] Action '${payload.action}' does not allow trigger '${context.trigger}'`);
             return;
         }
 
         if (actionDefinition.requiresActiveKey &&
             context.trigger === 'custom_json' &&
             !context.customJson?.isSignedWithActiveKey) {
-            console.warn(`[Streamer] Action '${payload.action}' requires active key signature`);
+            getLogger().warn(`[Streamer] Action '${payload.action}' requires active key signature`);
             return;
         }
 
@@ -1964,7 +2064,7 @@ export class Streamer {
         if (actionDefinition.schema) {
             const result = actionDefinition.schema.safeParse(actionPayload);
             if (!result.success) {
-                console.warn(`[Streamer] Invalid payload for ${payload.contract}.${payload.action}`, {
+                getLogger().warn(`[Streamer] Invalid payload for ${payload.contract}.${payload.action}`, {
                     errors: result.error?.errors
                 });
                 return;
@@ -1975,7 +2075,7 @@ export class Streamer {
         try {
             await actionDefinition.handler(actionPayload, context);
         } catch (error) {
-            console.error(`[Streamer] Contract action error for ${payload.contract}.${payload.action}:`, error);
+            getLogger().error(`[Streamer] Contract action error for ${payload.contract}.${payload.action}:`, error);
             if (context.trigger === 'time') {
                 throw error;
             }
@@ -2010,25 +2110,25 @@ export class Streamer {
 
             // Contract doesn't exist or method doesn't exist, log warning and skip
             if (!contract) {
-                console.warn(`[Streamer] Contract '${action.contractName}' not found for action '${action.id}'`);
+                getLogger().warn(`[Streamer] Contract '${action.contractName}' not found for action '${action.id}'`);
                 continue;
             }
             
             const actionDefinition = contract.actions?.[action.contractAction];
             if (!actionDefinition || typeof actionDefinition.handler !== 'function') {
-                console.warn(`[Streamer] Action '${action.contractAction}' not found in contract '${action.contractName}' for action '${action.id}'`);
+                getLogger().warn(`[Streamer] Action '${action.contractAction}' not found in contract '${action.contractName}' for action '${action.id}'`);
                 continue;
             }
 
             if (!this.isActionTriggerAllowed(actionDefinition, 'time')) {
-                console.warn(`[Streamer] Action '${action.contractAction}' does not allow time triggers for action '${action.id}'`);
+                getLogger().warn(`[Streamer] Action '${action.contractAction}' does not allow time triggers for action '${action.id}'`);
                 continue;
             }
 
             // Get frequency in seconds from optimized map
             const frequencySeconds = this.actionFrequencyMap.get(action.timeValue);
             if (!frequencySeconds) {
-                console.warn(`[Streamer] Invalid time value '${action.timeValue}' for action '${action.id}'`);
+                getLogger().warn(`[Streamer] Invalid time value '${action.timeValue}' for action '${action.id}'`);
                 continue;
             }
 
@@ -2056,17 +2156,19 @@ export class Streamer {
                         payload: action.payload || {}
                     }, context);
                     
-                    // Reset the action timer and increment execution count
-                    action.reset();
-                    action.incrementExecutionCount();
+                    // Reset the action timer and increment execution count,
+                    // anchored to blockchain time so wall-clock skew and
+                    // replayed/simulated blocks stay consistent
+                    action.reset(this.latestBlockchainTime || new Date());
+                    action.incrementExecutionCount(this.latestBlockchainTime || new Date());
                     executedActions.push(action.id);
                     
                     if (this.config.DEBUG_MODE) {
-                        console.log(`[Streamer] Executed action: ${action.id} (execution #${action.executionCount})`);
+                        getLogger().debug(`[Streamer] Executed action: ${action.id} (execution #${action.executionCount})`);
                     }
                 } catch (error) {
                     const err = error instanceof Error ? error : new Error(String(error));
-                    console.error(`[Streamer] Action execution error for ${action.contractName}.${action.contractAction}:`, {
+                    getLogger().error(`[Streamer] Action execution error for ${action.contractName}.${action.contractAction}:`, {
                         actionId: action.id,
                         error: err.message,
                         stack: err.stack,
@@ -2098,7 +2200,7 @@ export class Streamer {
         this.actions = this.actions.filter(action => {
             if (action.hasReachedMaxExecutions()) {
                 if (this.config.DEBUG_MODE) {
-                    console.log(`[Streamer] Removing completed action: ${action.id} (${action.executionCount}/${action.maxExecutions} executions)`);
+                    getLogger().debug(`[Streamer] Removing completed action: ${action.id} (${action.executionCount}/${action.maxExecutions} executions)`);
                 }
                 return false;
             }
@@ -2110,7 +2212,7 @@ export class Streamer {
         if (beforeCount !== afterCount) {
             // Save state if we removed any actions
             this.saveActionsToDisk().catch(error => {
-                console.error('[Streamer] Failed to save state after action cleanup:', error);
+                getLogger().error('[Streamer] Failed to save state after action cleanup:', error);
             });
         }
     }
@@ -2131,7 +2233,7 @@ export class Streamer {
             this.lastStateSave = now;
             // Save state asynchronously without blocking block processing
             this.saveStateToDisk().catch(error => {
-                console.error('[Streamer] State save error:', error);
+                getLogger().error('[Streamer] State save error:', error);
             });
         }
     }
@@ -2659,6 +2761,127 @@ export class Streamer {
         };
     }
 
+    /**
+     * Get Health
+     *
+     * A machine-readable health summary suitable for load balancer checks
+     * and monitoring. Status meanings:
+     * - `ok`       — started and within the blocks-behind warning threshold
+     * - `behind`   — started but at least BLOCKS_BEHIND_WARNING blocks behind head
+     * - `stalled`  — started but no block processed in the last 60 seconds
+     * - `stopped`  — not started
+     */
+    public getHealth() {
+        const status = this.getStatus();
+        const now = Date.now();
+        const lastBlockAgeSeconds = this.blockTime
+            ? Math.round((now - this.blockTime.getTime()) / 1000)
+            : null;
+
+        let health: 'ok' | 'behind' | 'stalled' | 'stopped' = 'ok';
+
+        if (!this.isStarted) {
+            health = 'stopped';
+        } else if (this.lastProcessedAt && now - this.lastProcessedAt > 60000) {
+            health = 'stalled';
+        } else if (status.blocksBehind >= this.config.BLOCKS_BEHIND_WARNING) {
+            health = 'behind';
+        }
+
+        return {
+            status: health,
+            healthy: health === 'ok' || health === 'behind',
+            isStarted: this.isStarted,
+            uptimeSeconds: this.startedAt ? Math.round((now - this.startedAt) / 1000) : 0,
+            lastBlockAgeSeconds,
+            contracts: this.contracts.map((contract) => contract.name),
+            actions: this.actions.length,
+            ...status
+        };
+    }
+
+    /**
+     * Enable Graceful Shutdown
+     *
+     * Registers signal handlers that stop the streamer cleanly — halting
+     * polling, closing the API server, running contract destroy hooks, and
+     * closing the adapter — before exiting. A second signal forces exit.
+     *
+     * Returns a disposer that removes the handlers.
+     */
+    public enableGracefulShutdown(signals: NodeJS.Signals[] = ['SIGINT', 'SIGTERM']): () => void {
+        let shuttingDown = false;
+
+        const handler = async (signal: NodeJS.Signals) => {
+            if (shuttingDown) {
+                getLogger().warn(`[Streamer] Received ${signal} during shutdown, forcing exit`);
+                process.exit(1);
+            }
+
+            shuttingDown = true;
+            getLogger().info(`[Streamer] Received ${signal}, shutting down gracefully`);
+
+            try {
+                await this.stop();
+                process.exit(0);
+            } catch (error) {
+                getLogger().error('[Streamer] Error during graceful shutdown:', error);
+                process.exit(1);
+            }
+        };
+
+        for (const signal of signals) {
+            process.on(signal, handler);
+        }
+
+        return () => {
+            for (const signal of signals) {
+                process.removeListener(signal, handler);
+            }
+        };
+    }
+
+    /**
+     * Replay Blocks
+     *
+     * Reprocesses a historical block range through every registered
+     * subscription, contract, and adapter — useful for backfills and
+     * debugging. Cannot run while the streamer is started, and moves the
+     * streaming cursor: afterwards the streamer resumes from `toBlock`.
+     *
+     * Returns the number of blocks replayed.
+     */
+    public async replayBlocks(fromBlock: number, toBlock: number): Promise<number> {
+        if (this.isStarted) {
+            throw new Error('Stop the streamer before replaying blocks');
+        }
+
+        if (!Number.isInteger(fromBlock) || !Number.isInteger(toBlock) || fromBlock < 1 || toBlock < fromBlock) {
+            throw new Error(`Invalid replay range: ${fromBlock} to ${toBlock}`);
+        }
+
+        await this.init();
+
+        this.lastBlockNumber = fromBlock - 1;
+        let replayed = 0;
+
+        while (this.lastBlockNumber < toBlock) {
+            const target = this.lastBlockNumber + 1;
+            await this.loadBlock(target);
+
+            if (this.lastBlockNumber < target) {
+                getLogger().warn(`[Streamer] Replay stopped: block ${target} unavailable from provider`);
+                break;
+            }
+
+            replayed++;
+        }
+
+        await this.saveStateToDisk();
+
+        return replayed;
+    }
+
     public verifyTransfer(transaction, from: string, to: string, amount: string) {
         return Utils.verifyTransfer(transaction, from, to, amount);
     }
@@ -2975,67 +3198,67 @@ export class Streamer {
         // Limit subscription arrays to prevent memory leaks
         if (this.customJsonSubscriptions.length > this.maxSubscriptions) {
             this.customJsonSubscriptions = this.customJsonSubscriptions.slice(-this.maxSubscriptions);
-            console.warn(`[Streamer] Trimmed customJsonSubscriptions to ${this.maxSubscriptions} items`);
+            getLogger().warn(`[Streamer] Trimmed customJsonSubscriptions to ${this.maxSubscriptions} items`);
         }
         
         if (this.customJsonIdSubscriptions.length > this.maxSubscriptions) {
             this.customJsonIdSubscriptions = this.customJsonIdSubscriptions.slice(-this.maxSubscriptions);
-            console.warn(`[Streamer] Trimmed customJsonIdSubscriptions to ${this.maxSubscriptions} items`);
+            getLogger().warn(`[Streamer] Trimmed customJsonIdSubscriptions to ${this.maxSubscriptions} items`);
         }
         
         if (this.customJsonHiveEngineSubscriptions.length > this.maxSubscriptions) {
             this.customJsonHiveEngineSubscriptions = this.customJsonHiveEngineSubscriptions.slice(-this.maxSubscriptions);
-            console.warn(`[Streamer] Trimmed customJsonHiveEngineSubscriptions to ${this.maxSubscriptions} items`);
+            getLogger().warn(`[Streamer] Trimmed customJsonHiveEngineSubscriptions to ${this.maxSubscriptions} items`);
         }
         
         if (this.commentSubscriptions.length > this.maxSubscriptions) {
             this.commentSubscriptions = this.commentSubscriptions.slice(-this.maxSubscriptions);
-            console.warn(`[Streamer] Trimmed commentSubscriptions to ${this.maxSubscriptions} items`);
+            getLogger().warn(`[Streamer] Trimmed commentSubscriptions to ${this.maxSubscriptions} items`);
         }
         
         if (this.postSubscriptions.length > this.maxSubscriptions) {
             this.postSubscriptions = this.postSubscriptions.slice(-this.maxSubscriptions);
-            console.warn(`[Streamer] Trimmed postSubscriptions to ${this.maxSubscriptions} items`);
+            getLogger().warn(`[Streamer] Trimmed postSubscriptions to ${this.maxSubscriptions} items`);
         }
         
         if (this.transferSubscriptions.length > this.maxSubscriptions) {
             this.transferSubscriptions = this.transferSubscriptions.slice(-this.maxSubscriptions);
-            console.warn(`[Streamer] Trimmed transferSubscriptions to ${this.maxSubscriptions} items`);
+            getLogger().warn(`[Streamer] Trimmed transferSubscriptions to ${this.maxSubscriptions} items`);
         }
 
         if (this.escrowSubscriptions.length > this.maxSubscriptions) {
             this.escrowSubscriptions = this.escrowSubscriptions.slice(-this.maxSubscriptions);
-            console.warn(`[Streamer] Trimmed escrowSubscriptions to ${this.maxSubscriptions} items`);
+            getLogger().warn(`[Streamer] Trimmed escrowSubscriptions to ${this.maxSubscriptions} items`);
         }
 
         if (this.voteSubscriptions.length > this.maxSubscriptions) {
             this.voteSubscriptions = this.voteSubscriptions.slice(-this.maxSubscriptions);
-            console.warn(`[Streamer] Trimmed voteSubscriptions to ${this.maxSubscriptions} items`);
+            getLogger().warn(`[Streamer] Trimmed voteSubscriptions to ${this.maxSubscriptions} items`);
         }
 
         if (this.delegateSubscriptions.length > this.maxSubscriptions) {
             this.delegateSubscriptions = this.delegateSubscriptions.slice(-this.maxSubscriptions);
-            console.warn(`[Streamer] Trimmed delegateSubscriptions to ${this.maxSubscriptions} items`);
+            getLogger().warn(`[Streamer] Trimmed delegateSubscriptions to ${this.maxSubscriptions} items`);
         }
 
         if (this.powerUpSubscriptions.length > this.maxSubscriptions) {
             this.powerUpSubscriptions = this.powerUpSubscriptions.slice(-this.maxSubscriptions);
-            console.warn(`[Streamer] Trimmed powerUpSubscriptions to ${this.maxSubscriptions} items`);
+            getLogger().warn(`[Streamer] Trimmed powerUpSubscriptions to ${this.maxSubscriptions} items`);
         }
 
         if (this.powerDownSubscriptions.length > this.maxSubscriptions) {
             this.powerDownSubscriptions = this.powerDownSubscriptions.slice(-this.maxSubscriptions);
-            console.warn(`[Streamer] Trimmed powerDownSubscriptions to ${this.maxSubscriptions} items`);
+            getLogger().warn(`[Streamer] Trimmed powerDownSubscriptions to ${this.maxSubscriptions} items`);
         }
 
         if (this.claimRewardsSubscriptions.length > this.maxSubscriptions) {
             this.claimRewardsSubscriptions = this.claimRewardsSubscriptions.slice(-this.maxSubscriptions);
-            console.warn(`[Streamer] Trimmed claimRewardsSubscriptions to ${this.maxSubscriptions} items`);
+            getLogger().warn(`[Streamer] Trimmed claimRewardsSubscriptions to ${this.maxSubscriptions} items`);
         }
 
         if (this.witnessVoteSubscriptions.length > this.maxSubscriptions) {
             this.witnessVoteSubscriptions = this.witnessVoteSubscriptions.slice(-this.maxSubscriptions);
-            console.warn(`[Streamer] Trimmed witnessVoteSubscriptions to ${this.maxSubscriptions} items`);
+            getLogger().warn(`[Streamer] Trimmed witnessVoteSubscriptions to ${this.maxSubscriptions} items`);
         }
 
         const extraArrays = [
@@ -3047,7 +3270,7 @@ export class Streamer {
         for (const name of extraArrays) {
             if (this[name].length > this.maxSubscriptions) {
                 (this as any)[name] = this[name].slice(-this.maxSubscriptions);
-                console.warn(`[Streamer] Trimmed ${name} to ${this.maxSubscriptions} items`);
+                getLogger().warn(`[Streamer] Trimmed ${name} to ${this.maxSubscriptions} items`);
             }
         }
     }

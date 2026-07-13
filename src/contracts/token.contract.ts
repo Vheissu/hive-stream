@@ -1,3 +1,4 @@
+import { getLogger } from '../logger';
 import BigNumber from 'bignumber.js';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
@@ -170,9 +171,9 @@ export function createTokenContract(options: TokenContractOptions = {}) {
                 });
             });
 
-            console.log(`[TokenContract] Token ${symbol} created by ${ctx.sender}`);
+            getLogger().debug(`[TokenContract] Token ${symbol} created by ${ctx.sender}`);
         } catch (error) {
-            console.error('[TokenContract] Error creating token:', error);
+            getLogger().error('[TokenContract] Error creating token:', error);
             throw error;
         }
     };
@@ -245,9 +246,9 @@ export function createTokenContract(options: TokenContractOptions = {}) {
                 });
             });
 
-            console.log(`[TokenContract] Issued ${amount} ${symbol} to ${to}`);
+            getLogger().debug(`[TokenContract] Issued ${amount} ${symbol} to ${to}`);
         } catch (error) {
-            console.error('[TokenContract] Error issuing tokens:', error);
+            getLogger().error('[TokenContract] Error issuing tokens:', error);
             throw error;
         }
     };
@@ -327,9 +328,9 @@ export function createTokenContract(options: TokenContractOptions = {}) {
                 });
             });
 
-            console.log(`[TokenContract] Transferred ${amount} ${symbol} from ${ctx.sender} to ${to}`);
+            getLogger().debug(`[TokenContract] Transferred ${amount} ${symbol} from ${ctx.sender} to ${to}`);
         } catch (error) {
-            console.error('[TokenContract] Error transferring tokens:', error);
+            getLogger().error('[TokenContract] Error transferring tokens:', error);
             throw error;
         }
     };
@@ -355,9 +356,9 @@ export function createTokenContract(options: TokenContractOptions = {}) {
                 }
             });
 
-            console.log(`[TokenContract] Balance query: ${account} has ${balanceAmount} ${symbol}`);
+            getLogger().debug(`[TokenContract] Balance query: ${account} has ${balanceAmount} ${symbol}`);
         } catch (error) {
-            console.error('[TokenContract] Error getting balance:', error);
+            getLogger().error('[TokenContract] Error getting balance:', error);
             throw error;
         }
     };
@@ -383,9 +384,9 @@ export function createTokenContract(options: TokenContractOptions = {}) {
                 }
             });
 
-            console.log(`[TokenContract] Token info query for ${symbol} by ${ctx.sender}`);
+            getLogger().debug(`[TokenContract] Token info query for ${symbol} by ${ctx.sender}`);
         } catch (error) {
-            console.error('[TokenContract] Error getting token info:', error);
+            getLogger().error('[TokenContract] Error getting token info:', error);
             throw error;
         }
     };

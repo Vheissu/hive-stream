@@ -1,3 +1,4 @@
+import { getLogger } from '../logger';
 import { TimeAction } from './../actions';
 import { ContractPayload, TransferMetadata, CustomJsonMetadata } from './../types/hive-stream';
 import { AdapterBase } from './base.adapter';
@@ -42,46 +43,54 @@ export class SqliteAdapter extends AdapterBase {
 
     public async create(): Promise<boolean> {
         try {
-            await this.db.schema.createTableIfNotExists('params', table => {
-                table.integer('id').primary();
-                table.integer('lastBlockNumber');
-                table.text('actions');
-            });
+            if (!await this.db.schema.hasTable('params')) {
+                await this.db.schema.createTable('params', table => {
+                    table.integer('id').primary();
+                    table.integer('lastBlockNumber');
+                    table.text('actions');
+                });
+            }
 
-            await this.db.schema.createTableIfNotExists('transfers', table => {
-                table.text('id').primary();
-                table.text('blockId');
-                table.integer('blockNumber');
-                table.text('sender');
-                table.text('amount');
-                table.text('contractName');
-                table.text('contractAction');
-                table.text('contractPayload');
-            });
+            if (!await this.db.schema.hasTable('transfers')) {
+                await this.db.schema.createTable('transfers', table => {
+                    table.text('id').primary();
+                    table.text('blockId');
+                    table.integer('blockNumber');
+                    table.text('sender');
+                    table.text('amount');
+                    table.text('contractName');
+                    table.text('contractAction');
+                    table.text('contractPayload');
+                });
+            }
 
-            await this.db.schema.createTableIfNotExists('customJson', table => {
-                table.text('id').primary();
-                table.text('blockId');
-                table.integer('blockNumber');
-                table.text('sender');
-                table.integer('isSignedWithActiveKey');
-                table.text('contractName');
-                table.text('contractAction');
-                table.text('contractPayload');
-            });
+            if (!await this.db.schema.hasTable('customJson')) {
+                await this.db.schema.createTable('customJson', table => {
+                    table.text('id').primary();
+                    table.text('blockId');
+                    table.integer('blockNumber');
+                    table.text('sender');
+                    table.integer('isSignedWithActiveKey');
+                    table.text('contractName');
+                    table.text('contractAction');
+                    table.text('contractPayload');
+                });
+            }
 
-            await this.db.schema.createTableIfNotExists('events', table => {
-                table.increments('id').primary();
-                table.text('date');
-                table.text('contract');
-                table.text('action');
-                table.text('payload');
-                table.text('data');
-            });
+            if (!await this.db.schema.hasTable('events')) {
+                await this.db.schema.createTable('events', table => {
+                    table.increments('id').primary();
+                    table.text('date');
+                    table.text('contract');
+                    table.text('action');
+                    table.text('payload');
+                    table.text('data');
+                });
+            }
 
             return true;
         } catch (error) {
-            console.error('[SqliteAdapter] Error creating tables:', error);
+            getLogger().error('[SqliteAdapter] Error creating tables:', error);
             throw error;
         }
     }
@@ -96,12 +105,12 @@ export class SqliteAdapter extends AdapterBase {
                     try {
                         return TimeAction.fromJSON(actionData);
                     } catch (error) {
-                        console.warn(`[SqliteAdapter] Failed to restore action ${actionData?.id || 'unknown'}:`, error);
+                        getLogger().warn(`[SqliteAdapter] Failed to restore action ${actionData?.id || 'unknown'}:`, error);
                         return null;
                     }
                 }).filter(Boolean) as TimeAction[];
             } catch (error) {
-                console.error('[SqliteAdapter] Error loading actions:', error);
+                getLogger().error('[SqliteAdapter] Error loading actions:', error);
                 return [];
             }
         }
@@ -119,7 +128,7 @@ export class SqliteAdapter extends AdapterBase {
                 try {
                     row.actions = row.actions ? JSON.parse(row.actions) : [];
                 } catch (parseError) {
-                    console.warn('[SqliteAdapter] Failed to parse actions from database, using empty array:', parseError);
+                    getLogger().warn('[SqliteAdapter] Failed to parse actions from database, using empty array:', parseError);
                     row.actions = [];
                 }
                 return row;
@@ -127,7 +136,7 @@ export class SqliteAdapter extends AdapterBase {
             
             return null;
         } catch (error) {
-            console.error('[SqliteAdapter] Error loading state:', error);
+            getLogger().error('[SqliteAdapter] Error loading state:', error);
             throw error;
         }
     }
@@ -138,7 +147,7 @@ export class SqliteAdapter extends AdapterBase {
             try {
                 actionsJson = JSON.stringify(data.actions || []);
             } catch (error) {
-                console.error('[SqliteAdapter] Failed to serialize actions:', error);
+                getLogger().error('[SqliteAdapter] Failed to serialize actions:', error);
                 actionsJson = '[]';
             }
 
@@ -153,7 +162,7 @@ export class SqliteAdapter extends AdapterBase {
 
             return true;
         } catch (error) {
-            console.error('[SqliteAdapter] Error saving state:', error);
+            getLogger().error('[SqliteAdapter] Error saving state:', error);
             throw error;
         }
     }
@@ -180,7 +189,7 @@ export class SqliteAdapter extends AdapterBase {
             
             return true;
         } catch (error) {
-            console.error('[SqliteAdapter] Error processing transfer:', error);
+            getLogger().error('[SqliteAdapter] Error processing transfer:', error);
             throw error;
         }
     }
@@ -200,7 +209,7 @@ export class SqliteAdapter extends AdapterBase {
             
             return true;
         } catch (error) {
-            console.error('[SqliteAdapter] Error processing custom JSON:', error);
+            getLogger().error('[SqliteAdapter] Error processing custom JSON:', error);
             throw error;
         }
     }
@@ -217,7 +226,7 @@ export class SqliteAdapter extends AdapterBase {
             
             return true;
         } catch (error) {
-            console.error('[SqliteAdapter] Error adding event:', error);
+            getLogger().error('[SqliteAdapter] Error adding event:', error);
             throw error;
         }
     }
@@ -236,7 +245,7 @@ export class SqliteAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[SqliteAdapter] Error getting transfers:', error);
+            getLogger().error('[SqliteAdapter] Error getting transfers:', error);
             throw error;
         }
     }
@@ -256,7 +265,7 @@ export class SqliteAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[SqliteAdapter] Error getting events:', error);
+            getLogger().error('[SqliteAdapter] Error getting events:', error);
             throw error;
         }
     }
@@ -277,7 +286,7 @@ export class SqliteAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[SqliteAdapter] Error getting events by contract:', error);
+            getLogger().error('[SqliteAdapter] Error getting events by contract:', error);
             throw error;
         }
     }
@@ -298,7 +307,7 @@ export class SqliteAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[SqliteAdapter] Error getting events by account:', error);
+            getLogger().error('[SqliteAdapter] Error getting events by account:', error);
             throw error;
         }
     }
@@ -318,7 +327,7 @@ export class SqliteAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[SqliteAdapter] Error getting transfers by contract:', error);
+            getLogger().error('[SqliteAdapter] Error getting transfers by contract:', error);
             throw error;
         }
     }
@@ -338,7 +347,7 @@ export class SqliteAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[SqliteAdapter] Error getting transfers by account:', error);
+            getLogger().error('[SqliteAdapter] Error getting transfers by account:', error);
             throw error;
         }
     }
@@ -358,7 +367,7 @@ export class SqliteAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[SqliteAdapter] Error getting transfers by blockId:', error);
+            getLogger().error('[SqliteAdapter] Error getting transfers by blockId:', error);
             throw error;
         }
     }
@@ -377,7 +386,7 @@ export class SqliteAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[SqliteAdapter] Error getting JSON:', error);
+            getLogger().error('[SqliteAdapter] Error getting JSON:', error);
             throw error;
         }
     }
@@ -397,7 +406,7 @@ export class SqliteAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[SqliteAdapter] Error getting JSON by contract:', error);
+            getLogger().error('[SqliteAdapter] Error getting JSON by contract:', error);
             throw error;
         }
     }
@@ -417,7 +426,7 @@ export class SqliteAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[SqliteAdapter] Error getting JSON by account:', error);
+            getLogger().error('[SqliteAdapter] Error getting JSON by account:', error);
             throw error;
         }
     }
@@ -437,7 +446,7 @@ export class SqliteAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[SqliteAdapter] Error getting JSON by blockId:', error);
+            getLogger().error('[SqliteAdapter] Error getting JSON by blockId:', error);
             throw error;
         }
     }
@@ -454,7 +463,7 @@ export class SqliteAdapter extends AdapterBase {
             const rows = await query;
             return rows.length ? rows : [];
         } catch (error) {
-            console.error('[SqliteAdapter] Error getting exchange balances:', error);
+            getLogger().error('[SqliteAdapter] Error getting exchange balances:', error);
             throw error;
         }
     }
@@ -483,7 +492,7 @@ export class SqliteAdapter extends AdapterBase {
             const rows = await query;
             return rows.length ? rows : [];
         } catch (error) {
-            console.error('[SqliteAdapter] Error getting exchange orders:', error);
+            getLogger().error('[SqliteAdapter] Error getting exchange orders:', error);
             throw error;
         }
     }
@@ -510,7 +519,7 @@ export class SqliteAdapter extends AdapterBase {
             const rows = await query;
             return rows.length ? rows : [];
         } catch (error) {
-            console.error('[SqliteAdapter] Error getting exchange trades:', error);
+            getLogger().error('[SqliteAdapter] Error getting exchange trades:', error);
             throw error;
         }
     }
@@ -544,7 +553,7 @@ export class SqliteAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[SqliteAdapter] Error getting exchange order book snapshots:', error);
+            getLogger().error('[SqliteAdapter] Error getting exchange order book snapshots:', error);
             throw error;
         }
     }
@@ -554,7 +563,7 @@ export class SqliteAdapter extends AdapterBase {
             await this.db.destroy();
             return true;
         } catch (error) {
-            console.error('[SqliteAdapter] Error destroying database connection:', error);
+            getLogger().error('[SqliteAdapter] Error destroying database connection:', error);
             throw error;
         }
     }
@@ -564,7 +573,7 @@ export class SqliteAdapter extends AdapterBase {
             const rows = await this.db(table).where(query);
             return rows.length ? rows : [];
         } catch (error) {
-            console.error(`[SqliteAdapter] Error finding in table ${table}:`, error);
+            getLogger().error(`[SqliteAdapter] Error finding in table ${table}:`, error);
             throw error;
         }
     }
@@ -574,7 +583,7 @@ export class SqliteAdapter extends AdapterBase {
             const row = await this.db(table).where(query).first();
             return row || null;
         } catch (error) {
-            console.error(`[SqliteAdapter] Error finding one in table ${table}:`, error);
+            getLogger().error(`[SqliteAdapter] Error finding one in table ${table}:`, error);
             throw error;
         }
     }
@@ -584,7 +593,7 @@ export class SqliteAdapter extends AdapterBase {
             await this.db(table).insert(data);
             return true;
         } catch (error) {
-            console.error(`[SqliteAdapter] Error inserting into table ${table}:`, error);
+            getLogger().error(`[SqliteAdapter] Error inserting into table ${table}:`, error);
             throw error;
         }
     }
@@ -597,7 +606,7 @@ export class SqliteAdapter extends AdapterBase {
                 .merge();
             return data;
         } catch (error) {
-            console.error(`[SqliteAdapter] Error replacing in table ${table}:`, error);
+            getLogger().error(`[SqliteAdapter] Error replacing in table ${table}:`, error);
             throw error;
         }
     }
@@ -615,7 +624,7 @@ export class SqliteAdapter extends AdapterBase {
             const result = await this.db.raw(sql, params);
             return result || [];
         } catch (error) {
-            console.error('[SqliteAdapter] Error executing raw query:', error);
+            getLogger().error('[SqliteAdapter] Error executing raw query:', error);
             throw error;
         }
     }

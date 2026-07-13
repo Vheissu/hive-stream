@@ -1,3 +1,4 @@
+import { getLogger } from '../logger';
 import BigNumber from 'bignumber.js';
 import seedrandom from 'seedrandom';
 import { v4 as uuidv4 } from 'uuid';
@@ -79,7 +80,7 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
                 return amount;
             }
         } catch (error) {
-            console.error('[CoinflipContract] Error fetching balance:', error);
+            getLogger().error('[CoinflipContract] Error fetching balance:', error);
             if (state.balanceCache) {
                 return state.balanceCache.balance;
             }
@@ -101,7 +102,7 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
                 try {
                     await nextBet();
                 } catch (error) {
-                    console.error('[CoinflipContract] Queue processing error:', error);
+                    getLogger().error('[CoinflipContract] Queue processing error:', error);
                 }
             }
         }
@@ -212,7 +213,7 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
             }
         } catch (e) {
             const error = e instanceof Error ? e : new Error(String(e));
-            console.error('[CoinflipContract] Flip processing error:', {
+            getLogger().error('[CoinflipContract] Flip processing error:', {
                 sender,
                 amount: amountRaw,
                 payload,
@@ -228,7 +229,7 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
                     }
                 }
             } catch (refundError) {
-                console.error('[CoinflipContract] Failed to refund after error:', refundError);
+                getLogger().error('[CoinflipContract] Failed to refund after error:', refundError);
             }
 
             throw error;

@@ -1,3 +1,4 @@
+import { getLogger } from './logger';
 import { CoinGeckoExchange } from './exchanges/coingecko';
 import { Exchange } from './exchanges/exchange';
 import { 
@@ -52,7 +53,7 @@ export class HiveRates {
             const fiatUpdated = fiatSuccess.status === 'fulfilled' && fiatSuccess.value;
 
             if (!cryptoUpdated && !fiatUpdated) {
-                console.warn('No rates were updated');
+                getLogger().warn('No rates were updated');
                 return false;
             }
 
@@ -62,7 +63,7 @@ export class HiveRates {
 
             return true;
         } catch (error) {
-            console.error('Error in fetchRates:', error);
+            getLogger().error('Error in fetchRates:', error);
             throw error instanceof RatesError ? error : new RatesError(
                 `Unexpected error: ${error instanceof Error ? error.message : String(error)}`,
                 'UNKNOWN_ERROR'
@@ -87,7 +88,7 @@ export class HiveRates {
                 .filter(result => result.status === 'rejected')
                 .map(result => (result as PromiseRejectedResult).reason);
             
-            console.warn('All crypto exchanges failed:', errors);
+            getLogger().warn('All crypto exchanges failed:', errors);
             return false;
         }
 
@@ -98,7 +99,7 @@ export class HiveRates {
         const { hiveAverage, hbdAverage } = this.calculateAverageRates();
 
         if (hiveAverage === 0 && hbdAverage === 0) {
-            console.warn('No valid crypto rates available for cross-rate calculation');
+            getLogger().warn('No valid crypto rates available for cross-rate calculation');
             return;
         }
 
@@ -192,12 +193,12 @@ export class HiveRates {
                 this.fiatRates = rates;
                 this.lastFiatFetch = Date.now();
 
-                console.log(`Successfully fetched ${Object.keys(rates).length} fiat rates from ${baseUrl}`);
+                getLogger().debug(`Successfully fetched ${Object.keys(rates).length} fiat rates from ${baseUrl}`);
                 return true;
 
             } catch (error) {
                 lastError = error instanceof Error ? error : new Error(String(error));
-                console.warn(`Fiat API endpoint ${baseUrl} failed:`, lastError.message);
+                getLogger().warn(`Fiat API endpoint ${baseUrl} failed:`, lastError.message);
             }
         }
 

@@ -1,3 +1,4 @@
+import { getLogger } from '../logger';
 import { TimeAction } from './../actions';
 import { ContractPayload, TransferMetadata, CustomJsonMetadata } from './../types/hive-stream';
 import { AdapterBase } from './base.adapter';
@@ -117,7 +118,7 @@ export class PostgreSQLAdapter extends AdapterBase {
 
             return true;
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error creating tables:', error);
+            getLogger().error('[PostgreSQLAdapter] Error creating tables:', error);
             throw error;
         }
     }
@@ -147,12 +148,12 @@ export class PostgreSQLAdapter extends AdapterBase {
                     try {
                         return TimeAction.fromJSON(actionData);
                     } catch (error) {
-                        console.warn(`[PostgreSQLAdapter] Failed to restore action ${actionData?.id || 'unknown'}:`, error);
+                        getLogger().warn(`[PostgreSQLAdapter] Failed to restore action ${actionData?.id || 'unknown'}:`, error);
                         return null;
                     }
                 }).filter(Boolean) as TimeAction[];
             } catch (error) {
-                console.error('[PostgreSQLAdapter] Error loading actions:', error);
+                getLogger().error('[PostgreSQLAdapter] Error loading actions:', error);
                 return [];
             }
         }
@@ -170,7 +171,7 @@ export class PostgreSQLAdapter extends AdapterBase {
                 try {
                     row.actions = row.actions ? JSON.parse(row.actions) : [];
                 } catch (parseError) {
-                    console.warn('[PostgreSQLAdapter] Failed to parse actions from database, using empty array:', parseError);
+                    getLogger().warn('[PostgreSQLAdapter] Failed to parse actions from database, using empty array:', parseError);
                     row.actions = [];
                 }
                 return row;
@@ -178,7 +179,7 @@ export class PostgreSQLAdapter extends AdapterBase {
             
             return null;
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error loading state:', error);
+            getLogger().error('[PostgreSQLAdapter] Error loading state:', error);
             throw error;
         }
     }
@@ -189,7 +190,7 @@ export class PostgreSQLAdapter extends AdapterBase {
             try {
                 actionsJson = JSON.stringify(data.actions || []);
             } catch (error) {
-                console.error('[PostgreSQLAdapter] Failed to serialize actions:', error);
+                getLogger().error('[PostgreSQLAdapter] Failed to serialize actions:', error);
                 actionsJson = '[]';
             }
 
@@ -204,7 +205,7 @@ export class PostgreSQLAdapter extends AdapterBase {
 
             return true;
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error saving state:', error);
+            getLogger().error('[PostgreSQLAdapter] Error saving state:', error);
             throw error;
         }
     }
@@ -231,7 +232,7 @@ export class PostgreSQLAdapter extends AdapterBase {
             
             return true;
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error processing transfer:', error);
+            getLogger().error('[PostgreSQLAdapter] Error processing transfer:', error);
             throw error;
         }
     }
@@ -251,7 +252,7 @@ export class PostgreSQLAdapter extends AdapterBase {
             
             return true;
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error processing custom JSON:', error);
+            getLogger().error('[PostgreSQLAdapter] Error processing custom JSON:', error);
             throw error;
         }
     }
@@ -268,7 +269,7 @@ export class PostgreSQLAdapter extends AdapterBase {
             
             return true;
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error adding event:', error);
+            getLogger().error('[PostgreSQLAdapter] Error adding event:', error);
             throw error;
         }
     }
@@ -288,7 +289,7 @@ export class PostgreSQLAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error getting transfers:', error);
+            getLogger().error('[PostgreSQLAdapter] Error getting transfers:', error);
             throw error;
         }
     }
@@ -309,7 +310,7 @@ export class PostgreSQLAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error getting events:', error);
+            getLogger().error('[PostgreSQLAdapter] Error getting events:', error);
             throw error;
         }
     }
@@ -331,7 +332,7 @@ export class PostgreSQLAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error getting events by contract:', error);
+            getLogger().error('[PostgreSQLAdapter] Error getting events by contract:', error);
             throw error;
         }
     }
@@ -353,7 +354,7 @@ export class PostgreSQLAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error getting events by account:', error);
+            getLogger().error('[PostgreSQLAdapter] Error getting events by account:', error);
             throw error;
         }
     }
@@ -374,7 +375,7 @@ export class PostgreSQLAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error getting transfers by contract:', error);
+            getLogger().error('[PostgreSQLAdapter] Error getting transfers by contract:', error);
             throw error;
         }
     }
@@ -395,7 +396,7 @@ export class PostgreSQLAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error getting transfers by account:', error);
+            getLogger().error('[PostgreSQLAdapter] Error getting transfers by account:', error);
             throw error;
         }
     }
@@ -416,7 +417,7 @@ export class PostgreSQLAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error getting transfers by blockId:', error);
+            getLogger().error('[PostgreSQLAdapter] Error getting transfers by blockId:', error);
             throw error;
         }
     }
@@ -436,7 +437,7 @@ export class PostgreSQLAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error getting JSON:', error);
+            getLogger().error('[PostgreSQLAdapter] Error getting JSON:', error);
             throw error;
         }
     }
@@ -457,7 +458,7 @@ export class PostgreSQLAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error getting JSON by contract:', error);
+            getLogger().error('[PostgreSQLAdapter] Error getting JSON by contract:', error);
             throw error;
         }
     }
@@ -478,7 +479,7 @@ export class PostgreSQLAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error getting JSON by account:', error);
+            getLogger().error('[PostgreSQLAdapter] Error getting JSON by account:', error);
             throw error;
         }
     }
@@ -499,7 +500,7 @@ export class PostgreSQLAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error getting JSON by blockId:', error);
+            getLogger().error('[PostgreSQLAdapter] Error getting JSON by blockId:', error);
             throw error;
         }
     }
@@ -509,7 +510,7 @@ export class PostgreSQLAdapter extends AdapterBase {
             await this.db.destroy();
             return true;
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error destroying database connection:', error);
+            getLogger().error('[PostgreSQLAdapter] Error destroying database connection:', error);
             throw error;
         }
     }
@@ -519,7 +520,7 @@ export class PostgreSQLAdapter extends AdapterBase {
             const rows = await this.db(table).where(query);
             return rows.length ? rows : [];
         } catch (error) {
-            console.error(`[PostgreSQLAdapter] Error finding in table ${table}:`, error);
+            getLogger().error(`[PostgreSQLAdapter] Error finding in table ${table}:`, error);
             throw error;
         }
     }
@@ -529,7 +530,7 @@ export class PostgreSQLAdapter extends AdapterBase {
             const row = await this.db(table).where(query).first();
             return row || null;
         } catch (error) {
-            console.error(`[PostgreSQLAdapter] Error finding one in table ${table}:`, error);
+            getLogger().error(`[PostgreSQLAdapter] Error finding one in table ${table}:`, error);
             throw error;
         }
     }
@@ -539,7 +540,7 @@ export class PostgreSQLAdapter extends AdapterBase {
             await this.db(table).insert(data);
             return true;
         } catch (error) {
-            console.error(`[PostgreSQLAdapter] Error inserting into table ${table}:`, error);
+            getLogger().error(`[PostgreSQLAdapter] Error inserting into table ${table}:`, error);
             throw error;
         }
     }
@@ -552,7 +553,7 @@ export class PostgreSQLAdapter extends AdapterBase {
                 .merge();
             return data;
         } catch (error) {
-            console.error(`[PostgreSQLAdapter] Error replacing in table ${table}:`, error);
+            getLogger().error(`[PostgreSQLAdapter] Error replacing in table ${table}:`, error);
             throw error;
         }
     }
@@ -577,7 +578,7 @@ export class PostgreSQLAdapter extends AdapterBase {
             const rows = await query;
             return rows.length ? rows : [];
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error getting exchange balances:', error);
+            getLogger().error('[PostgreSQLAdapter] Error getting exchange balances:', error);
             throw error;
         }
     }
@@ -606,7 +607,7 @@ export class PostgreSQLAdapter extends AdapterBase {
             const rows = await query;
             return rows.length ? rows : [];
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error getting exchange orders:', error);
+            getLogger().error('[PostgreSQLAdapter] Error getting exchange orders:', error);
             throw error;
         }
     }
@@ -633,7 +634,7 @@ export class PostgreSQLAdapter extends AdapterBase {
             const rows = await query;
             return rows.length ? rows : [];
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error getting exchange trades:', error);
+            getLogger().error('[PostgreSQLAdapter] Error getting exchange trades:', error);
             throw error;
         }
     }
@@ -667,7 +668,7 @@ export class PostgreSQLAdapter extends AdapterBase {
 
             return [];
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error getting exchange order book snapshots:', error);
+            getLogger().error('[PostgreSQLAdapter] Error getting exchange order book snapshots:', error);
             throw error;
         }
     }
@@ -678,7 +679,7 @@ export class PostgreSQLAdapter extends AdapterBase {
             // PostgreSQL returns results in result.rows
             return result.rows || [];
         } catch (error) {
-            console.error('[PostgreSQLAdapter] Error executing raw query:', error);
+            getLogger().error('[PostgreSQLAdapter] Error executing raw query:', error);
             throw error;
         }
     }

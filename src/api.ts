@@ -1,3 +1,4 @@
+import { getLogger } from './logger';
 import express from 'express';
 import cors from 'cors';
 import type { Server } from 'http';
@@ -29,7 +30,7 @@ export class Api {
 
         this.server = await new Promise<Server>((resolve, reject) => {
             const server = this.app.listen(this.port, () => {
-                console.log(`Running server on port ${this.port}`);
+                getLogger().debug(`Running server on port ${this.port}`);
                 resolve(server);
             });
 
@@ -64,7 +65,7 @@ export class Api {
             try {
                 await handler(req, res);
             } catch (error) {
-                console.error(`[Api] Failed handling GET ${path}:`, error);
+                getLogger().error(`[Api] Failed handling GET ${path}:`, error);
 
                 if (!res.headersSent) {
                     res.status(500).json({ error: 'Internal server error' });
@@ -74,6 +75,21 @@ export class Api {
     }
 
     private setupRoutes() {
+        this.route('/health', async (req, res) => {
+            const health = this.streamer.getHealth();
+
+            res.status(health.healthy ? 200 : 503).json({
+                ...health,
+                timestamp: new Date().toISOString(),
+                uptime: process.uptime(),
+                version: process.env.npm_package_version || '1.0.0'
+            });
+        });
+
+        this.route('/status', async (req, res) => {
+            res.json(this.streamer.getStatus());
+        });
+
         this.route('/transfers', async (req, res) => {
             const transfers = await this.streamer.getAdapter().getTransfers();
 
@@ -138,17 +154,6 @@ export class Api {
             const events = await this.streamer.getAdapter().getEventsByAccount(req.params.account);
 
             res.json(events);
-        });
-
-        this.route('/health', async (req, res) => {
-            const health = {
-                status: 'ok',
-                timestamp: new Date().toISOString(),
-                uptime: process.uptime(),
-                version: process.env.npm_package_version || '1.0.0'
-            };
-
-            res.json(health);
         });
 
         this.route('/stats', async (req, res) => {

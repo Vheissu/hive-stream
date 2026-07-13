@@ -23,6 +23,27 @@ function createMockStreamer(overrides: Record<string, any> = {}) {
 
     return {
         getAdapter: jest.fn().mockReturnValue(defaultAdapter),
+        getHealth: jest.fn().mockReturnValue({
+            status: 'ok',
+            healthy: true,
+            isStarted: true,
+            uptimeSeconds: 5,
+            lastBlockAgeSeconds: 3,
+            lastBlockNumber: 100,
+            headBlockNumber: 100,
+            blocksBehind: 0,
+            isCatchingUp: false,
+            latestBlockchainTime: new Date(),
+            contracts: [],
+            actions: 0,
+        }),
+        getStatus: jest.fn().mockReturnValue({
+            lastBlockNumber: 100,
+            headBlockNumber: 100,
+            blocksBehind: 0,
+            latestBlockchainTime: new Date(),
+            isCatchingUp: false,
+        }),
         _adapter: defaultAdapter,
     };
 }

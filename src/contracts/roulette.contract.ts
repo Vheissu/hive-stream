@@ -1,3 +1,4 @@
+import { getLogger } from '../logger';
 import BigNumber from 'bignumber.js';
 import seedrandom from 'seedrandom';
 import { v4 as uuidv4 } from 'uuid';
@@ -239,7 +240,7 @@ export function createRouletteContract(options: RouletteContractOptions = {}) {
                 return amount;
             }
         } catch (error) {
-            console.error('[RouletteContract] Error fetching balance:', error);
+            getLogger().error('[RouletteContract] Error fetching balance:', error);
             if (state.balanceCache) {
                 return state.balanceCache.balance;
             }
@@ -261,7 +262,7 @@ export function createRouletteContract(options: RouletteContractOptions = {}) {
                 try {
                     await nextBet();
                 } catch (error) {
-                    console.error('[RouletteContract] Queue processing error:', error);
+                    getLogger().error('[RouletteContract] Queue processing error:', error);
                 }
             }
         }
@@ -389,7 +390,7 @@ export function createRouletteContract(options: RouletteContractOptions = {}) {
             }
         } catch (e) {
             const error = e instanceof Error ? e : new Error(String(e));
-            console.error('[RouletteContract] Spin processing error:', {
+            getLogger().error('[RouletteContract] Spin processing error:', {
                 sender,
                 amount: amountRaw,
                 payload,
@@ -406,7 +407,7 @@ export function createRouletteContract(options: RouletteContractOptions = {}) {
                     }
                 }
             } catch (refundError) {
-                console.error('[RouletteContract] Failed to refund after error:', refundError);
+                getLogger().error('[RouletteContract] Failed to refund after error:', refundError);
             }
 
             throw error;

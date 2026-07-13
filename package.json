@@ -10,8 +10,15 @@
     "exports": {
         ".": {
             "types": "./dist/index.d.ts",
+            "import": "./dist/index.mjs",
             "require": "./dist/index.js",
             "default": "./dist/index.js"
+        },
+        "./testing": {
+            "types": "./dist/testing/index.d.ts",
+            "import": "./dist/testing/index.mjs",
+            "require": "./dist/testing/index.js",
+            "default": "./dist/testing/index.js"
         },
         "./package.json": "./package.json"
     },
@@ -23,15 +30,38 @@
         "LICENSE"
     ],
     "repository": "git@github.com:Vheissu/hive-stream.git",
+    "homepage": "https://github.com/Vheissu/hive-stream#readme",
+    "bugs": {
+        "url": "https://github.com/Vheissu/hive-stream/issues"
+    },
+    "keywords": [
+        "hive",
+        "hive-blockchain",
+        "blockchain",
+        "hive-engine",
+        "dhive",
+        "smart-contracts",
+        "streaming",
+        "dapp",
+        "web3",
+        "crypto"
+    ],
+    "engines": {
+        "node": ">=18"
+    },
     "author": "Dwayne Charrington <dwaynecharrington@gmail.com>",
     "license": "MIT",
     "private": false,
     "scripts": {
-        "build": "tsc --project tsconfig.build.json",
+        "build": "tsc --project tsconfig.build.json && node scripts/generate-esm-wrappers.js",
         "start": "npx ts-node src/test.ts",
         "watch": "tsc -w",
         "test": "jest --verbose",
         "clean-tests": "jest --clearCache",
+        "docs:gen": "ts-node scripts/generate-contract-docs.ts",
+        "docs:dev": "npm run docs:gen && vitepress dev docs",
+        "docs:build": "npm run docs:gen && vitepress build docs",
+        "docs:preview": "vitepress preview docs",
         "prepublishOnly": "npm run build"
     },
     "dependencies": {
@@ -66,6 +96,7 @@
         "mongodb-memory-server": "^10.1.4",
         "ts-jest": "^29.4.0",
         "ts-node": "^10.9.2",
-        "typescript": "^5.9.2"
+        "typescript": "^5.9.2",
+        "vitepress": "^1.6.4"
     }
 }

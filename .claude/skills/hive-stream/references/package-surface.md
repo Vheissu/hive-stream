@@ -73,6 +73,34 @@ Use metadata when the task is scaffolding or introspection:
 - `HIVE_STREAM_METADATA`
 - `getHiveStreamMetadata()`
 
+## Testing (`hive-stream/testing`)
+
+Always write tests with the bundled testing kit instead of mocking dhive or hitting mainnet:
+
+```ts
+import { createTestStreamer, hive } from 'hive-stream/testing';
+
+const ts = await createTestStreamer({ username: 'myapp' });
+await ts.streamer.registerContract(myContract);
+await ts.contractTransfer({ from: 'alice', contract: 'mygame', action: 'play', amount: hive(1) });
+expect(ts.outgoingTransfers).toHaveLength(1);   // captured, never broadcast
+await ts.advanceTime('1h');                     // fires due TimeActions
+await ts.stop();
+```
+
+- Runs a real `Streamer` offline: in-memory blocks (`MemoryBlockProvider`), captured broadcasts (`FakeHiveClient`), in-memory SQLite (built-in SQL contracts work).
+- Other helpers: `contractJson()`, `transfer()`, `customJson()`, `sendOperations()`, `advanceBlocks(n)`, `getEvents()`, `ts.adapter.query(...)`, `ts.client.onCall(...)`/`setAccount(...)` for read stubs, `hive(n)`/`hbd(n)` formatters.
+- `blockProvider` and `client` are injectable on any `Streamer` config for lower-level composition.
+
+## Production Surface
+
+- `streamer.getHealth()` → `{ status: 'ok'|'behind'|'stalled'|'stopped', healthy, blocksBehind, ... }`; served at `/health` (200/503) and `/status` by the built-in API.
+- `streamer.enableGracefulShutdown()` — SIGINT/SIGTERM handlers that stop cleanly; returns a disposer.
+- `streamer.replayBlocks(from, to)` — reprocess a historical range (streamer must be stopped; moves the cursor).
+- `streamer.init()` + `streamer.processPendingBlocks()` — timer-free block processing.
+- `logger` config option (or `setLogger()`) routes all library output through a custom `debug/info/warn/error` logger; console by default.
+- ESM works natively: `import { Streamer } from 'hive-stream'` — one class copy at runtime, `instanceof` always safe.
+
 ## Config Defaults Worth Remembering
 
 - `JSON_ID`: `hivestream`

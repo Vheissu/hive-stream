@@ -112,8 +112,8 @@ export class TimeAction implements TimeActionInterface {
         throw new Error('TimeAction: date must be a Date object or valid date string');
     }
 
-    public reset(): void {
-        this.date = new Date();
+    public reset(date: Date = new Date()): void {
+        this.date = date;
         this.lastExecution = undefined;
     }
 
@@ -129,9 +129,9 @@ export class TimeAction implements TimeActionInterface {
         return this.maxExecutions !== undefined && this.executionCount >= this.maxExecutions;
     }
 
-    public incrementExecutionCount(): void {
+    public incrementExecutionCount(date: Date = new Date()): void {
         this.executionCount++;
-        this.lastExecution = new Date();
+        this.lastExecution = date;
     }
 
     public toJSON(): Record<string, any> {

@@ -1,3 +1,4 @@
+import { getLogger } from '../logger';
 import { createHash } from 'crypto';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
@@ -225,7 +226,7 @@ export function createCheckpointContract(options: CheckpointContractOptions) {
         });
 
         if (!matched) {
-            console.warn(`[CheckpointContract] State divergence detected against ${publisher} at block ${payload.blockNumber}`);
+            getLogger().warn(`[CheckpointContract] State divergence detected against ${publisher} at block ${payload.blockNumber}`);
         }
     };
 

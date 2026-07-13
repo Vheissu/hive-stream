@@ -1,3 +1,4 @@
+import { getLogger } from '../logger';
 import BigNumber from 'bignumber.js';
 import { Streamer } from '../streamer';
 import { Utils } from '../utils';
@@ -228,10 +229,10 @@ export class NFTContract {
                 });
             });
 
-            console.log(`[NFTContract] Collection ${symbol} created by ${sender}`);
+            getLogger().debug(`[NFTContract] Collection ${symbol} created by ${sender}`);
 
         } catch (error) {
-            console.error('[NFTContract] Error creating collection:', error);
+            getLogger().error('[NFTContract] Error creating collection:', error);
             throw error;
         }
     }
@@ -318,10 +319,10 @@ export class NFTContract {
                 });
             });
 
-            console.log(`[NFTContract] NFT ${tokenId} minted in collection ${collectionSymbol} to ${to}`);
+            getLogger().debug(`[NFTContract] NFT ${tokenId} minted in collection ${collectionSymbol} to ${to}`);
 
         } catch (error) {
-            console.error('[NFTContract] Error minting NFT:', error);
+            getLogger().error('[NFTContract] Error minting NFT:', error);
             throw error;
         }
     }
@@ -461,10 +462,10 @@ export class NFTContract {
                 });
             });
 
-            console.log(`[NFTContract] Batch of ${mintList.length} NFTs minted in collection ${collectionSymbol} to ${to}`);
+            getLogger().debug(`[NFTContract] Batch of ${mintList.length} NFTs minted in collection ${collectionSymbol} to ${to}`);
 
         } catch (error) {
-            console.error('[NFTContract] Error batch minting NFTs:', error);
+            getLogger().error('[NFTContract] Error batch minting NFTs:', error);
             throw error;
         }
     }
@@ -560,10 +561,10 @@ export class NFTContract {
                 });
             });
 
-            console.log(`[NFTContract] NFT ${tokenId} updated by ${sender}`);
+            getLogger().debug(`[NFTContract] NFT ${tokenId} updated by ${sender}`);
 
         } catch (error) {
-            console.error('[NFTContract] Error updating NFT:', error);
+            getLogger().error('[NFTContract] Error updating NFT:', error);
             throw error;
         }
     }
@@ -629,10 +630,10 @@ export class NFTContract {
                 });
             });
 
-            console.log(`[NFTContract] NFT ${tokenId} transferred from ${sender} to ${to}`);
+            getLogger().debug(`[NFTContract] NFT ${tokenId} transferred from ${sender} to ${to}`);
 
         } catch (error) {
-            console.error('[NFTContract] Error transferring NFT:', error);
+            getLogger().error('[NFTContract] Error transferring NFT:', error);
             throw error;
         }
     }
@@ -690,10 +691,10 @@ export class NFTContract {
                 });
             });
 
-            console.log(`[NFTContract] NFT ${tokenId} burned by ${sender}`);
+            getLogger().debug(`[NFTContract] NFT ${tokenId} burned by ${sender}`);
 
         } catch (error) {
-            console.error('[NFTContract] Error burning NFT:', error);
+            getLogger().error('[NFTContract] Error burning NFT:', error);
             throw error;
         }
     }
@@ -754,10 +755,10 @@ export class NFTContract {
                 });
             });
 
-            console.log(`[NFTContract] NFT ${tokenId} listed by ${sender} for ${price} ${currency}`);
+            getLogger().debug(`[NFTContract] NFT ${tokenId} listed by ${sender} for ${price} ${currency}`);
 
         } catch (error) {
-            console.error('[NFTContract] Error listing NFT:', error);
+            getLogger().error('[NFTContract] Error listing NFT:', error);
             throw error;
         }
     }
@@ -794,10 +795,10 @@ export class NFTContract {
                 });
             });
 
-            console.log(`[NFTContract] NFT ${tokenId} unlisted by ${sender}`);
+            getLogger().debug(`[NFTContract] NFT ${tokenId} unlisted by ${sender}`);
 
         } catch (error) {
-            console.error('[NFTContract] Error unlisting NFT:', error);
+            getLogger().error('[NFTContract] Error unlisting NFT:', error);
             throw error;
         }
     }
@@ -905,10 +906,10 @@ export class NFTContract {
                 );
             }
 
-            console.log(`[NFTContract] NFT ${tokenId} sold to ${sender} for ${amount} ${asset}`);
+            getLogger().debug(`[NFTContract] NFT ${tokenId} sold to ${sender} for ${amount} ${asset}`);
 
         } catch (error) {
-            console.error('[NFTContract] Error buying NFT:', error);
+            getLogger().error('[NFTContract] Error buying NFT:', error);
             throw error;
         }
     }
@@ -997,10 +998,10 @@ export class NFTContract {
                 });
             });
 
-            console.log(`[NFTContract] NFT ${tokenId} sold directly to ${sender} for ${amount} ${asset} (paid to ${listingData.seller})`);
+            getLogger().debug(`[NFTContract] NFT ${tokenId} sold directly to ${sender} for ${amount} ${asset} (paid to ${listingData.seller})`);
 
         } catch (error) {
-            console.error('[NFTContract] Error processing direct NFT sale:', error);
+            getLogger().error('[NFTContract] Error processing direct NFT sale:', error);
             throw error;
         }
     }
@@ -1041,10 +1042,10 @@ export class NFTContract {
                 }
             });
 
-            console.log(`[NFTContract] Token info query for ${tokenId} by ${sender}`);
+            getLogger().debug(`[NFTContract] Token info query for ${tokenId} by ${sender}`);
 
         } catch (error) {
-            console.error('[NFTContract] Error getting token info:', error);
+            getLogger().error('[NFTContract] Error getting token info:', error);
             throw error;
         }
     }
@@ -1075,10 +1076,10 @@ export class NFTContract {
                 }
             });
 
-            console.log(`[NFTContract] Collection info query for ${symbol} by ${sender}`);
+            getLogger().debug(`[NFTContract] Collection info query for ${symbol} by ${sender}`);
 
         } catch (error) {
-            console.error('[NFTContract] Error getting collection info:', error);
+            getLogger().error('[NFTContract] Error getting collection info:', error);
             throw error;
         }
     }
@@ -1110,10 +1111,10 @@ export class NFTContract {
                 }
             });
 
-            console.log(`[NFTContract] User tokens query for ${account} by ${sender}`);
+            getLogger().debug(`[NFTContract] User tokens query for ${account} by ${sender}`);
 
         } catch (error) {
-            console.error('[NFTContract] Error getting user tokens:', error);
+            getLogger().error('[NFTContract] Error getting user tokens:', error);
             throw error;
         }
     }

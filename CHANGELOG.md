@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased - DX & Production]
+
+### ✨ Added
+- **Testing Kit (`hive-stream/testing`)** - Test contracts and subscriptions fully offline
+  - `createTestStreamer()` runs a real `Streamer` against simulated infrastructure: in-memory blocks, captured broadcasts, in-memory SQLite
+  - `contractTransfer()`, `contractJson()`, `transfer()`, `customJson()`, `sendOperations()` inject operations; `advanceBlocks()`/`advanceTime('1h')` drive TimeActions without waiting
+  - `MemoryBlockProvider` and `FakeHiveClient` also compose individually via the `blockProvider`/`client` config options
+  - Files: `src/testing/`, `examples/testing/`, `tests/testing-kit.spec.ts`
+- **ESM support** - `import { Streamer } from 'hive-stream'` now resolves a real ESM entry
+  - Thin `.mjs` wrappers over the single CJS implementation: named imports work, and there is exactly one copy of every class at runtime (no dual-package hazard; `instanceof` is always safe)
+  - Subpath export `hive-stream/testing`; types verified under `nodenext` and `bundler` resolution
+  - Files: `scripts/generate-esm-wrappers.js`, `package.json`
+- **Documentation site** - VitePress site with 12 guides and auto-generated reference pages for all 40 built-in contracts
+  - Contract pages are generated from source (`npm run docs:gen`), so triggers and payload schemas never drift
+  - Deploys to GitHub Pages via `.github/workflows/docs.yml`; run locally with `npm run docs:dev`
+  - Files: `docs/`, `scripts/generate-contract-docs.ts`
+- **Production operations**
+  - `getHealth()` plus `/health` (200/503) and `/status` API routes for load balancers and orchestrators
+  - `enableGracefulShutdown()` registers SIGINT/SIGTERM handlers that stop the streamer cleanly
+  - `replayBlocks(from, to)` reprocesses a historical range through subscriptions, contracts, and adapters
+  - Pluggable structured logging: `logger` config option / `setLogger()`; all library output routes through it (console by default)
+  - `init()` + `processPendingBlocks()` for timer-free block processing (tests, replays, serverless)
+  - Files: `src/logger.ts`, `src/streamer.ts`, `src/api.ts`, `tests/production-ops.spec.ts`
+- **Package metadata** - npm keywords, homepage, bugs URL, and an `engines` field (Node 18+)
+
+### 🐛 Fixed
+- **TimeAction time anchoring** - `reset()` and `incrementExecutionCount()` now anchor to blockchain time instead of wall-clock time, keeping schedules consistent under clock skew, replays, and simulation
+- **README** - `onCustomJsonId` example showed the callback and id arguments in the wrong order
+- **SQLite adapter** - replaced deprecated `createTableIfNotExists` calls (knex warning spam on startup)
+- **Injected dhive clients** - `setConfig()` no longer replaces a client supplied via the new `client` config option
+
+### 🔧 Changed
+- **Live broadcast tests** - now require `RUN_LIVE_TESTS=1` in addition to credentials, so `npm test` never spends Resource Credits by accident
+- **Legacy `/health` API route** - replaced the static always-ok response with real streamer health (previous `timestamp`/`uptime`/`version` fields are preserved)
+
 ## [3.1.0] - 2026-07-13
 
 ### ✨ Added

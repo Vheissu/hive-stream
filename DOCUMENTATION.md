@@ -260,6 +260,94 @@ The action must have `trigger: 'time'` in its definition.
 
 ---
 
+## Testing Contracts
+
+The `hive-stream/testing` module runs a real `Streamer` against simulated infrastructure: an in-memory block provider, a fake Hive client that records broadcasts, and an in-memory SQLite database. Nothing touches the network or disk, and no keys are needed (unless your handlers broadcast — then any valid-format key works, since nothing is sent).
+
+### Setup
+
+```ts
+import { createTestStreamer, hive, hbd } from 'hive-stream/testing';
+
+const ts = await createTestStreamer({ username: 'myapp' });
+await ts.streamer.registerContract(myContract);
+```
+
+`createTestStreamer` accepts every regular streamer config option, plus:
+
+- `adapter` — a storage adapter (defaults to in-memory SQLite, so built-in SQL contracts work out of the box)
+- `startTime` — timestamp of the simulated chain's first block (defaults to now)
+- `blockIntervalMs` — simulated block spacing (defaults to 3000)
+
+### Driving the chain
+
+Every method mints a block containing your operation and processes it synchronously — when the promise resolves, your contract has run.
+
+```ts
+// Transfer with a wrapped contract payload in the memo
+await ts.contractTransfer({
+    from: 'alice',
+    contract: 'tipjar',
+    action: 'tip',
+    payload: { message: 'great post!' },
+    amount: hbd(5)           // defaults to '1.000 HIVE'
+                             // `to` defaults to the streamer's username
+});
+
+// Custom JSON with a wrapped contract payload
+await ts.contractJson('alice', {
+    contract: 'vault',
+    action: 'open',
+    activeKey: true          // sign with active authority (default: posting)
+});
+
+// Plain operations, for testing subscriptions
+await ts.transfer('alice', 'myapp', hive(1), 'a plain memo');
+await ts.customJson('bob', { follow: 'alice' }, { id: 'follow' });
+
+// Raw operations, one block, single transaction
+await ts.sendOperations([
+    ['transfer', { from: 'a', to: 'b', amount: '1.000 HIVE', memo: '' }]
+]);
+```
+
+### Time travel
+
+TimeActions fire against simulated chain time, so scheduled logic is testable without waiting:
+
+```ts
+await ts.streamer.registerAction(new TimeAction('1h', 'hourly-draw', 'lotto', 'draw', {}, ts.currentTime));
+
+await ts.advanceTime('1h');   // mints a block one hour later; the action fires
+await ts.advanceBlocks(3);    // three empty blocks at normal 3s spacing
+```
+
+`advanceTime` accepts milliseconds or `'30s'`, `'5m'`, `'1h'`, `'2d'`, `'1w'`.
+
+### Asserting on results
+
+```ts
+// Broadcasts your handlers attempted (payouts, refunds, custom JSON)
+expect(ts.outgoingTransfers).toEqual([
+    { from: 'myapp', to: 'alice', amount: '2.000 HIVE', memo: 'winnings' }
+]);
+expect(ts.broadcasts).toHaveLength(1);   // every broadcast, typed by kind
+
+// Contract events recorded through the adapter
+const events = await ts.getEvents();
+
+// Query contract tables directly
+const rows = await ts.adapter.query('SELECT * FROM tipjar_tips');
+
+// Stub chain reads your handlers perform
+ts.client.onCall('get_order_book', { bids: [], asks: [] });
+ts.client.setAccount('alice', { balance: '100.000 HIVE' });
+```
+
+Call `await ts.stop()` when done (in `afterEach`, for example) to close the database.
+
+---
+
 ## Adapter Requirements
 
 Contracts can use any adapter, but some require SQL features:
