@@ -13,6 +13,30 @@ This document focuses on the contract system and how to build robust contracts u
 
 ---
 
+## CLI
+
+Hive Stream ships a scaffolding CLI. It generates a complete TypeScript app — package.json, tsconfig, `.env.example`, a wired-up `src/index.ts`, a starter custom contract, and a README with payload examples for every registered contract action.
+
+```shell
+npx hive-stream new <name> [options]   # scaffold a new app
+npx hive-stream list                   # show templates and adapters
+```
+
+Run `new` without options for interactive prompts, or pass flags for non-interactive use:
+
+| Flag | Description |
+| --- | --- |
+| `-t, --template <id>` | `minimal`, `game`, `exchange`, `social`, `blog`, or `token` |
+| `-a, --adapter <id>` | `sqlite` (default), `mongodb`, or `postgresql` |
+| `-u, --username <name>` | Hive account the app runs as |
+| `--api` | Enable the built-in HTTP API server |
+| `--install` | Run `npm install` after scaffolding |
+| `-y, --yes` | Skip prompts and accept defaults |
+
+Generated apps read `HIVE_USERNAME`, `HIVE_POSTING_KEY`, and `HIVE_ACTIVE_KEY` from `.env` via `new Streamer({ env: true })`.
+
+---
+
 ## Concepts
 
 ### Contracts

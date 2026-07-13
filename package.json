@@ -4,6 +4,9 @@
     "description": "A layer for streaming actions on the Hive blockchain and reacting to them.",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
+    "bin": {
+        "hive-stream": "dist/cli/index.js"
+    },
     "exports": {
         ".": {
             "types": "./dist/index.d.ts",
