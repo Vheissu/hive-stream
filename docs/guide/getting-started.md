@@ -69,6 +69,8 @@ Anyone can now trigger it by broadcasting custom JSON with your configured id (d
 
 See [Writing Contracts](./contracts) for triggers, validation, lifecycle hooks, and payment-carrying actions.
 
+When another part of the app needs to call this contract, use a shared contract spec and `createContractCaller()` instead of assembling JSON by hand. The caller validates the action, payload, trigger, and authority before it builds an operation. See [Calling Contracts Safely](./contract-calls).
+
 ## Test it without touching the chain
 
 ```ts
@@ -91,6 +93,7 @@ Everything runs offline — simulated blocks, captured broadcasts, in-memory sto
 ## Where to next
 
 - [Configuration](./configuration) — keys, API nodes, catch-up behavior
+- [Calling Contracts Safely](./contract-calls) — shared schemas and operation builders
 - [Streaming & Subscriptions](./streaming) — every event you can react to
 - [Built-in Contracts](/contracts/) — 40 ready-to-register contracts
 - [Transfer Flows](./flows) — split, forward, burn, and refund payments

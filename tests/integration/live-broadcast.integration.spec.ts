@@ -3,8 +3,8 @@
  *
  * These tests perform REAL operations on the blockchain using the
  * steembutton account. They are gated behind environment variables
- * and only run when TEST_ACCOUNT, TEST_POSTING_KEY, and TEST_ACTIVE_KEY
- * are set.
+ * and only run when TEST_ACCOUNT, TEST_POSTING_KEY, TEST_ACTIVE_KEY,
+ * and the explicit RUN_LIVE_TESTS=1 opt-in are set.
  *
  * All operations are designed to be safe and low-impact:
  * - Follow/unfollow (free, reversible)

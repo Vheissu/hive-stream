@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased - DX & Production]
 
 ### ✨ Added
+- **Contract call client (`hive-stream/client`)** - Share lightweight action specs and build calls without hand-written wire JSON
+  - `defineContractSpec()` and `createContractCaller()` provide typed action names, Zod validation, trigger checks, and automatic posting/active authority selection
+  - Pure helpers build payload wrappers, transfer memos, `custom_json` operations, and native HIVE/HBD transfer operations without networking, keys, or database dependencies
+  - Sender and recipient account names are validated before operations are returned; `validateHiveAccountName()` is available for forms and scripts
+  - Structured validation issues make the same checks usable for browser forms, backend scripts, and offline tests
+  - Files: `src/client/`, `tests/contract-calls.spec.ts`, `docs/guide/contract-calls.md`
+- **Safer generated apps** - New scaffolds include TypeScript checking and an offline starter contract test
+  - `npm run verify` runs the type checker, Jest suite, and production build before an app touches Hive
+  - Generated packages are private by default, load the username from resolved config, and use the built-in SIGINT/SIGTERM shutdown helper
+  - Template prompts only offer compatible storage; SQL-backed templates now reject MongoDB during generation
+  - CLI flags support `--name=value` syntax and reject unknown options, extra arguments, and malformed Hive account names
+  - Files: `src/cli/`, `tests/cli.spec.ts`
 - **Testing Kit (`hive-stream/testing`)** - Test contracts and subscriptions fully offline
   - `createTestStreamer()` runs a real `Streamer` against simulated infrastructure: in-memory blocks, captured broadcasts, in-memory SQLite
   - `contractTransfer()`, `contractJson()`, `transfer()`, `customJson()`, `sendOperations()` inject operations; `advanceBlocks()`/`advanceTime('1h')` drive TimeActions without waiting
@@ -31,13 +43,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Package metadata** - npm keywords, homepage, bugs URL, and an `engines` field (Node 18+)
 
 ### 🐛 Fixed
+- **Hive Engine RPC dependency** - Replaced the abandoned `sscjs` client and its vulnerable Axios dependency chain with a small built-in JSON-RPC client that reports HTTP, RPC, and timeout failures directly
+- **Tooling metadata** - Corrected `onCustomJsonId` argument order and documented the contract call client surface
+- **Contract setup validation** - `defineContract()` and `registerContract()` now reject missing handlers, invalid schemas, unsupported triggers, empty trigger lists, and malformed hooks immediately
+- **Package builds** - `npm run build` now clears generated output first so removed source modules cannot survive in published tarballs
 - **TimeAction time anchoring** - `reset()` and `incrementExecutionCount()` now anchor to blockchain time instead of wall-clock time, keeping schedules consistent under clock skew, replays, and simulation
 - **README** - `onCustomJsonId` example showed the callback and id arguments in the wrong order
 - **SQLite adapter** - replaced deprecated `createTableIfNotExists` calls (knex warning spam on startup)
 - **Injected dhive clients** - `setConfig()` no longer replaces a client supplied via the new `client` config option
 
 ### 🔧 Changed
-- **Live broadcast tests** - now require `RUN_LIVE_TESTS=1` in addition to credentials, so `npm test` never spends Resource Credits by accident
+- **Dependencies** - Upgraded UUID to its patched 11.x release and refreshed compatible transitive dependencies
+- **Live write tests** - every suite that broadcasts now requires `RUN_LIVE_TESTS=1` in addition to credentials, so `npm test` never spends Resource Credits by accident
 - **Legacy `/health` API route** - replaced the static always-ok response with real streamer health (previous `timestamp`/`uptime`/`version` fields are preserved)
 
 ## [3.1.0] - 2026-07-13

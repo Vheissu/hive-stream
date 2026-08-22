@@ -14,7 +14,8 @@ const path = require('path');
 
 const ENTRIES = [
     { cjs: 'dist/index.js', mjs: 'dist/index.mjs' },
-    { cjs: 'dist/testing/index.js', mjs: 'dist/testing/index.mjs' }
+    { cjs: 'dist/testing/index.js', mjs: 'dist/testing/index.mjs' },
+    { cjs: 'dist/client/index.js', mjs: 'dist/client/index.mjs' }
 ];
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;

@@ -4,6 +4,8 @@ export * from './streamer';
 export * from './utils';
 export * from './actions';
 export * from './metadata';
+export * from './defaults';
+export * from './client';
 export * from './hive-rates';
 export * from './exchanges/exchange';
 export * from './exchanges/coingecko';

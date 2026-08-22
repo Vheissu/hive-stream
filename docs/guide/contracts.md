@@ -40,6 +40,8 @@ await streamer.registerContract(dice);
 
 Registration is async so `create` hooks can initialize tables. Unregister with `await streamer.unregisterContract('mydice')`.
 
+Definitions are checked during `defineContract()` and again at registration. Missing handlers, schemas without `safeParse()`, unsupported triggers, empty trigger lists, and malformed lifecycle hooks fail during setup.
+
 ## Triggers
 
 Each action declares what invokes it:
@@ -77,6 +79,8 @@ ctx.operation      // { type, data } — the raw operation
 ## Validation
 
 Attach a [Zod](https://zod.dev) schema to any action. Invalid payloads are rejected with a warning before your handler runs, so handler code can trust its input.
+
+Put schemas that are also needed by a frontend or CLI in a [shared contract spec](./contract-calls). This keeps client-side checks and server dispatch on the same definition.
 
 ## Active key enforcement
 

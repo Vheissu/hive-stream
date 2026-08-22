@@ -23,11 +23,11 @@ export type ContractTrigger =
     | EscrowOperationType
     | 'recurrent_transfer';
 
-export interface ContractPayload {
+export interface ContractPayload<Payload = Record<string, unknown>, Meta = Record<string, unknown>> {
     contract: string;
     action: string;
-    payload?: Record<string, unknown>;
-    meta?: Record<string, unknown>;
+    payload?: Payload;
+    meta?: Meta;
 }
 
 export interface ContractLifecycleContext {
@@ -90,9 +90,9 @@ export interface ContractActionDefinition<Payload = any> {
     description?: string;
 }
 
-export interface ContractDefinition {
+export interface ContractDefinition<Actions extends Record<string, ContractActionDefinition<any>> = Record<string, ContractActionDefinition<any>>> {
     name: string;
-    actions: Record<string, ContractActionDefinition<any>>;
+    actions: Actions;
     hooks?: {
         create?: (ctx: ContractLifecycleContext) => void | Promise<void>;
         destroy?: (ctx: ContractLifecycleContext) => void | Promise<void>;

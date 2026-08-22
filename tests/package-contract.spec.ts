@@ -17,11 +17,18 @@ describe('package contract', () => {
                 require: './dist/testing/index.js',
                 default: './dist/testing/index.js'
             },
+            './client': {
+                types: './dist/client/index.d.ts',
+                import: './dist/client/index.mjs',
+                require: './dist/client/index.js',
+                default: './dist/client/index.js'
+            },
             './package.json': './package.json'
         }));
     });
 
     test('build generates the ESM wrappers referenced by the exports map', () => {
+        expect(packageJson.scripts.build).toContain('npm run clean');
         expect(packageJson.scripts.build).toContain('generate-esm-wrappers');
     });
 

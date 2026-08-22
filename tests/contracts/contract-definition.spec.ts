@@ -34,6 +34,18 @@ describe('defineContract()', () => {
         expect(() => defineContract({ name: '', actions: { a: { handler: jest.fn() } } })).toThrow('requires a name');
     });
 
+    test('throws when names contain surrounding whitespace', () => {
+        expect(() => defineContract({
+            name: ' invalid ',
+            actions: { okay: action(jest.fn()) }
+        })).toThrow('surrounding whitespace');
+
+        expect(() => defineContract({
+            name: 'valid',
+            actions: { ' not-normalized ': action(jest.fn()) }
+        })).toThrow('surrounding whitespace');
+    });
+
     test('throws when name is not a string', () => {
         expect(() => defineContract({ name: 42, actions: { a: { handler: jest.fn() } } } as any)).toThrow('requires a name');
     });
@@ -48,6 +60,33 @@ describe('defineContract()', () => {
 
     test('throws when actions is empty object', () => {
         expect(() => defineContract({ name: 'test', actions: {} })).toThrow('at least one action');
+    });
+
+    test('throws when an action has no handler', () => {
+        expect(() => defineContract({
+            name: 'test',
+            actions: { broken: {} as any }
+        })).toThrow("action 'broken' requires a handler function");
+    });
+
+    test('throws for unsupported or empty trigger lists', () => {
+        expect(() => defineContract({
+            name: 'test',
+            actions: { broken: { handler: jest.fn(), trigger: 'typo' as any } }
+        })).toThrow("unsupported trigger 'typo'");
+
+        expect(() => defineContract({
+            name: 'test',
+            actions: { broken: { handler: jest.fn(), trigger: [] } }
+        })).toThrow('at least one trigger');
+    });
+
+    test('throws for invalid lifecycle hooks', () => {
+        expect(() => defineContract({
+            name: 'test',
+            hooks: { create: 'not-a-function' } as any,
+            actions: { valid: { handler: jest.fn() } }
+        })).toThrow('create hook must be a function');
     });
 
     test('preserves hooks in definition', () => {
@@ -78,9 +117,14 @@ describe('action()', () => {
 
     test('works with schema option', () => {
         const handler = jest.fn();
-        const schema = { parse: jest.fn() };
+        const schema = { safeParse: jest.fn() };
         const result = action(handler, { schema: schema as any });
         expect(result.schema).toBe(schema);
+    });
+
+    test('rejects invalid handlers and schemas immediately', () => {
+        expect(() => action(null as any)).toThrow('requires a handler function');
+        expect(() => action(jest.fn(), { schema: { parse: jest.fn() } as any })).toThrow('schema must provide safeParse()');
     });
 
     test('defaults to empty options', () => {

@@ -17,4 +17,11 @@ describe('package root exports', () => {
     test('exposes roulette contract factory from the root entrypoint', () => {
         expect(HiveStream.createRouletteContract).toBeDefined();
     });
+
+    test('exposes safe contract call helpers from the root entrypoint', () => {
+        expect(HiveStream.createContractPayload).toBeDefined();
+        expect(HiveStream.createContractCaller).toBeDefined();
+        expect(HiveStream.ContractCallValidationError).toBeDefined();
+        expect(HiveStream.validateHiveAccountName).toBeDefined();
+    });
 });

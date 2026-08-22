@@ -14,6 +14,7 @@ Use this skill when the code should be built around `hive-stream` instead of dro
 3. Choose the narrowest integration path:
    - subscriptions for passive read reactions
    - contracts for wrapped payload dispatch
+   - contract callers for browser, script, and test operation construction
    - flows for inbound transfer automation
    - ops for fluent outbound write builders
 4. Keep `new Streamer()` side-effect free. Register adapters, contracts, or time actions explicitly, and call `start()` only when streaming is required.
@@ -25,12 +26,14 @@ Use this skill when the code should be built around `hive-stream` instead of dro
 | --- | --- |
 | Package surface, lifecycle, defaults | [references/package-surface.md](references/package-surface.md) |
 | Contracts, payload wrappers, triggers, time actions | [references/contracts-and-triggers.md](references/contracts-and-triggers.md) |
+| Shared contract specs and safe call builders | [references/contract-calls.md](references/contract-calls.md) |
 | Transfer flows, ops builders, money helpers | [references/flows-and-builders.md](references/flows-and-builders.md) |
 | Built-in contract factories already shipped by the package | [references/built-in-contracts.md](references/built-in-contracts.md) |
 
 ## Package-Specific Rules
 
 - Distinguish subscriptions from contract dispatch. Contract actions only run when a valid wrapper exists under `PAYLOAD_IDENTIFIER`.
+- Use `hive-stream/client` for outbound contract payloads instead of assembling wrapper JSON or authority arrays by hand.
 - Prefer camelCase config keys in code. Uppercase canonical keys and env var aliases remain supported for compatibility.
 - Prefer explicit adapters when storage choice matters. The default SQLite adapter is lazy, but app code should not assume SQLite forever.
 - Do not enable the built-in API unless the task needs it. Use `apiEnabled: true` on `start()` or call `startApiServer()` directly.

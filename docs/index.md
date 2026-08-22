@@ -24,7 +24,9 @@ features:
   - title: Test everything offline
     details: The hive-stream/testing kit simulates blocks, captures broadcasts, and time-travels TimeActions. No network, no keys, no waiting.
   - title: Scaffold in seconds
-    details: npx hive-stream new gives you a ready-to-run app with contracts, storage, and payload examples wired up.
+    details: npx hive-stream new gives you contracts, compatible storage, environment config, and an offline starter test.
+  - title: Calls checked before signing
+    details: Shared contract specs validate action names, payloads, triggers, JSON, and authority before a wallet sees the operation.
   - title: Payments that add up
     details: Transfer flows split, forward, burn, and refund incoming payments with integer-safe math and a previewable plan.
   - title: Your storage, your call

@@ -2,6 +2,7 @@ import { getLogger, setLogger } from './logger';
 import { AdapterBase } from './adapters/base.adapter';
 import { Api } from './api';
 import { SqliteAdapter } from './adapters/sqlite.adapter';
+import { validateContractDefinition } from './contracts/contract';
 
 import { TimeAction } from './actions';
 import { Client } from '@hiveio/dhive';
@@ -48,6 +49,7 @@ import {
 } from './builders';
 import { ConfigInput, ConfigInterface, createConfig, normalizeConfigInput } from './config';
 import { BlockProvider } from './providers/block-provider';
+import { HiveEngineClient } from './providers/hive-engine-client';
 import { HiveProvider } from './providers/hive-provider';
 import { 
     AutoBurnIncomingTransfersOptions,
@@ -80,9 +82,6 @@ import {
     EscrowSubscription,
     EscrowOperationType,
 } from './types/hive-stream';
-
-import hivejs from 'sscjs';
-
 
 interface ProcessingAction {
     when: number;
@@ -119,7 +118,7 @@ export class Streamer {
 
     private config: ConfigInterface = createConfig();
     private client: Client;
-    private hive: any;
+    private hive: HiveEngineClient;
 
     private username: string;
     private postingKey: string;
@@ -381,7 +380,7 @@ export class Streamer {
         this.postingKey = this.config.POSTING_KEY;
         this.activeKey = this.config.ACTIVE_KEY;
 
-        this.hive = new hivejs(this.config.HIVE_ENGINE_API);
+        this.hive = new HiveEngineClient(this.config.HIVE_ENGINE_API);
         this.hasInjectedClient = Boolean(userConfig.client);
         this.client = userConfig.client ?? new Client(this.config.API_NODES);
         this.adapter = new SqliteAdapter();
@@ -1102,20 +1101,18 @@ export class Streamer {
     }
 
     public async registerContract(contract: ContractDefinition): Promise<void> {
-        if (!contract || typeof contract !== 'object') {
-            throw new Error('Contract must be a valid definition object');
+        if (!contract || typeof contract !== 'object' || Array.isArray(contract)) {
+            throw new Error('Contract must be a valid definition');
         }
 
-        if (!contract.name || typeof contract.name !== 'string') {
+        if (typeof contract.name !== 'string' || !contract.name.trim()) {
             throw new Error('Contract name must be a non-empty string');
         }
 
+        validateContractDefinition(contract);
+
         if (this.contractCache.has(contract.name)) {
             throw new Error(`Contract '${contract.name}' is already registered`);
-        }
-
-        if (!contract.actions || typeof contract.actions !== 'object') {
-            throw new Error(`Contract '${contract.name}' must define actions`);
         }
 
         await this.initializeContract(contract);
@@ -1169,7 +1166,7 @@ export class Streamer {
         }
 
         if (shouldRecreateHiveEngine) {
-            this.hive = new hivejs(this.config.HIVE_ENGINE_API);
+            this.hive = new HiveEngineClient(this.config.HIVE_ENGINE_API);
         }
 
         if (shouldSyncApiServer && (this.apiServer || this.isStarted)) {

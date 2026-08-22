@@ -273,7 +273,7 @@ export const HIVE_STREAM_METADATA: Readonly<HiveStreamMetadata> = deepFreeze({
         },
         {
             method: 'onCustomJsonId',
-            signature: 'onCustomJsonId(callback, id: string)',
+            signature: 'onCustomJsonId(id: string, callback)',
             callbackSignature: '(op, { sender, isSignedWithActiveKey }, blockNumber, blockId, prevBlockId, trxId, blockTime) => void',
             description: 'Fires for custom_json operations matching id.',
             requiresStart: true,
@@ -808,6 +808,61 @@ export const HIVE_STREAM_METADATA: Readonly<HiveStreamMetadata> = deepFreeze({
                     signature: 'ops.downvote()',
                     description: 'Create a chainable builder for downvotes using the configured voter.',
                     requiresActiveKey: true,
+                    requiresStart: false
+                }
+            ]
+        },
+        {
+            name: 'contractCalls',
+            description: 'Browser-safe helpers for validating contract calls and building Hive operations.',
+            methods: [
+                {
+                    method: 'defineContractSpec',
+                    signature: 'defineContractSpec(definition)',
+                    description: 'Define a lightweight shared contract interface without bundling server handlers.',
+                    requiresActiveKey: false,
+                    requiresStart: false
+                },
+                {
+                    method: 'createContractPayload',
+                    signature: 'createContractPayload(call, options?)',
+                    description: 'Build the configured contract payload wrapper without broadcasting.',
+                    requiresActiveKey: false,
+                    requiresStart: false
+                },
+                {
+                    method: 'createContractMemo',
+                    signature: 'createContractMemo(call, options?)',
+                    description: 'Serialize a wrapped contract payload for a transfer memo.',
+                    requiresActiveKey: false,
+                    requiresStart: false
+                },
+                {
+                    method: 'createContractCustomJsonOperation',
+                    signature: 'createContractCustomJsonOperation(call, options)',
+                    description: 'Build a custom_json operation with explicit posting or active authority.',
+                    requiresActiveKey: false,
+                    requiresStart: false
+                },
+                {
+                    method: 'createContractTransferOperation',
+                    signature: 'createContractTransferOperation(call, options)',
+                    description: 'Build a native HIVE/HBD transfer carrying a validated contract memo.',
+                    requiresActiveKey: false,
+                    requiresStart: false
+                },
+                {
+                    method: 'createContractCaller',
+                    signature: 'createContractCaller(contract, options?)',
+                    description: 'Create a typed caller that checks action names, schemas, triggers, and authority before building operations.',
+                    requiresActiveKey: false,
+                    requiresStart: false
+                },
+                {
+                    method: 'validateHiveAccountName',
+                    signature: 'validateHiveAccountName(name)',
+                    description: 'Check a Hive account name before using it in a form or operation.',
+                    requiresActiveKey: false,
                     requiresStart: false
                 }
             ]

@@ -1,3 +1,4 @@
+import { spawnSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -5,10 +6,18 @@ import path from 'path';
 import {
     generateProjectFiles,
     isDirectoryUsable,
+    validateHiveAccountName,
     validateProjectName,
     writeProjectFiles
 } from '../src/cli/scaffold';
-import { ADAPTERS, TEMPLATES, getAdapter, getTemplate } from '../src/cli/templates';
+import {
+    ADAPTERS,
+    TEMPLATES,
+    getAdapter,
+    getAdapterCompatibilityError,
+    getCompatibleAdapters,
+    getTemplate
+} from '../src/cli/templates';
 
 const baseOptions = {
     name: 'my-app',
@@ -35,6 +44,22 @@ describe('validateProjectName', () => {
     });
 });
 
+describe('validateHiveAccountName', () => {
+    test('accepts valid Hive account names', () => {
+        expect(validateHiveAccountName('alice')).toBeNull();
+        expect(validateHiveAccountName('dice-bank')).toBeNull();
+        expect(validateHiveAccountName('app.one')).toBeNull();
+    });
+
+    test('rejects malformed Hive account names', () => {
+        expect(validateHiveAccountName('')).not.toBeNull();
+        expect(validateHiveAccountName('ab')).not.toBeNull();
+        expect(validateHiveAccountName('Uppercase')).not.toBeNull();
+        expect(validateHiveAccountName('-alice')).not.toBeNull();
+        expect(validateHiveAccountName('a'.repeat(17))).not.toBeNull();
+    });
+});
+
 describe('template and adapter registries', () => {
     test('all templates resolve by id', () => {
         for (const template of TEMPLATES) {
@@ -50,6 +75,19 @@ describe('template and adapter registries', () => {
         }
 
         expect(getAdapter('nope')).toBeUndefined();
+    });
+
+    test('only offers adapters that satisfy a template requirements', () => {
+        expect(getCompatibleAdapters(getTemplate('minimal')!).map((adapter) => adapter.id)).toEqual([
+            'sqlite',
+            'mongodb',
+            'postgresql'
+        ]);
+        expect(getCompatibleAdapters(getTemplate('exchange')!).map((adapter) => adapter.id)).toEqual([
+            'sqlite',
+            'postgresql'
+        ]);
+        expect(getAdapterCompatibilityError(getTemplate('exchange')!, getAdapter('mongodb')!)).toMatch(/requires sql storage/i);
     });
 
     test('usage examples are valid payload wrappers', () => {
@@ -74,9 +112,12 @@ describe('generateProjectFiles', () => {
             '.env.example',
             '.gitignore',
             'README.md',
+            'jest.config.js',
             'package.json',
             'src/contracts/greeting.contract.ts',
             'src/index.ts',
+            'tests/greeting.contract.spec.ts',
+            'tsconfig.build.json',
             'tsconfig.json'
         ]);
     });
@@ -88,11 +129,23 @@ describe('generateProjectFiles', () => {
         expect(pkg.name).toBe('my-app');
         expect(pkg.dependencies['hive-stream']).toBe('^3.0.5');
         expect(pkg.scripts.dev).toBe('ts-node src/index.ts');
+        expect(pkg.scripts.verify).toBe('npm run check && npm test && npm run build');
+        expect(pkg.private).toBe(true);
     });
 
     test('throws on unknown template or adapter', () => {
         expect(() => generateProjectFiles({ ...baseOptions, template: 'bogus' })).toThrow(/Unknown template/);
         expect(() => generateProjectFiles({ ...baseOptions, adapter: 'bogus' })).toThrow(/Unknown adapter/);
+    });
+
+    test('rejects SQL contract templates paired with MongoDB', () => {
+        for (const template of ['exchange', 'social', 'blog', 'token', 'assets']) {
+            expect(() => generateProjectFiles({ ...baseOptions, template, adapter: 'mongodb' }))
+                .toThrow(/requires sql storage/i);
+        }
+
+        expect(() => generateProjectFiles({ ...baseOptions, template: 'game', adapter: 'mongodb' }))
+            .not.toThrow();
     });
 
     test('throws on invalid project name', () => {
@@ -113,11 +166,19 @@ describe('generateProjectFiles', () => {
         }
     });
 
-    test('username is embedded as fallback account', () => {
+    test('username stays in environment config instead of application source', () => {
         const { files } = generateProjectFiles({ ...baseOptions, template: 'game', username: 'dice-bank' });
 
-        expect(files['src/index.ts']).toContain(`process.env.HIVE_USERNAME ?? 'dice-bank'`);
+        expect(files['src/index.ts']).toContain('streamer.getConfig().USERNAME');
+        expect(files['src/index.ts']).not.toContain(`'dice-bank'`);
         expect(files['.env.example']).toContain('HIVE_USERNAME=dice-bank');
+    });
+
+    test('generates a clear startup guard when no username is configured', () => {
+        const { files } = generateProjectFiles({ ...baseOptions, username: '' });
+
+        expect(files['.env.example']).toContain('HIVE_USERNAME=\n');
+        expect(files['src/index.ts']).toContain('Set HIVE_USERNAME in .env before starting the app.');
     });
 
     test('adapters wire their constructor and env vars', () => {
@@ -155,6 +216,16 @@ describe('generateProjectFiles', () => {
         for (const example of template.usage) {
             expect(files['README.md']).toContain(example.payload);
         }
+    });
+
+    test('includes an offline starter test and graceful shutdown wiring', () => {
+        const { files } = generateProjectFiles(baseOptions);
+
+        expect(files['tests/greeting.contract.spec.ts']).toContain("from 'hive-stream/testing'");
+        expect(files['tests/greeting.contract.spec.ts']).toContain("from 'hive-stream/client'");
+        expect(files['src/index.ts']).toContain('streamer.enableGracefulShutdown();');
+        expect(files['src/index.ts']).not.toContain("process.on('SIGINT'");
+        expect(files['README.md']).toContain('npm run verify');
     });
 });
 
@@ -209,5 +280,80 @@ describe('writeProjectFiles and isDirectoryUsable', () => {
 
         fs.mkdirSync(path.join(target, '.git'), { recursive: true });
         expect(isDirectoryUsable(target).usable).toBe(true);
+    });
+});
+
+describe('CLI argument guardrails', () => {
+    let tmpDir: string;
+    const cli = path.resolve(__dirname, '../src/cli/index.ts');
+    const tsNode = path.resolve(__dirname, '../node_modules/.bin/ts-node');
+
+    beforeEach(() => {
+        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hive-stream-cli-process-'));
+    });
+
+    afterEach(() => {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    function run(args: string[]) {
+        return spawnSync(tsNode, [cli, ...args], {
+            cwd: tmpDir,
+            encoding: 'utf8'
+        });
+    }
+
+    test('supports equals syntax for value flags', () => {
+        const result = run([
+            'new',
+            'equals-app',
+            '--template=game',
+            '--adapter=mongodb',
+            '--username=test-app',
+            '--yes'
+        ]);
+
+        expect(result.status).toBe(0);
+        expect(fs.existsSync(path.join(tmpDir, 'equals-app', 'package.json'))).toBe(true);
+    });
+
+    test('rejects unknown flags instead of silently using defaults', () => {
+        const result = run(['new', 'typo-app', '--templta=game', '--yes']);
+
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain("Unknown option '--templta=game'");
+        expect(fs.existsSync(path.join(tmpDir, 'typo-app'))).toBe(false);
+    });
+
+    test('rejects new-only flags and extra arguments on list', () => {
+        const flagResult = run(['list', '--template=minimal']);
+        const argumentResult = run(['list', 'extra']);
+
+        expect(flagResult.status).toBe(1);
+        expect(flagResult.stderr).toContain('Option --template is only valid with the new command.');
+        expect(argumentResult.status).toBe(1);
+        expect(argumentResult.stderr).toContain("Unexpected argument 'extra'");
+    });
+
+    test('rejects command-specific flags when no command was supplied', () => {
+        const result = run(['--api']);
+
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain('Option --api requires a command.');
+    });
+
+    test('rejects incompatible storage before creating the directory', () => {
+        const result = run([
+            'new',
+            'broken-app',
+            '--template=exchange',
+            '--adapter=mongodb',
+            '--username=test-app',
+            '--yes'
+        ]);
+
+        expect(result.status).toBe(1);
+        expect(result.stderr).toMatch(/requires sql storage/i);
+        expect(fs.existsSync(path.join(tmpDir, 'broken-app'))).toBe(false);
     });
 });

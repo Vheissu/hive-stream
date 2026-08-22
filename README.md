@@ -6,13 +6,13 @@ A Node.js layer for Hive that allows you to watch for specific actions on the Hi
 
 ## Scaffold a new app
 
-The fastest way to start is the bundled CLI. It scaffolds a ready-to-run Hive app — game, exchange, social platform, blog, token/NFT project, non-custodial asset platform, or a minimal starter — wired up with the storage adapter of your choice:
+The bundled CLI scaffolds a ready-to-run game, exchange, social app, blog, token/NFT project, asset platform, or minimal starter:
 
 ```shell
 npx hive-stream new my-app
 ```
 
-Answer a few prompts (or skip them with flags) and you get a TypeScript project with contracts registered, a `.env.example`, and a README with copy-paste payload examples for every contract action:
+Answer a few prompts (or skip them with flags) and you get registered contracts, environment config, an offline contract test, and copy-paste payload examples:
 
 ```shell
 npx hive-stream new my-game --template game --username my-account
@@ -20,7 +20,9 @@ npx hive-stream new my-exchange --template exchange --adapter postgresql --api
 npx hive-stream list   # see all templates and adapters
 ```
 
-Templates: `minimal`, `game` (dice, coinflip, roulette, RPS), `exchange` (order book + matching engine), `social` (fan clubs, subscriptions, tips), `blog` (paywall, tips, post streaming), `token` (tokens + NFTs), `assets` (non-custodial NFTs, event tickets, peer-to-peer sales, on-chain state checkpoints). Adapters: `sqlite`, `mongodb`, `postgresql`.
+Templates: `minimal`, `game` (dice, coinflip, roulette, RPS), `exchange` (order book + matching engine), `social` (fan clubs, subscriptions, tips), `blog` (paywall, tips, post streaming), `token` (tokens + NFTs), `assets` (non-custodial NFTs, event tickets, peer-to-peer sales, on-chain state checkpoints).
+
+SQLite and PostgreSQL work with every template. MongoDB is offered for the `minimal` and `game` templates; the other templates register SQL-backed contracts. The CLI rejects incompatible combinations before writing files. Generated projects also include `npm run verify`, which type-checks, tests, and builds the app offline.
 
 ## Install
 
@@ -50,6 +52,32 @@ ss.onCustomJson((op, { sender, isSignedWithActiveKey }, blockNumber, blockId, pr
 
 `new Streamer()` is now side-effect free. The default SQLite adapter is created lazily on first use, and the built-in Express API is opt-in via `apiEnabled: true` on `start()` or an explicit `startApiServer()` call.
 
+## Build contract calls safely
+
+`hive-stream/client` builds contract payloads and Hive operations without connecting to a node or handling private keys. Put the action schemas in a shared spec, then use the same spec on the server, in a browser, and in tests:
+
+```ts
+import { createContractCaller, defineContractSpec } from 'hive-stream/client';
+import { z } from 'zod';
+
+export const guestbookSpec = defineContractSpec({
+    name: 'guestbook',
+    actions: {
+        sign: {
+            trigger: 'custom_json',
+            schema: z.object({ message: z.string().max(280) })
+        }
+    }
+});
+
+const guestbook = createContractCaller(guestbookSpec);
+const operation = guestbook.customJson('alice', 'sign', { message: 'Hello Hive' });
+
+await streamer.broadcastOperations([operation]);
+```
+
+The caller checks action names, Hive account names, Zod schemas, allowed triggers, JSON encoding, and required authority before it returns an operation. Actions marked `requiresActiveKey` select active authority automatically. Lower-level helpers such as `createContractMemo()`, `createContractTransferOperation()`, and `validateHiveAccountName()` are also exported. See [Calling contracts safely](https://vheissu.github.io/hive-stream/guide/contract-calls).
+
 ## Builder/Tooling Metadata
 
 For external tooling (like visual builders), Hive Stream now exports a read-only metadata object:
@@ -61,7 +89,7 @@ console.log(HIVE_STREAM_METADATA.subscriptions);
 console.log(getHiveStreamMetadata().writeOperations);
 ```
 
-This metadata is static runtime data (no network calls) and includes config defaults, event callback signatures, write operation signatures, adapter metadata, contract trigger info, and valid `TimeAction` values.
+This metadata is static runtime data (no network calls) and includes config defaults, event callback signatures, write operation signatures, adapter metadata, contract call builders, trigger info, and valid `TimeAction` values.
 
 ## AI Skills
 

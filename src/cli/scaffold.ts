@@ -1,7 +1,16 @@
 import fs from 'fs';
 import path from 'path';
 
-import { AdapterDefinition, TemplateDefinition, getAdapter, getTemplate } from './templates';
+import {
+    AdapterDefinition,
+    TemplateDefinition,
+    getAdapter,
+    getAdapterCompatibilityError,
+    getTemplate
+} from './templates';
+import { validateHiveAccountName } from '../validation/hive-account';
+
+export { validateHiveAccountName } from '../validation/hive-account';
 
 export interface ScaffoldOptions {
     name: string;
@@ -49,18 +58,28 @@ function generatePackageJson(options: ScaffoldOptions): string {
         name: options.name,
         version: '0.1.0',
         description: `A Hive blockchain app built with hive-stream.`,
+        private: true,
         main: 'dist/index.js',
+        engines: {
+            node: '>=18'
+        },
         scripts: {
             dev: 'ts-node src/index.ts',
-            build: 'tsc',
-            start: 'node dist/index.js'
+            check: 'tsc --noEmit',
+            build: 'tsc --project tsconfig.build.json',
+            start: 'node dist/index.js',
+            test: 'jest --runInBand',
+            verify: 'npm run check && npm test && npm run build'
         },
         dependencies: {
             'hive-stream': `^${options.hiveStreamVersion}`,
             zod: '^3.25.76'
         },
         devDependencies: {
+            '@types/jest': '^30.0.0',
             '@types/node': '^24.1.0',
+            jest: '^30.0.5',
+            'ts-jest': '^29.4.0',
             'ts-node': '^10.9.2',
             typescript: '^5.9.2'
         }
@@ -73,20 +92,47 @@ function generateTsconfig(): string {
     const tsconfig = {
         compilerOptions: {
             target: 'es2022',
-            module: 'commonjs',
-            moduleResolution: 'node',
-            outDir: 'dist',
-            rootDir: 'src',
+            module: 'Node16',
+            moduleResolution: 'Node16',
             strict: true,
+            isolatedModules: true,
             esModuleInterop: true,
             skipLibCheck: true,
             forceConsistentCasingInFileNames: true,
             resolveJsonModule: true
         },
-        include: ['src']
+        include: ['src', 'tests']
     };
 
     return `${JSON.stringify(tsconfig, null, 4)}\n`;
+}
+
+function generateBuildTsconfig(): string {
+    const tsconfig = {
+        extends: './tsconfig.json',
+        compilerOptions: {
+            outDir: 'dist',
+            rootDir: 'src',
+            declaration: true,
+            sourceMap: true
+        },
+        include: ['src'],
+        exclude: ['tests', 'node_modules', 'dist']
+    };
+
+    return `${JSON.stringify(tsconfig, null, 4)}\n`;
+}
+
+function generateJestConfig(): string {
+    return `module.exports = {
+    moduleFileExtensions: ['ts', 'js'],
+    transform: {
+        '^.+\\\\.ts$': 'ts-jest'
+    },
+    testMatch: ['**/tests/**/*.spec.ts'],
+    testEnvironment: 'node'
+};
+`;
 }
 
 function generateGitignore(): string {
@@ -96,6 +142,7 @@ function generateGitignore(): string {
         '.env',
         '*.db',
         '*.log',
+        'coverage/',
         ''
     ].join('\n');
 }
@@ -139,7 +186,7 @@ function envSafeName(name: string): string {
 }
 
 function generateIndex(options: ScaffoldOptions, template: TemplateDefinition, adapter: AdapterDefinition): string {
-    const namedImports = ['Streamer', 'loadEnv', adapter.importName, ...template.imports]
+    const namedImports = ['Streamer', adapter.importName, ...template.imports]
         .sort((a, b) => a.localeCompare(b));
 
     const sections: string[] = [];
@@ -148,14 +195,13 @@ function generateIndex(options: ScaffoldOptions, template: TemplateDefinition, a
     sections.push('');
     sections.push(`import { GreetingContract } from './contracts/greeting.contract';`);
     sections.push('');
-    sections.push(`loadEnv();`);
-    sections.push('');
-    sections.push(`const HIVE_USERNAME = process.env.HIVE_USERNAME ?? '${options.username}';`);
-    sections.push('');
     sections.push(`async function main() {`);
-    sections.push(`    // env: true reads HIVE_USERNAME, HIVE_POSTING_KEY, HIVE_ACTIVE_KEY,`);
-    sections.push(`    // API_ENABLED, and other settings from .env`);
     sections.push(`    const streamer = new Streamer({ env: true });`);
+    sections.push(`    const HIVE_USERNAME = streamer.getConfig().USERNAME;`);
+    sections.push('');
+    sections.push(`    if (!HIVE_USERNAME) {`);
+    sections.push(`        throw new Error('Set HIVE_USERNAME in .env before starting the app.');`);
+    sections.push(`    }`);
     sections.push('');
     sections.push(`    await streamer.registerAdapter(${adapter.construct.replace(/APP_NAME_PLACEHOLDER/g, envSafeName(options.name))});`);
     sections.push('');
@@ -171,15 +217,10 @@ function generateIndex(options: ScaffoldOptions, template: TemplateDefinition, a
     }
 
     sections.push('');
+    sections.push(`    streamer.enableGracefulShutdown();`);
     sections.push(`    await streamer.start();`);
     sections.push('');
     sections.push(`    console.log('${options.name} is streaming the Hive blockchain. Press Ctrl+C to stop.');`);
-    sections.push('');
-    sections.push(`    process.on('SIGINT', () => {`);
-    sections.push(`        void streamer.stop().then(() => {`);
-    sections.push(`            process.exit(0);`);
-    sections.push(`        });`);
-    sections.push(`    });`);
     sections.push(`}`);
     sections.push('');
     sections.push(`main().catch((error) => {`);
@@ -193,26 +234,64 @@ function generateIndex(options: ScaffoldOptions, template: TemplateDefinition, a
 
 function generateGreetingContract(): string {
     return `import { action, defineContract } from 'hive-stream';
+import { defineContractSpec } from 'hive-stream/client';
 import { z } from 'zod';
 
 const greetSchema = z.object({
     name: z.string().min(1).max(80)
 });
 
+type GreetPayload = z.infer<typeof greetSchema>;
+
+export const GreetingSpec = defineContractSpec({
+    name: 'greeting',
+    actions: {
+        greet: {
+            trigger: 'custom_json',
+            schema: greetSchema
+        }
+    }
+});
+
 // A minimal custom contract. Users call it by broadcasting a custom_json
 // operation with id 'hivestream' and this JSON:
 // {"hive_stream":{"contract":"greeting","action":"greet","payload":{"name":"Hive"}}}
 export const GreetingContract = defineContract({
-    name: 'greeting',
+    name: GreetingSpec.name,
     actions: {
-        greet: action(async (payload, ctx) => {
-            const data = greetSchema.parse(payload);
-
-            console.log(\`Hello, \${data.name}! Greeted by @\${ctx.sender} in block \${ctx.block.number}.\`);
-        }, {
-            trigger: 'custom_json'
-        })
+        greet: action(async (payload: GreetPayload, ctx) => {
+            console.log(\`Hello, \${payload.name}! Greeted by @\${ctx.sender} in block \${ctx.block.number}.\`);
+        }, GreetingSpec.actions.greet)
     }
+});
+`;
+}
+
+function generateGreetingTest(): string {
+    return `import { createContractCaller } from 'hive-stream/client';
+import { createTestStreamer } from 'hive-stream/testing';
+
+import { GreetingContract, GreetingSpec } from '../src/contracts/greeting.contract';
+
+describe('GreetingContract', () => {
+    test('accepts valid calls and rejects invalid payloads offline', async () => {
+        const testStreamer = await createTestStreamer({ username: 'test-app' });
+        const greeting = createContractCaller(GreetingSpec);
+        const output = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+
+        try {
+            await testStreamer.streamer.registerContract(GreetingContract);
+            await testStreamer.sendOperations([
+                greeting.customJson('alice', 'greet', { name: 'Hive' })
+            ]);
+
+            expect(output).toHaveBeenCalledWith(expect.stringContaining('Hello, Hive! Greeted by @alice'));
+            expect(greeting.validate('greet', { name: '' }).success).toBe(false);
+        } finally {
+            output.mockRestore();
+            await testStreamer.stop();
+        }
+    });
 });
 `;
 }
@@ -229,6 +308,7 @@ function generateReadme(options: ScaffoldOptions, template: TemplateDefinition, 
     lines.push('```bash');
     lines.push('npm install');
     lines.push('cp .env.example .env   # then fill in your Hive account and keys');
+    lines.push('npm run verify');
     lines.push('npm run dev');
     lines.push('```');
     lines.push('');
@@ -254,6 +334,13 @@ function generateReadme(options: ScaffoldOptions, template: TemplateDefinition, 
     lines.push('## Custom contracts');
     lines.push('');
     lines.push('A starter contract lives in `src/contracts/greeting.contract.ts`. Define actions with `defineContract` and `action`, validate payloads with zod, and register the contract in `src/index.ts`. Actions can be triggered by `custom_json`, `transfer`, `time`, escrow, and recurrent transfer operations.');
+    lines.push('');
+
+    lines.push('Use `createContractCaller` from `hive-stream/client` when a frontend, script, or test needs to call a contract. It checks the action name, trigger, authority, and zod schema before it builds the Hive operation.');
+    lines.push('');
+    lines.push('## Tests');
+    lines.push('');
+    lines.push('`npm test` runs the starter contract against simulated blocks and in-memory storage. It does not connect to Hive or use private keys. Add contract tests under `tests/` as the app grows.');
     lines.push('');
 
     if (options.api) {
@@ -285,20 +372,37 @@ export function generateProjectFiles(options: ScaffoldOptions): ScaffoldResult {
         throw new Error(`Unknown adapter '${options.adapter}'.`);
     }
 
+    const compatibilityError = getAdapterCompatibilityError(template, adapter);
+
+    if (compatibilityError) {
+        throw new Error(compatibilityError);
+    }
+
     const nameError = validateProjectName(options.name);
 
     if (nameError) {
         throw new Error(nameError);
     }
 
+    if (options.username) {
+        const usernameError = validateHiveAccountName(options.username);
+
+        if (usernameError) {
+            throw new Error(usernameError);
+        }
+    }
+
     const files: Record<string, string> = {
         'package.json': generatePackageJson(options),
         'tsconfig.json': generateTsconfig(),
+        'tsconfig.build.json': generateBuildTsconfig(),
+        'jest.config.js': generateJestConfig(),
         '.gitignore': generateGitignore(),
         '.env.example': generateEnvExample(options, adapter),
         'README.md': generateReadme(options, template, adapter),
         'src/index.ts': generateIndex(options, template, adapter),
-        'src/contracts/greeting.contract.ts': generateGreetingContract()
+        'src/contracts/greeting.contract.ts': generateGreetingContract(),
+        'tests/greeting.contract.spec.ts': generateGreetingTest()
     };
 
     return { files, template, adapter };

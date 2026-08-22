@@ -21,6 +21,7 @@ export interface ConfigInterface {
 
 import { config as loadDotenv } from 'dotenv';
 import { BlockProvider } from './providers/block-provider';
+import { DEFAULT_CONTRACT_JSON_ID, DEFAULT_CONTRACT_PAYLOAD_IDENTIFIER } from './defaults';
 import type { Client } from '@hiveio/dhive';
 import type { Logger } from './logger';
 
@@ -106,14 +107,14 @@ export const Config: ConfigInterface = {
     ACTIVE_KEY: '',
     POSTING_KEY: '',
 
-    JSON_ID: 'hivestream',
+    JSON_ID: DEFAULT_CONTRACT_JSON_ID,
 
     HIVE_ENGINE_API: 'https://api.hive-engine.com/rpc',
     HIVE_ENGINE_ID: 'ssc-mainnet-hive',
 
     APP_NAME: 'hive-stream',
 
-    PAYLOAD_IDENTIFIER: 'hive_stream',
+    PAYLOAD_IDENTIFIER: DEFAULT_CONTRACT_PAYLOAD_IDENTIFIER,
 
     USERNAME: '',
 

@@ -40,6 +40,7 @@ describe('metadata exports', () => {
 
         expect(customJsonId).toBeDefined();
         expect(customJsonId?.idFilterBuiltIn).toBe(true);
+        expect(customJsonId?.signature).toBe('onCustomJsonId(id: string, callback)');
     });
 
     test('includes burn helpers in write operation metadata', () => {
@@ -96,10 +97,11 @@ describe('metadata exports', () => {
         expect(names).toEqual(['HiveProvider', 'HafProvider', 'HafClient']);
     });
 
-    test('includes money and flows namespaces for tooling discovery', () => {
+    test('includes money, flows, ops, and contract call namespaces for tooling discovery', () => {
         const money = HIVE_STREAM_METADATA.namespaces.find((item) => item.name === 'money');
         const flows = HIVE_STREAM_METADATA.namespaces.find((item) => item.name === 'flows');
         const ops = HIVE_STREAM_METADATA.namespaces.find((item) => item.name === 'ops');
+        const contractCalls = HIVE_STREAM_METADATA.namespaces.find((item) => item.name === 'contractCalls');
 
         expect(money?.methods.map((method) => method.method)).toEqual(
             expect.arrayContaining([
@@ -142,6 +144,16 @@ describe('metadata exports', () => {
                 'downvote'
             ])
         );
+
+        expect(contractCalls?.methods.map((method) => method.method)).toEqual([
+            'defineContractSpec',
+            'createContractPayload',
+            'createContractMemo',
+            'createContractCustomJsonOperation',
+            'createContractTransferOperation',
+            'createContractCaller',
+            'validateHiveAccountName'
+        ]);
     });
 
     test('keeps helper exports aligned with the expanded contract catalog', () => {

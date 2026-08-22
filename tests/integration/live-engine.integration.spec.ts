@@ -10,6 +10,7 @@ describe('Live Hive Engine Integration Tests', () => {
     let streamer: Streamer;
 
     beforeAll(() => {
+        (global as any).fetchMock.dontMock();
         streamer = new Streamer({
             API_NODES: ['https://api.hive.blog'],
             HIVE_ENGINE_API: 'https://api.hive-engine.com/rpc',
@@ -19,6 +20,7 @@ describe('Live Hive Engine Integration Tests', () => {
 
     afterAll(async () => {
         await streamer.stop();
+        (global as any).fetchMock.resetMocks();
     });
 
     test('getToken returns token info for BEE', async () => {

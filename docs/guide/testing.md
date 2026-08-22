@@ -25,6 +25,19 @@ await ts.stop();
 
 `ts.streamer` is a genuine `Streamer` — the same dispatch, validation, persistence, and scheduling paths that run in production.
 
+If the app has a shared contract spec, drive tests with the same operation a browser or backend would build:
+
+```ts
+import { createContractCaller } from 'hive-stream/client';
+
+const calls = createContractCaller(myContractSpec);
+await ts.sendOperations([
+    calls.customJson('alice', 'submit', { count: 3 })
+]);
+```
+
+Bad action names, triggers, authority, and schema values fail before a simulated block is created.
+
 ## Options
 
 `createTestStreamer` accepts every regular config option, plus:

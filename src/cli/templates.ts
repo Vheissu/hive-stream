@@ -1,5 +1,6 @@
 export type TemplateId = 'minimal' | 'game' | 'exchange' | 'social' | 'blog' | 'token' | 'assets';
 export type AdapterId = 'sqlite' | 'mongodb' | 'postgresql';
+export type AdapterCapability = 'sql';
 
 export interface UsageExample {
     title: string;
@@ -15,6 +16,7 @@ export interface TemplateDefinition {
     registrations: string[];
     setup: string[];
     usage: UsageExample[];
+    requiredAdapterCapabilities?: AdapterCapability[];
 }
 
 export interface AdapterDefinition {
@@ -24,6 +26,7 @@ export interface AdapterDefinition {
     importName: string;
     construct: string;
     envLines: string[];
+    capabilities: AdapterCapability[];
 }
 
 const wrap = (contract: string, actionName: string, payload: string): string => {
@@ -98,6 +101,7 @@ export const TEMPLATES: TemplateDefinition[] = [
         id: 'exchange',
         label: 'Exchange',
         description: 'An on-chain order book exchange with deposits, orders, and a matching engine.',
+        requiredAdapterCapabilities: ['sql'],
         imports: ['createExchangeContract', 'TimeAction'],
         registrations: [
             `await streamer.registerContract(createExchangeContract({`,
@@ -133,6 +137,7 @@ export const TEMPLATES: TemplateDefinition[] = [
         id: 'social',
         label: 'Social',
         description: 'A social platform backend: fan clubs, subscriptions, tips, and post streaming.',
+        requiredAdapterCapabilities: ['sql'],
         imports: [
             'createFanClubContract',
             'createSubscriptionContract',
@@ -179,6 +184,7 @@ export const TEMPLATES: TemplateDefinition[] = [
         id: 'blog',
         label: 'Blog',
         description: 'A blogging backend: paywalled content, tips, and post/comment streaming.',
+        requiredAdapterCapabilities: ['sql'],
         imports: ['createPaywallContract', 'createTipJarContract'],
         registrations: [
             `await streamer.registerContract(createPaywallContract());`,
@@ -215,6 +221,7 @@ export const TEMPLATES: TemplateDefinition[] = [
         id: 'token',
         label: 'Token & NFT',
         description: 'Custom tokens and NFT collections with minting, transfers, and a marketplace.',
+        requiredAdapterCapabilities: ['sql'],
         imports: ['createNFTContract', 'createTokenContract'],
         registrations: [
             `await streamer.registerContract(createTokenContract());`,
@@ -243,6 +250,7 @@ export const TEMPLATES: TemplateDefinition[] = [
         id: 'assets',
         label: 'Assets & Tickets',
         description: 'Non-custodial NFTs and event tickets: batch minting, direct peer-to-peer sales, and on-chain state checkpoints.',
+        requiredAdapterCapabilities: ['sql'],
         imports: [
             'createCheckpointContract',
             'createNFTContract',
@@ -319,7 +327,8 @@ export const ADAPTERS: AdapterDefinition[] = [
         description: 'Zero-config local database. Great for development and single-node apps.',
         importName: 'SqliteAdapter',
         construct: `new SqliteAdapter()`,
-        envLines: []
+        envLines: [],
+        capabilities: ['sql']
     },
     {
         id: 'mongodb',
@@ -331,7 +340,8 @@ export const ADAPTERS: AdapterDefinition[] = [
             '# MongoDB connection',
             'MONGODB_URI=mongodb://localhost:27017',
             'MONGODB_DATABASE=APP_NAME_PLACEHOLDER'
-        ]
+        ],
+        capabilities: []
     },
     {
         id: 'postgresql',
@@ -342,7 +352,8 @@ export const ADAPTERS: AdapterDefinition[] = [
         envLines: [
             '# PostgreSQL connection',
             'DATABASE_URL=postgres://localhost:5432/APP_NAME_PLACEHOLDER'
-        ]
+        ],
+        capabilities: ['sql']
     }
 ];
 
@@ -352,4 +363,23 @@ export function getTemplate(id: string): TemplateDefinition | undefined {
 
 export function getAdapter(id: string): AdapterDefinition | undefined {
     return ADAPTERS.find((adapter) => adapter.id === id);
+}
+
+export function getCompatibleAdapters(template: TemplateDefinition): AdapterDefinition[] {
+    const required = template.requiredAdapterCapabilities ?? [];
+
+    return ADAPTERS.filter((adapter) => required.every((capability) => adapter.capabilities.includes(capability)));
+}
+
+export function getAdapterCompatibilityError(template: TemplateDefinition, adapter: AdapterDefinition): string | null {
+    const missing = (template.requiredAdapterCapabilities ?? [])
+        .filter((capability) => !adapter.capabilities.includes(capability));
+
+    if (missing.length === 0) {
+        return null;
+    }
+
+    const compatible = getCompatibleAdapters(template).map((entry) => entry.id).join(' or ');
+
+    return `Template '${template.id}' requires ${missing.join(', ')} storage. Choose ${compatible}.`;
 }

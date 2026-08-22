@@ -5,8 +5,21 @@ import fs from 'fs';
 import path from 'path';
 
 import { color, confirm, isInteractive, select, text } from './prompts';
-import { generateProjectFiles, isDirectoryUsable, validateProjectName, writeProjectFiles } from './scaffold';
-import { ADAPTERS, TEMPLATES, getAdapter, getTemplate } from './templates';
+import {
+    generateProjectFiles,
+    isDirectoryUsable,
+    validateHiveAccountName,
+    validateProjectName,
+    writeProjectFiles
+} from './scaffold';
+import {
+    ADAPTERS,
+    TEMPLATES,
+    getAdapter,
+    getAdapterCompatibilityError,
+    getCompatibleAdapters,
+    getTemplate
+} from './templates';
 
 interface ParsedArgs {
     command: string | null;
@@ -24,6 +37,9 @@ const FLAG_ALIASES: Record<string, string> = {
 };
 
 const VALUE_FLAGS = new Set(['template', 'adapter', 'username']);
+const BOOLEAN_FLAGS = new Set(['yes', 'api', 'install', 'help', 'version']);
+const KNOWN_FLAGS = new Set([...VALUE_FLAGS, ...BOOLEAN_FLAGS]);
+const NEW_FLAGS = new Set(['template', 'adapter', 'username', 'yes', 'api', 'install']);
 
 function getPackageVersion(): string {
     const packagePath = path.join(__dirname, '..', '..', 'package.json');
@@ -39,20 +55,35 @@ function parseArgs(argv: string[]): ParsedArgs {
     while (index < argv.length) {
         const arg = argv[index];
 
-        if (arg.startsWith('--') || (arg.startsWith('-') && arg.length === 2)) {
+        if (arg.startsWith('-')) {
+            if (arg === '-' || (arg.startsWith('-') && !arg.startsWith('--') && arg.length !== 2)) {
+                fail(`Unknown option '${arg}'. Run hive-stream help for usage.`);
+            }
+
             const raw = arg.replace(/^-+/, '');
-            const name = FLAG_ALIASES[raw] ?? raw;
+            const separator = raw.indexOf('=');
+            const rawName = separator >= 0 ? raw.slice(0, separator) : raw;
+            const inlineValue = separator >= 0 ? raw.slice(separator + 1) : undefined;
+            const name = FLAG_ALIASES[rawName] ?? rawName;
+
+            if (!KNOWN_FLAGS.has(name)) {
+                fail(`Unknown option '${arg}'. Run hive-stream help for usage.`);
+            }
 
             if (VALUE_FLAGS.has(name)) {
-                const value = argv[index + 1];
+                const value = inlineValue ?? argv[index + 1];
 
-                if (value === undefined || value.startsWith('-')) {
+                if (value === undefined || value === '' || (inlineValue === undefined && value.startsWith('-'))) {
                     fail(`Flag --${name} requires a value.`);
                 }
 
                 parsed.flags[name] = value;
-                index += 2;
+                index += inlineValue === undefined ? 2 : 1;
                 continue;
+            }
+
+            if (inlineValue !== undefined) {
+                fail(`Flag --${name} does not take a value.`);
             }
 
             parsed.flags[name] = true;
@@ -77,6 +108,30 @@ function fail(message: string): never {
     process.exit(1);
 }
 
+function validateCommandUsage(parsed: ParsedArgs): void {
+    if (parsed.command === 'list') {
+        if (parsed.positional.length > 0) {
+            fail(`Unexpected argument '${parsed.positional[0]}'. Usage: hive-stream list`);
+        }
+
+        const flag = Object.keys(parsed.flags)[0];
+
+        if (flag) {
+            fail(`Option --${flag} is only valid with the new command.`);
+        }
+
+        return;
+    }
+
+    if (parsed.command === 'new' || parsed.command === 'create') {
+        const invalidFlag = Object.keys(parsed.flags).find((flag) => !NEW_FLAGS.has(flag));
+
+        if (invalidFlag) {
+            fail(`Option --${invalidFlag} is not valid with the ${parsed.command} command.`);
+        }
+    }
+}
+
 function printHelp(): void {
     const lines = [
         '',
@@ -98,6 +153,9 @@ function printHelp(): void {
         `${color.bold('Examples')}`,
         `  npx hive-stream new my-game --template game --username my-account`,
         `  npx hive-stream new my-exchange -t exchange -a postgresql --api`,
+        '',
+        `  MongoDB is available for the minimal and game templates. Templates built`,
+        `  from SQL-backed contracts use SQLite or PostgreSQL.`,
         ''
     ];
 
@@ -109,7 +167,9 @@ function printList(): void {
     console.log(color.bold('Templates'));
 
     for (const template of TEMPLATES) {
+        const storage = getCompatibleAdapters(template).map((adapter) => adapter.id).join(', ');
         console.log(`  ${color.cyan(template.id.padEnd(12))} ${template.description}`);
+        console.log(`  ${''.padEnd(12)} ${color.dim(`Storage: ${storage}`)}`);
     }
 
     console.log('');
@@ -141,6 +201,10 @@ async function runNew(parsed: ParsedArgs): Promise<void> {
         fail(nameError);
     }
 
+    if (parsed.positional.length > 1) {
+        fail(`Unexpected argument '${parsed.positional[1]}'. Usage: hive-stream new <name>`);
+    }
+
     const targetDir = path.resolve(process.cwd(), name);
     const usable = isDirectoryUsable(targetDir);
 
@@ -162,16 +226,27 @@ async function runNew(parsed: ParsedArgs): Promise<void> {
         );
     }
 
+    const selectedTemplate = getTemplate(template)!;
+    const compatibleAdapters = getCompatibleAdapters(selectedTemplate);
+
     let adapter = typeof parsed.flags.adapter === 'string' ? parsed.flags.adapter : '';
 
     if (adapter && !getAdapter(adapter)) {
         fail(`Unknown adapter '${adapter}'. Available: ${ADAPTERS.map((entry) => entry.id).join(', ')}`);
     }
 
+    if (adapter) {
+        const compatibilityError = getAdapterCompatibilityError(selectedTemplate, getAdapter(adapter)!);
+
+        if (compatibilityError) {
+            fail(compatibilityError);
+        }
+    }
+
     if (!adapter) {
         adapter = skipPrompts ? 'sqlite' : await select(
             'Where should app state be stored?',
-            ADAPTERS.map((entry) => ({ value: entry.id, label: entry.label, hint: entry.description })),
+            compatibleAdapters.map((entry) => ({ value: entry.id, label: entry.label, hint: entry.description })),
             'sqlite'
         );
     }
@@ -180,11 +255,23 @@ async function runNew(parsed: ParsedArgs): Promise<void> {
 
     if (!username) {
         username = skipPrompts
-            ? 'your-account'
-            : await text('Hive account the app runs as:', 'your-account');
+            ? ''
+            : await text(
+                'Hive account the app runs as:',
+                '',
+                (value) => validateHiveAccountName(value.replace(/^@/, ''))
+            );
     }
 
     username = username.replace(/^@/, '');
+
+    if (username) {
+        const usernameError = validateHiveAccountName(username);
+
+        if (usernameError) {
+            fail(usernameError);
+        }
+    }
 
     let api = Boolean(parsed.flags.api);
 
@@ -251,10 +338,23 @@ async function main(): Promise<void> {
         return;
     }
 
-    if (parsed.flags.help || parsed.command === 'help' || parsed.command === null) {
+    if (parsed.flags.help || parsed.command === 'help') {
         printHelp();
         return;
     }
+
+    if (parsed.command === null) {
+        const flag = Object.keys(parsed.flags)[0];
+
+        if (flag) {
+            fail(`Option --${flag} requires a command.`);
+        }
+
+        printHelp();
+        return;
+    }
+
+    validateCommandUsage(parsed);
 
     switch (parsed.command) {
         case 'new':

@@ -4,10 +4,10 @@
  * SETUP:
  *   1. Copy .env.example to .env
  *   2. Fill in ACTIVE_KEY, POSTING_KEY, HIVE_ACCOUNT
- *   3. Run: npx jest tests/live --no-watchman
+ *   3. Run: RUN_LIVE_TESTS=1 npx jest tests/live --no-watchman
  *
  * These tests use dust amounts (0.001 HIVE) and are safe to run.
- * They are SKIPPED by default unless keys are present in .env.
+ * They are SKIPPED by default unless keys are present and RUN_LIVE_TESTS=1.
  */
 import * as dotenv from 'dotenv';
 import * as path from 'path';
@@ -23,10 +23,11 @@ const ACCOUNT = process.env.HIVE_ACCOUNT || 'beggars';
 const ACTIVE_KEY = process.env.ACTIVE_KEY;
 const POSTING_KEY = process.env.POSTING_KEY;
 const HAS_KEYS = Boolean(ACTIVE_KEY && POSTING_KEY);
+const LIVE_WRITES_ENABLED = process.env.RUN_LIVE_TESTS === '1';
 
 const API_NODES = ['https://api.hive.blog', 'https://api.deathwing.me', 'https://anyx.io'];
 
-const describeIfKeys = HAS_KEYS ? describe : describe.skip;
+const describeIfKeys = HAS_KEYS && LIVE_WRITES_ENABLED ? describe : describe.skip;
 
 let client: Client;
 

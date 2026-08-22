@@ -20,6 +20,12 @@
             "require": "./dist/testing/index.js",
             "default": "./dist/testing/index.js"
         },
+        "./client": {
+            "types": "./dist/client/index.d.ts",
+            "import": "./dist/client/index.mjs",
+            "require": "./dist/client/index.js",
+            "default": "./dist/client/index.js"
+        },
         "./package.json": "./package.json"
     },
     "files": [
@@ -53,7 +59,8 @@
     "license": "MIT",
     "private": false,
     "scripts": {
-        "build": "tsc --project tsconfig.build.json && node scripts/generate-esm-wrappers.js",
+        "clean": "node scripts/clean-dist.js",
+        "build": "npm run clean && tsc --project tsconfig.build.json && node scripts/generate-esm-wrappers.js",
         "start": "npx ts-node src/test.ts",
         "watch": "tsc -w",
         "test": "jest --verbose",
@@ -74,11 +81,9 @@
         "express": "^5.1.0",
         "knex": "^3.1.0",
         "mongodb": "^6.18.0",
-        "node-fetch": "^3.3.2",
         "pg": "^8.16.3",
         "seedrandom": "^3.0.5",
-        "sscjs": "^0.0.9",
-        "uuid": "^10.0.0",
+        "uuid": "^11.1.1",
         "zod": "^3.25.76"
     },
     "devDependencies": {
@@ -89,7 +94,6 @@
         "@types/node-cron": "^3.0.11",
         "@types/pg": "^8.15.5",
         "@types/seedrandom": "^3.0.8",
-        "@types/uuid": "^10.0.0",
         "jest": "^30.0.5",
         "jest-cli": "^30.0.5",
         "jest-fetch-mock": "^3.0.3",

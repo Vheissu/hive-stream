@@ -35,6 +35,8 @@ Run `new` without options for interactive prompts, or pass flags for non-interac
 
 Generated apps read `HIVE_USERNAME`, `HIVE_POSTING_KEY`, and `HIVE_ACTIVE_KEY` from `.env` via `new Streamer({ env: true })`.
 
+SQLite and PostgreSQL support every template. MongoDB is limited to `minimal` and `game` because the remaining templates register SQL-backed contracts. Generated projects include TypeScript checking, an offline Jest contract test, a production build in `npm run verify`, and graceful SIGINT/SIGTERM shutdown.
+
 ---
 
 ## Concepts
@@ -75,6 +77,30 @@ It expects a wrapper object that looks like:
 
 The wrapper key `hive_stream` is the default `PAYLOAD_IDENTIFIER`. You can change it in config.
 
+### Contract Call Client
+
+Use `hive-stream/client` to share action schemas and build calls without hand-writing wrapper JSON:
+
+```ts
+import { createContractCaller, defineContractSpec } from 'hive-stream/client';
+import { z } from 'zod';
+
+const spec = defineContractSpec({
+    name: 'guestbook',
+    actions: {
+        sign: {
+            trigger: 'custom_json',
+            schema: z.object({ message: z.string().max(280) })
+        }
+    }
+});
+
+const guestbook = createContractCaller(spec);
+const operation = guestbook.customJson('alice', 'sign', { message: 'Hello' });
+```
+
+The client entry point performs no network calls and handles no keys. It validates action names, payload schemas, triggers, JSON values, and authority before returning a Hive operation tuple. Use `createContractMemo`, `createContractPayload`, `createContractCustomJsonOperation`, or `createContractTransferOperation` when a full shared spec is not available.
+
 Relevant configuration defaults:
 
 - `PAYLOAD_IDENTIFIER`: `hive_stream`
@@ -108,6 +134,8 @@ const MyContract = defineContract({
     }
 });
 ```
+
+`defineContract()` and `registerContract()` reject missing handlers, invalid schemas, unsupported triggers, and malformed lifecycle hooks during setup instead of waiting for the first matching chain operation.
 
 ### Register a Contract
 

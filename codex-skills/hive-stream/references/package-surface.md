@@ -68,6 +68,12 @@ Use high-level namespaces when the app needs less boilerplate:
 - `flows.*` for inbound transfer automation
 - `ops.*` for fluent outbound write builders
 
+Use `hive-stream/client` when another app surface needs to call a contract:
+
+- `defineContractSpec(...)` for a shared schema/trigger definition
+- `createContractCaller(...)` for typed payload, memo, custom JSON, and transfer builders
+- direct `createContract*` helpers when no shared spec is available
+
 Use metadata when the task is scaffolding or introspection:
 
 - `HIVE_STREAM_METADATA`
@@ -129,3 +135,5 @@ Available block providers:
 - `BlockProvider` base type
 
 If a task needs SQL features such as `adapter.query(...)`, prefer SQLite or Postgres. Do not assume MongoDB supports raw SQL helpers.
+
+The scaffolding CLI enforces this distinction: MongoDB is offered for `minimal` and `game`; SQL-backed templates use SQLite or PostgreSQL. Generated apps include `npm run verify` and an offline starter test.

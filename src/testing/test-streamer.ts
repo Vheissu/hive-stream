@@ -5,6 +5,7 @@ import { SqliteAdapter } from '../adapters/sqlite.adapter';
 import { BlockData } from '../providers/block-provider';
 import { MemoryBlockProvider, AddBlockOptions } from './memory-block-provider';
 import { FakeHiveClient, RecordedBroadcast } from './fake-client';
+import { createContractPayload } from '../client/contract-calls';
 
 export interface TestStreamerOptions extends Omit<ConfigInput, 'blockProvider' | 'client'> {
     /**
@@ -190,13 +191,10 @@ export class TestStreamer {
      * custom JSON bodies.
      */
     public contractPayload(contract: string, action: string, payload: any = {}, meta?: any): Record<string, any> {
-        const body: Record<string, any> = { contract, action, payload };
-
-        if (meta !== undefined) {
-            body.meta = meta;
-        }
-
-        return { [this.config.PAYLOAD_IDENTIFIER]: body };
+        return createContractPayload(
+            { contract, action, payload, meta },
+            { payloadIdentifier: this.config.PAYLOAD_IDENTIFIER }
+        );
     }
 
     /**
