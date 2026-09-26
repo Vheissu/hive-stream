@@ -416,6 +416,77 @@ describe('Financial Safety', () => {
         });
     });
 
+    describe('Lotto: payout split across drawn winners', () => {
+        test('splits the pot across the winners actually drawn when there are fewer entries than winner slots', async () => {
+            const mockStreamer = createMockStreamer();
+            const mockAdapter = createMockAdapter();
+
+            // 2 entries but 3 winner slots: both entrants win and share the whole pot.
+            const contract = createLottoContract({ cost: 5, minEntriesHourly: 2, hourlyWinnersPick: 3, feePercentage: 10 });
+            contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
+
+            mockAdapter.find.mockResolvedValue([{
+                _id: 'draw-3',
+                status: 'active',
+                type: 'hourly',
+                entries: [
+                    { account: 'alice', transactionId: 'trx-1', date: new Date() },
+                    { account: 'bob', transactionId: 'trx-2', date: new Date() },
+                ],
+            }]);
+
+            const ctx = {
+                sender: 'system',
+                block: { number: 1, id: 'b1', previousId: 'b0', time: new Date().toISOString() },
+                transaction: { id: 'trx-draw-3' },
+            };
+
+            await contract.actions.drawHourlyLottery.handler({}, ctx as any);
+
+            // Pot 10.000, fee 10% => 9.000 shared by 2 winners => 4.500 each
+            const winnerCall = mockStreamer.transferHiveTokensMultiple.mock.calls.find(
+                (call: any[]) => String(call[4]).includes('Congratulations')
+            );
+            expect(winnerCall).toBeDefined();
+            expect(winnerCall![1]).toHaveLength(2);
+            expect(winnerCall![2]).toBe('4.500');
+        });
+
+        test('rounds each share down so payouts never exceed the pot', async () => {
+            const mockStreamer = createMockStreamer();
+            const mockAdapter = createMockAdapter();
+
+            const contract = createLottoContract({ cost: 0.1, minEntriesHourly: 1, hourlyWinnersPick: 3, feePercentage: 0 });
+            contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
+
+            mockAdapter.find.mockResolvedValue([{
+                _id: 'draw-4',
+                status: 'active',
+                type: 'hourly',
+                entries: [
+                    { account: 'alice', transactionId: 'trx-1', date: new Date() },
+                    { account: 'bob', transactionId: 'trx-2', date: new Date() },
+                    { account: 'carol', transactionId: 'trx-3', date: new Date() },
+                    { account: 'dave', transactionId: 'trx-4', date: new Date() },
+                ],
+            }]);
+
+            const ctx = {
+                sender: 'system',
+                block: { number: 1, id: 'b1', previousId: 'b0', time: new Date().toISOString() },
+                transaction: { id: 'trx-draw-4' },
+            };
+
+            await contract.actions.drawHourlyLottery.handler({}, ctx as any);
+
+            // Pot 0.400 split 3 ways = 0.1333... => 0.133 each (0.399 total, never 0.402)
+            const winnerCall = mockStreamer.transferHiveTokensMultiple.mock.calls.find(
+                (call: any[]) => String(call[4]).includes('Congratulations')
+            );
+            expect(winnerCall![2]).toBe('0.133');
+        });
+    });
+
     describe('Lotto: unique winners (audit #18)', () => {
         test('getWinners does not select duplicates', async () => {
             const mockStreamer = createMockStreamer();

@@ -130,7 +130,7 @@ export function createLottoContract(options: LottoContractOptions = {}) {
             }
 
             const previousEntriesCount = await getPreviousUserTicketsForCurrentDrawType(payload.type, sender);
-            if (previousEntriesCount === maxTicketsPerUser) {
+            if (previousEntriesCount >= maxTicketsPerUser) {
                 await state.streamer.transferHiveTokens(account, sender, amountTrim[0], amountTrim[1], '[Refund] You have exceeded the allowed number of entries');
                 return;
             }
@@ -232,7 +232,6 @@ export function createLottoContract(options: LottoContractOptions = {}) {
             const winningsAmount = new BigNumber(total).multipliedBy(cost);
             const percentageFee = winningsAmount.dividedBy(100).multipliedBy(feePercentage);
             const payoutTotal = winningsAmount.minus(percentageFee);
-            const amountPerWinner = payoutTotal.dividedBy(hourlyWinnersPick).toFixed(3);
 
             // Check full outgoing amount (winnings + fee) against balance
             if (balance !== null && winningsAmount.toNumber() > balance) {
@@ -247,6 +246,9 @@ export function createLottoContract(options: LottoContractOptions = {}) {
             }
 
             const { winners, proof } = await getWinners(hourlyWinnersPick, draw.entries, ctx);
+            // Split the pot across the winners actually drawn, rounding down so
+            // the payouts can never exceed the pot.
+            const amountPerWinner = payoutTotal.dividedBy(Math.max(1, winners.length)).toFixed(3, BigNumber.ROUND_DOWN);
 
             if (proof) {
                 await state.adapter.replace(COLLECTION_LOTTERY, { _id: draw._id }, {
@@ -307,7 +309,6 @@ export function createLottoContract(options: LottoContractOptions = {}) {
             const winningsAmount = new BigNumber(total).multipliedBy(cost);
             const percentageFee = winningsAmount.dividedBy(100).multipliedBy(feePercentage);
             const payoutTotal = winningsAmount.minus(percentageFee);
-            const amountPerWinner = payoutTotal.dividedBy(dailyWinnersPick).toFixed(3);
 
             // Check full outgoing amount (winnings + fee) against balance
             if (balance !== null && winningsAmount.toNumber() > balance) {
@@ -322,6 +323,9 @@ export function createLottoContract(options: LottoContractOptions = {}) {
             }
 
             const { winners, proof } = await getWinners(dailyWinnersPick, draw.entries, ctx);
+            // Split the pot across the winners actually drawn, rounding down so
+            // the payouts can never exceed the pot.
+            const amountPerWinner = payoutTotal.dividedBy(Math.max(1, winners.length)).toFixed(3, BigNumber.ROUND_DOWN);
 
             if (proof) {
                 await state.adapter.replace(COLLECTION_LOTTERY, { _id: draw._id }, {
