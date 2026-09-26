@@ -40,7 +40,9 @@ await streamer.registerContract(dice);
 
 Registration is async so `create` hooks can initialize tables. Unregister with `await streamer.unregisterContract('mydice')`.
 
-Definitions are checked during `defineContract()` and again at registration. Missing handlers, schemas without `safeParse()`, unsupported triggers, empty trigger lists, and malformed lifecycle hooks fail during setup.
+Definitions are checked during `defineContract()` and again at registration. Missing handlers, schemas without `safeParse()`, unsupported triggers, empty trigger lists, malformed hooks, and invalid guards fail during setup.
+
+Contracts can also declare `beforeAction` / `afterAction` / `onError` hooks and declarative guards (allowed senders and assets, amount limits, rate limits, pausing). See [Hooks & Guards](./hooks).
 
 ## Triggers
 
@@ -69,8 +71,8 @@ ctx.streamer       // the Streamer — broadcast responses from here
 ctx.adapter        // your storage adapter
 ctx.config         // resolved config
 ctx.block          // { number, id, previousId, time }
-ctx.transaction    // { id }
-ctx.transfer       // { from, to, amount, asset, rawAmount, memo } for transfer triggers
+ctx.transaction    // { id, operationIndex }
+ctx.transfer       // { from, to, amount, asset, rawAmount, memo } for transfer and recurrent_transfer triggers
 ctx.customJson     // { id, json, isSignedWithActiveKey } for custom_json triggers
 ctx.escrow         // escrow details for escrow triggers
 ctx.operation      // { type, data } — the raw operation
@@ -78,7 +80,7 @@ ctx.operation      // { type, data } — the raw operation
 
 ## Validation
 
-Attach a [Zod](https://zod.dev) schema to any action. Invalid payloads are rejected with a warning before your handler runs, so handler code can trust its input.
+Attach a [Zod](https://zod.dev) schema to any action. Invalid payloads are rejected with a warning before your handler runs, so handler code can trust its input. The `onInvalidPayload` hook receives the Zod issues if you want to log them or tell the user.
 
 Put schemas that are also needed by a frontend or CLI in a [shared contract spec](./contract-calls). This keeps client-side checks and server dispatch on the same definition.
 
@@ -97,7 +99,21 @@ Operations signed only with a posting key are rejected.
 
 ## Error handling
 
-Exceptions thrown by handlers are caught and logged; block processing continues. Time-triggered actions are the exception — their errors propagate so scheduling can account for the failure.
+What happens when a handler throws is set by `errorPolicy`:
+
+- `'skip'` (default): the error is logged and reported to `onContractError` / `onError`, the action is recorded as failed, and the stream moves on.
+- `'halt'`: the streamer stops at that block without checkpointing it. After you fix the cause, restart (or call `processPendingBlocks()`) and the block is processed again. Actions that already succeeded in that block are skipped by the idempotency ledger.
+- `'retry'`: the handler is retried up to `errorMaxRetries` times with exponential backoff, then the streamer halts.
+
+A time-triggered action that fails under `'skip'` stays due and runs again on the next block.
+
+## Write handlers to be safe to retry
+
+Hive Stream records each contract action in an idempotency ledger after the handler returns, so a replayed block does not run it again. There is still a window: if the process dies after your handler broadcasts a payout but before the ledger write lands, that action runs again on restart. To close it:
+
+- Record your own side effects keyed by `ctx.transaction.id` and `ctx.transaction.operationIndex` inside `adapter.runInTransaction()`, and check that record before paying out.
+- Keep the broadcast as the last step of the handler.
+- Under `errorPolicy: 'retry'`, assume the handler can run more than once for the same operation.
 
 ## Responding with payments
 

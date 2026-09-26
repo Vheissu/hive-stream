@@ -30,6 +30,7 @@ export default defineConfig({
                     items: [
                         { text: 'Streaming & Subscriptions', link: '/guide/streaming' },
                         { text: 'Writing Contracts', link: '/guide/contracts' },
+                        { text: 'Hooks & Guards', link: '/guide/hooks' },
                         { text: 'Calling Contracts Safely', link: '/guide/contract-calls' },
                         { text: 'Time-Based Actions', link: '/guide/time-actions' },
                         { text: 'Storage Adapters', link: '/guide/adapters' }

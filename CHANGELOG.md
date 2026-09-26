@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0 - Unreleased] - Reliability, hooks and configuration
+
+This release makes the streamer safe to run money-handling apps on: nothing is processed until it is irreversible, the cursor is saved after every block, and contract actions are recorded so a replay never runs them twice.
+
+### ⚠️ Breaking changes
+- **Irreversible streaming is the default.** `streamMode: 'irreversible'` only processes blocks up to `last_irreversible_block_num`, adding a few seconds of latency. Set `streamMode: 'head'` for the old behaviour (now with fork detection).
+- **The cursor is saved after every block** instead of every 5 seconds. Use `checkpointMode: 'interval'` to get the old write pattern.
+- **Configuration is validated.** Invalid values (zero/negative intervals, empty or malformed `apiNodes`, unknown enum values) throw `ConfigValidationError` from the constructor and `setConfig()`.
+- **Subscription callbacks are awaited in order** and their errors are isolated. Previously most were fire-and-forget, so async callbacks could interleave.
+- **Time actions run after the block's operations** and are evaluated against the block timestamp rather than the latest head time.
+- **`onBlock` receives the number of the block being processed** (it previously received the previous block's number).
+- **Subscriptions are no longer trimmed** when a list passes 1000 handlers; a warning is logged instead.
+- **Persisted time actions are restored in `init()`**, not only when `registerAction()` is called.
+- **Adapters gained ledger methods** (`hasProcessedOperation`, `markOperationProcessed`, `pruneProcessedOperations`); `AdapterBase` provides an in-memory default. SQL adapters add a `processed_operations` table and a `lastBlockId` column on `params` automatically.
+- `transfers`/`customJson` adapter rows for the second and later operations in a transaction now use `trxId:opIndex` ids (the first operation keeps the bare transaction id), and inserts ignore duplicates so replays don't fail.
+
+### ✨ Added
+- **Idempotency ledger** (`idempotency`, `idempotencyRetentionBlocks`): every contract action is keyed by transaction id + operation index (time actions by id + block) and skipped if it already ran. `replayBlocks(from, to, { force: true })` bypasses it.
+- **Stream modes and fork handling** (`streamMode`, `maxForkDepth`): `head` mode detects forks, rewinds to the common ancestor, reprocesses the new branch, and fires `onFork` with the orphaned blocks.
+- **Error policy** (`errorPolicy: 'skip' | 'halt' | 'retry'`, `errorMaxRetries`, `errorRetryDelayMs`): decide whether a failing handler or storage write skips, halts at the failing block, or retries with backoff. Halts show up as `status: 'halted'` in `getHealth()` with `lastError` in `getStatus()`.
+- **Block fetch backoff** (`retryMaxDelayMs`) and **per-request API timeouts** (`apiTimeoutMs`, default 10s instead of dhive's 60s) so a dead node fails over quickly.
+- **Streamer hooks**: `onStart`, `onStop`, `beforeBlock`, `afterBlock`, `beforeOperation` (can skip), `afterOperation`, `beforeContractAction` (can veto or replace the payload), `afterContractAction`, `onContractError`, `onInvalidPayload`, `onActionRejected`, `onFork`, `onError`, `onCaughtUp`, `onCheckpoint`. Register via `hooks` config, `streamer.hook()`, or `streamer.use(plugin)`; `defineHooks()` for typed plugins.
+- **Contract hooks** `beforeAction` (can veto), `afterAction`, `onError`.
+- **Declarative guards** on contracts and actions: `allowedSenders`, `blockedSenders`, `allowedAssets`, `minAmount`, `maxAmount`, `rateLimit`, `paused`. Runtime `pauseContract()` / `resumeContract()` / `isContractPaused()`.
+- `defineConfig()` and `validateConfig()` helpers; new options readable from env vars.
+- `getStatus()` reports `streamMode`, `irreversibleBlockNumber`, `targetBlockNumber`, `lastBlockId`, `halted`, `lastError`.
+- Testing kit: `irreversibleLag` on `MemoryBlockProvider`/`createTestStreamer`, `forkAt()` to simulate microforks, and `transactionIds` on `addBlock()`.
+- `ctx.transaction.operationIndex`, and `ctx.transfer` is now populated for `recurrent_transfer` triggers.
+
+### 🐛 Fixed
+- A crash within 5 seconds of processing a block replayed it and could re-run payouts.
+- PostgreSQL returned `lastBlockNumber` as a string (BIGINT), so resuming did string concatenation on the cursor.
+- Two contract operations in one transaction collided on the adapter's `transfers`/`customJson` primary key, so the second was never dispatched; replays hit the same error.
+- `stop()` could tear down the adapter while a block was mid-processing; it now waits for the block and writes a final checkpoint.
+- A missing block slept inside the processing loop instead of yielding back to the poller.
+- Invalid payload logging read Zod's removed `.errors` field; it now uses `.issues`.
+
 ## [Unreleased - DX & Production]
 
 ### ✨ Added
