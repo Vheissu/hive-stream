@@ -4,12 +4,20 @@
     "link": "/contracts/auctionhouse"
   },
   {
+    "text": "badges",
+    "link": "/contracts/badges"
+  },
+  {
     "text": "bookings",
     "link": "/contracts/bookings"
   },
   {
     "text": "bountyboard",
     "link": "/contracts/bountyboard"
+  },
+  {
+    "text": "bridge",
+    "link": "/contracts/bridge"
   },
   {
     "text": "bundlemarketplace",
@@ -88,6 +96,10 @@
     "link": "/contracts/launchpad"
   },
   {
+    "text": "limbo",
+    "link": "/contracts/limbo"
+  },
+  {
     "text": "multisigtreasury",
     "link": "/contracts/multisigtreasury"
   },
@@ -144,6 +156,10 @@
     "link": "/contracts/savings"
   },
   {
+    "text": "stakingpool",
+    "link": "/contracts/stakingpool"
+  },
+  {
     "text": "subscriptions",
     "link": "/contracts/subscriptions"
   },
@@ -158,5 +174,9 @@
   {
     "text": "tipjar",
     "link": "/contracts/tipjar"
+  },
+  {
+    "text": "tournaments",
+    "link": "/contracts/tournaments"
   }
 ]

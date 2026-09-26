@@ -20,8 +20,10 @@ export interface ContractMetadata {
 
 export const CONTRACT_METADATA: Record<string, ContractMetadata> = {
     createAuctionHouseContract: { category: 'commerce', description: 'Auctions with reserve prices, buy-now support, and timed settlement.' },
+    createBadgesContract: { category: 'games', description: 'Non-transferable achievements and badges issued by authorised issuers or earned by payment and check-in rules.' },
     createBookingContract: { category: 'commerce', description: 'Reservable listings with paid booking windows and confirmations.' },
     createBountyBoardContract: { category: 'commerce', description: 'Funded bounties, submissions, and award selection.' },
+    createBridgeContract: { category: 'bridge', description: 'A custody bridge/peg with M-of-N operator attestations, fees, per-transaction and daily limits, a pause switch and a full audit trail.', args: [{ custodyAccount: 'bridge-custody', operators: ['operator-a', 'operator-b', 'operator-c'], threshold: 2 }] },
     createBundleMarketplaceContract: { category: 'commerce', description: 'Fixed-price bundle storefronts with inventory tracking.' },
     createCharityMatchContract: { category: 'fundraising', description: 'Donation campaigns with matched totals and closing summaries.' },
     createCheckpointContract: { category: 'utility', description: 'Deterministic state hashes published on-chain for operator verification.', args: [{ tables: ['nft_tokens'] }] },
@@ -38,6 +40,7 @@ export const CONTRACT_METADATA: Record<string, ContractMetadata> = {
     createInsurancePoolContract: { category: 'finance', description: 'Insurance pools with premium-backed policies, claims, and reserves.' },
     createInvoiceContract: { category: 'commerce', description: 'Invoices with partial payments, recurring payments, and overdue sweeps.' },
     createLaunchpadContract: { category: 'finance', description: 'Launchpad sales with allocations, finalization, and claim flows.' },
+    createLimboContract: { category: 'gambling', description: 'A provably-fair limbo/crash game: pick a target multiplier and win when the committed-seed result reaches it, with bankroll-based payout caps.', args: [{ account: 'house' }] },
     createLottoContract: { category: 'gambling', description: 'A lottery-style game with scheduled draws.' },
     createMultisigTreasuryContract: { category: 'governance', description: 'Multisig vaults, proposal approvals, and execution readiness.' },
     createNFTContract: { category: 'assets', description: 'NFT minting, transfers, market listings, and direct peer-to-peer sales.' },
@@ -54,9 +57,11 @@ export const CONTRACT_METADATA: Record<string, ContractMetadata> = {
     createRouletteContract: { category: 'gambling', description: 'Roulette with straight, color, parity, dozen, column, and low/high bets.' },
     createRpsContract: { category: 'games', description: 'Rock-paper-scissors with wagers.' },
     createSavingsContract: { category: 'finance', description: 'Savings goals with recurring contributions and withdrawal requests.' },
+    createStakingPoolContract: { category: 'finance', description: 'Staking pools with reward-per-share accrual (per second or per block), funded reward reserves, cooldowns and claims.', args: [{ account: 'staking-vault' }] },
     createSubscriptionContract: { category: 'commerce', description: 'Subscription plans renewed by transfers or recurrent transfers.' },
     createSweepstakesContract: { category: 'gambling', description: 'Paid-entry sweepstakes with deterministic winner draws.' },
     createTicketingContract: { category: 'commerce', description: 'Event ticketing with purchases, check-ins, refunds, transfers, and resale.' },
     createTipJarContract: { category: 'social', description: 'A tip jar with an optional message board.' },
-    createTokenContract: { category: 'assets', description: 'App-level token issuance, transfers, and balances.' }
+    createTokenContract: { category: 'assets', description: 'App-level token issuance, transfers, and balances.' },
+    createTournamentContract: { category: 'games', description: 'Game tournaments with entry fees, registration windows, oracle-submitted scores, tie handling and basis-point prize splits.', args: [{ account: 'tournament-host' }] }
 };

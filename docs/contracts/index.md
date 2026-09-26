@@ -1,12 +1,14 @@
 # Built-in Contracts
 
-Hive Stream ships 40 ready-to-register contracts. Every page here is generated from the contract source, so triggers, options and payload schemas are always current. The same data is available to tools as JSON through `hive-stream/catalog`.
+Hive Stream ships 45 ready-to-register contracts. Every page here is generated from the contract source, so triggers, options and payload schemas are always current. The same data is available to tools as JSON through `hive-stream/catalog`.
 
 | Contract | Category | Actions | Description |
 | --- | --- | --- | --- |
 | [auctionhouse](./auctionhouse) | commerce | 4 | Auctions with reserve prices, buy-now support, and timed settlement. |
+| [badges](./badges) | games | 6 | Non-transferable achievements and badges issued by authorised issuers or earned by payment and check-in rules. |
 | [bookings](./bookings) | commerce | 5 | Reservable listings with paid booking windows and confirmations. |
 | [bountyboard](./bountyboard) | commerce | 4 | Funded bounties, submissions, and award selection. |
+| [bridge](./bridge) | bridge | 7 | A custody bridge/peg with M-of-N operator attestations, fees, per-transaction and daily limits, a pause switch and a full audit trail. |
 | [bundlemarketplace](./bundlemarketplace) | commerce | 4 | Fixed-price bundle storefronts with inventory tracking. |
 | [charitymatch](./charitymatch) | fundraising | 3 | Donation campaigns with matched totals and closing summaries. |
 | [checkpoint](./checkpoint) | utility | 2 | Deterministic state hashes published on-chain for operator verification. |
@@ -26,6 +28,7 @@ Hive Stream ships 40 ready-to-register contracts. Every page here is generated f
 | [insurancepool](./insurancepool) | finance | 6 | Insurance pools with premium-backed policies, claims, and reserves. |
 | [invoices](./invoices) | commerce | 4 | Invoices with partial payments, recurring payments, and overdue sweeps. |
 | [launchpad](./launchpad) | finance | 4 | Launchpad sales with allocations, finalization, and claim flows. |
+| [limbo](./limbo) | gambling | 2 | A provably-fair limbo/crash game: pick a target multiplier and win when the committed-seed result reaches it, with bankroll-based payout caps. |
 | [multisigtreasury](./multisigtreasury) | governance | 5 | Multisig vaults, proposal approvals, and execution readiness. |
 | [oraclebounty](./oraclebounty) | utility | 5 | Oracle bounty feeds with report rounds and median finalization. |
 | [payroll](./payroll) | finance | 5 | Recurring team payrolls with funded budgets and scheduled runs. |
@@ -40,7 +43,9 @@ Hive Stream ships 40 ready-to-register contracts. Every page here is generated f
 | [roulette](./roulette) | gambling | 1 | Roulette with straight, color, parity, dozen, column, and low/high bets. |
 | [rps](./rps) | games | 1 | Rock-paper-scissors with wagers. |
 | [savings](./savings) | finance | 4 | Savings goals with recurring contributions and withdrawal requests. |
+| [stakingpool](./stakingpool) | finance | 8 | Staking pools with reward-per-share accrual (per second or per block), funded reward reserves, cooldowns and claims. |
 | [subscriptions](./subscriptions) | commerce | 5 | Subscription plans renewed by transfers or recurrent transfers. |
 | [sweepstakes](./sweepstakes) | gambling | 3 | Paid-entry sweepstakes with deterministic winner draws. |
 | [ticketing](./ticketing) | commerce | 8 | Event ticketing with purchases, check-ins, refunds, transfers, and resale. |
 | [tipjar](./tipjar) | social | 1 | A tip jar with an optional message board. |
+| [tournaments](./tournaments) | games | 7 | Game tournaments with entry fees, registration windows, oracle-submitted scores, tie handling and basis-point prize splits. |

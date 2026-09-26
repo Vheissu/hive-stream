@@ -130,6 +130,189 @@
       ]
     },
     {
+      "name": "badges",
+      "factory": "createBadgesContract",
+      "category": "games",
+      "description": "Non-transferable achievements and badges issued by authorised issuers or earned by payment and check-in rules.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": false,
+          "description": "Account that receives `payment_total` rule payments. Required to use payment rules."
+        },
+        {
+          "name": "admins",
+          "type": "string[]",
+          "required": false,
+          "description": "When set, only these accounts can define badges."
+        }
+      ],
+      "actions": [
+        {
+          "name": "defineBadge",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "badgeId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "description",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "imageUrl",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "issuers",
+              "type": "string[]",
+              "required": false
+            },
+            {
+              "name": "maxSupply",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "rule",
+              "type": "object | object",
+              "required": false
+            }
+          ],
+          "description": "Define a non-transferable badge with issuers, optional supply cap and an optional earning rule."
+        },
+        {
+          "name": "issueBadge",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "badgeId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "recipient",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "reason",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "evidence",
+              "type": "string",
+              "required": false
+            }
+          ],
+          "description": "Issuer-only: award a badge to an account."
+        },
+        {
+          "name": "revokeBadge",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "badgeId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "recipient",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "reason",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "Issuer-only: revoke a badge with a public reason."
+        },
+        {
+          "name": "updateIssuers",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "badgeId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "add",
+              "type": "string[]",
+              "required": false
+            },
+            {
+              "name": "remove",
+              "type": "string[]",
+              "required": false
+            }
+          ],
+          "description": "Creator-only: add or remove issuers (the creator always remains an issuer)."
+        },
+        {
+          "name": "contribute",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "badgeId",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "Count a payment toward a payment_total badge; the badge is awarded when the threshold is reached."
+        },
+        {
+          "name": "checkIn",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "badgeId",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "Record a periodic check-in toward a checkin_count badge (optionally requiring consecutive periods)."
+        }
+      ]
+    },
+    {
       "name": "bookings",
       "factory": "createBookingContract",
       "category": "commerce",
@@ -401,6 +584,269 @@
               "required": true
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "bridge",
+      "factory": "createBridgeContract",
+      "category": "bridge",
+      "description": "A custody bridge/peg with M-of-N operator attestations, fees, per-transaction and daily limits, a pause switch and a full audit trail.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "custodyAccount",
+          "type": "string",
+          "required": true,
+          "description": "Hive account that holds bridged funds. Deposits must be sent here."
+        },
+        {
+          "name": "operators",
+          "type": "string[]",
+          "required": true,
+          "description": "Accounts allowed to attest deposits and withdrawals."
+        },
+        {
+          "name": "threshold",
+          "type": "number",
+          "required": false,
+          "description": "Attestations required to act (M of N). Defaults to a strict majority."
+        },
+        {
+          "name": "assets",
+          "type": "string[]",
+          "required": false,
+          "description": "Hive assets the bridge accepts. Defaults to HIVE and HBD."
+        },
+        {
+          "name": "chains",
+          "type": "string[]",
+          "required": false,
+          "description": "Allowed external chain identifiers. When omitted any well-formed id is accepted."
+        },
+        {
+          "name": "addressPattern",
+          "type": "RegExp | Record<string, RegExp>",
+          "required": false,
+          "description": "Validates destination addresses, globally or per chain."
+        },
+        {
+          "name": "feeBps",
+          "type": "number",
+          "required": false,
+          "description": "Fee charged on both directions, in basis points (max 2000)."
+        },
+        {
+          "name": "minAmount",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "maxPerTx",
+          "type": "string",
+          "required": false,
+          "description": "Largest single deposit or withdrawal."
+        },
+        {
+          "name": "dailyLimit",
+          "type": "string",
+          "required": false,
+          "description": "Rolling 24h cap per asset and direction across all users."
+        },
+        {
+          "name": "accountDailyLimit",
+          "type": "string",
+          "required": false,
+          "description": "Rolling 24h cap on deposits per Hive account and asset."
+        },
+        {
+          "name": "admins",
+          "type": "string[]",
+          "required": false,
+          "description": "Accounts allowed to pause/unpause and retry releases. Defaults to the custody account."
+        }
+      ],
+      "actions": [
+        {
+          "name": "deposit",
+          "triggers": [
+            "transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "chain",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "address",
+              "type": "string",
+              "required": false
+            }
+          ],
+          "description": "Deposit HIVE/HBD to the custody account with the destination chain and address; invalid deposits are refunded automatically."
+        },
+        {
+          "name": "attestDeposit",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": true,
+          "payload": [
+            {
+              "name": "depositId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "decision",
+              "type": "\"minted\" | \"refund\"",
+              "required": true,
+              "values": [
+                "minted",
+                "refund"
+              ]
+            },
+            {
+              "name": "externalTxId",
+              "type": "string",
+              "required": false
+            }
+          ],
+          "description": "Operator attestation that a deposit was minted on the destination chain (or should be refunded). Acts at the M-of-N threshold."
+        },
+        {
+          "name": "requestWithdrawal",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "sourceChain",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "sourceTxId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "amount",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "recipient",
+              "type": "string",
+              "required": false
+            }
+          ],
+          "description": "Register a withdrawal back to Hive for funds locked or burned on another chain."
+        },
+        {
+          "name": "attestWithdrawal",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": true,
+          "payload": [
+            {
+              "name": "sourceChain",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "sourceTxId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "recipient",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "amount",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "decision",
+              "type": "\"release\" | \"reject\"",
+              "required": false,
+              "values": [
+                "release",
+                "reject"
+              ]
+            }
+          ],
+          "description": "Operator attestation that a withdrawal is valid (release) or invalid (reject). Releases at the M-of-N threshold within limits."
+        },
+        {
+          "name": "executeWithdrawal",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": true,
+          "payload": [
+            {
+              "name": "sourceChain",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "sourceTxId",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "Retry a queued withdrawal, or (admins only) a failed release after manual reconciliation."
+        },
+        {
+          "name": "processQueue",
+          "triggers": [
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": [],
+          "description": "Scheduled release of withdrawals queued by a pause or the daily limit."
+        },
+        {
+          "name": "setPaused",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": true,
+          "payload": [
+            {
+              "name": "paused",
+              "type": "boolean",
+              "required": true
+            },
+            {
+              "name": "reason",
+              "type": "string",
+              "required": false
+            }
+          ],
+          "description": "Pause or resume the bridge (admins only). Paused deposits are refunded and releases are queued."
         }
       ]
     },
@@ -2689,6 +3135,114 @@
       ]
     },
     {
+      "name": "limbo",
+      "factory": "createLimboContract",
+      "category": "gambling",
+      "description": "A provably-fair limbo/crash game: pick a target multiplier and win when the committed-seed result reaches it, with bankroll-based payout caps.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": true,
+          "description": "House account that receives bets and pays winners."
+        },
+        {
+          "name": "assets",
+          "type": "string[]",
+          "required": false,
+          "description": "Accepted assets. Defaults to HIVE."
+        },
+        {
+          "name": "houseEdgeBps",
+          "type": "number",
+          "required": false,
+          "description": "House edge in basis points (default 100 = 1%)."
+        },
+        {
+          "name": "minBet",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "maxBet",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "minTarget",
+          "type": "string",
+          "required": false,
+          "description": "Lowest and highest target multipliers a player may choose."
+        },
+        {
+          "name": "maxTarget",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "maxPayout",
+          "type": "string",
+          "required": false,
+          "description": "Absolute cap on any single payout, in the bet's asset."
+        },
+        {
+          "name": "maxPayoutBankrollBps",
+          "type": "number",
+          "required": false,
+          "description": "Cap any single payout at this share of the available bankroll (basis points, default 100 = 1%)."
+        },
+        {
+          "name": "notifyLosses",
+          "type": "boolean",
+          "required": false,
+          "description": "Send a 0.001 notice transfer on losses (default false; results are always recorded as events)."
+        },
+        {
+          "name": "fairness",
+          "type": "FairnessManager | FairnessOptions",
+          "required": false,
+          "description": "Fairness configuration. Always enabled for this game; defaults to block-entropy commit-reveal."
+        }
+      ],
+      "actions": [
+        {
+          "name": "bet",
+          "triggers": [
+            "transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "target",
+              "type": "string | number",
+              "required": false
+            },
+            {
+              "name": "seed",
+              "type": "string",
+              "required": false
+            }
+          ],
+          "description": "Bet with a target multiplier (e.g. \"2.5\"); you win bet x target when the provably-fair result reaches it."
+        },
+        {
+          "name": "rotateSeed",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": true,
+          "payload": [],
+          "description": "Reveal the current server seed and commit to a new one (house account only)."
+        }
+      ]
+    },
+    {
       "name": "multisigtreasury",
       "factory": "createMultisigTreasuryContract",
       "category": "governance",
@@ -4228,6 +4782,194 @@
       ]
     },
     {
+      "name": "stakingpool",
+      "factory": "createStakingPoolContract",
+      "category": "finance",
+      "description": "Staking pools with reward-per-share accrual (per second or per block), funded reward reserves, cooldowns and claims.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": true,
+          "description": "Custody account that receives stakes and reward funding and pays them out."
+        },
+        {
+          "name": "admins",
+          "type": "string[]",
+          "required": false,
+          "description": "Accounts allowed to create pools and change reward rates. Defaults to the custody account."
+        },
+        {
+          "name": "accrual",
+          "type": "'time' | 'block'",
+          "required": false,
+          "description": "'time' accrues `rewardRate` per second of block time; 'block' accrues per block."
+        }
+      ],
+      "actions": [
+        {
+          "name": "createPool",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": true,
+          "payload": [
+            {
+              "name": "poolId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "stakeAsset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "rewardAsset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "rewardRate",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "cooldownSeconds",
+              "type": "number",
+              "required": false,
+              "default": 0
+            },
+            {
+              "name": "minStake",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "endsAt",
+              "type": "string",
+              "required": false
+            }
+          ],
+          "description": "Admin-only: create a pool with stake/reward assets, a reward rate per second (or block), cooldown and optional end time."
+        },
+        {
+          "name": "fundRewards",
+          "triggers": [
+            "transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "poolId",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "Top up a pool's reward reserve. Rewards never accrue beyond what has been funded."
+        },
+        {
+          "name": "stake",
+          "triggers": [
+            "transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "poolId",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "Stake by transferring the pool's stake asset; wrong assets, tiny amounts and ended pools are refunded."
+        },
+        {
+          "name": "unstake",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "poolId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "amount",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "Start unbonding part of your stake; funds are released after the pool's cooldown."
+        },
+        {
+          "name": "withdraw",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "poolId",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "Release your matured unbonding entries."
+        },
+        {
+          "name": "claim",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "poolId",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "Pay out accrued rewards (rounded down to the asset precision; the remainder stays pending)."
+        },
+        {
+          "name": "setRewardRate",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": true,
+          "payload": [
+            {
+              "name": "poolId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "rewardRate",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "Admin-only: change the reward rate after settling accruals at the old rate."
+        },
+        {
+          "name": "releaseMatured",
+          "triggers": [
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": [],
+          "description": "Scheduled release of every matured unbonding entry."
+        }
+      ]
+    },
+    {
       "name": "subscriptions",
       "factory": "createSubscriptionContract",
       "category": "commerce",
@@ -4701,6 +5443,237 @@
               "required": false
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "tournaments",
+      "factory": "createTournamentContract",
+      "category": "games",
+      "description": "Game tournaments with entry fees, registration windows, oracle-submitted scores, tie handling and basis-point prize splits.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": true,
+          "description": "Account that receives entry fees and pays prizes. Entries sent elsewhere are rejected."
+        },
+        {
+          "name": "feeBps",
+          "type": "number",
+          "required": false,
+          "description": "House fee taken from the prize pool, in basis points (max 3000)."
+        },
+        {
+          "name": "feeAccount",
+          "type": "string",
+          "required": false,
+          "description": "Where the house fee is sent. Defaults to keeping it in `account`."
+        },
+        {
+          "name": "oracles",
+          "type": "string[]",
+          "required": false,
+          "description": "Accounts allowed to submit scores for any tournament, in addition to each tournament's oracle."
+        },
+        {
+          "name": "organizers",
+          "type": "string[]",
+          "required": false,
+          "description": "When set, only these accounts can create tournaments."
+        }
+      ],
+      "actions": [
+        {
+          "name": "createTournament",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "tournamentId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "entryFee",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "registrationOpensAt",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "registrationClosesAt",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "endsAt",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "minPlayers",
+              "type": "number",
+              "required": false,
+              "default": 2
+            },
+            {
+              "name": "maxPlayers",
+              "type": "number",
+              "required": false,
+              "default": 1000
+            },
+            {
+              "name": "prizeSplitBps",
+              "type": "number[]",
+              "required": true
+            },
+            {
+              "name": "oracle",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "scoreOrder",
+              "type": "\"desc\" | \"asc\"",
+              "required": false,
+              "values": [
+                "desc",
+                "asc"
+              ],
+              "default": "desc"
+            },
+            {
+              "name": "tieBreak",
+              "type": "\"split\" | \"earliest\"",
+              "required": false,
+              "values": [
+                "split",
+                "earliest"
+              ],
+              "default": "split"
+            }
+          ],
+          "description": "Create a tournament with an entry fee, registration window, player limits and a basis-point prize split."
+        },
+        {
+          "name": "enter",
+          "triggers": [
+            "transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "tournamentId",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "Enter by transferring the exact entry fee; wrong assets, amounts, duplicates and closed registrations are refunded."
+        },
+        {
+          "name": "submitScore",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": true,
+          "payload": [
+            {
+              "name": "tournamentId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "player",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "score",
+              "type": "number | string",
+              "required": true
+            }
+          ],
+          "description": "Oracle-only: record a player score after registration closes."
+        },
+        {
+          "name": "submitScores",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": true,
+          "payload": [
+            {
+              "name": "tournamentId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "scores",
+              "type": "object[]",
+              "required": true
+            }
+          ],
+          "description": "Oracle-only: record up to 100 scores in one operation."
+        },
+        {
+          "name": "finalize",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": true,
+          "payload": [
+            {
+              "name": "tournamentId",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "Rank players, take the house fee and pay prizes; under-subscribed tournaments are cancelled and refunded."
+        },
+        {
+          "name": "finalizeDue",
+          "triggers": [
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": [],
+          "description": "Scheduled sweep that finalizes tournaments past their end time."
+        },
+        {
+          "name": "cancelTournament",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": true,
+          "payload": [
+            {
+              "name": "tournamentId",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "Organizer-only: cancel and refund every entry."
         }
       ]
     }

@@ -62,25 +62,29 @@ export const TEMPLATES: TemplateDefinition[] = [
     {
         id: 'game',
         label: 'Game',
-        description: 'Provably-fair games of chance: dice, coinflip, roulette, and rock-paper-scissors.',
+        description: 'Provably-fair games of chance (commit-reveal seeds): dice, coinflip, roulette, rock-paper-scissors, and limbo.',
         imports: [
             'createCoinflipContract',
             'createDiceContract',
+            'createLimboContract',
             'createRouletteContract',
             'createRpsContract'
         ],
         registrations: [
-            `await streamer.registerContract(createDiceContract({ account: HIVE_USERNAME }));`,
-            `await streamer.registerContract(createCoinflipContract({ account: HIVE_USERNAME }));`,
-            `await streamer.registerContract(createRouletteContract({ account: HIVE_USERNAME }));`,
-            `await streamer.registerContract(createRpsContract({ account: HIVE_USERNAME }));`
+            `// fairness: true commits to a hashed server seed before any bet and mixes in the`,
+            `// bet's block id. Reveal a seed with the rotateSeed action so players can verify.`,
+            `await streamer.registerContract(createDiceContract({ account: HIVE_USERNAME, fairness: true }));`,
+            `await streamer.registerContract(createCoinflipContract({ account: HIVE_USERNAME, fairness: true }));`,
+            `await streamer.registerContract(createRouletteContract({ account: HIVE_USERNAME, fairness: true }));`,
+            `await streamer.registerContract(createRpsContract({ account: HIVE_USERNAME, fairness: true }));`,
+            `await streamer.registerContract(createLimboContract({ account: HIVE_USERNAME, fairness: { rotateAfter: 1000 } }));`
         ],
         setup: [],
         usage: [
             {
                 title: 'Roll the dice',
                 description: 'Send HIVE to your app account with this transfer memo:',
-                payload: wrap('dice', 'roll', '{"roll":50}')
+                payload: wrap('hivedice', 'roll', '{"roll":50,"seed":"my-client-seed"}')
             },
             {
                 title: 'Flip a coin',
@@ -96,6 +100,16 @@ export const TEMPLATES: TemplateDefinition[] = [
                 title: 'Play rock-paper-scissors',
                 description: 'Send HIVE with this transfer memo:',
                 payload: wrap('rps', 'play', '{"move":"rock"}')
+            },
+            {
+                title: 'Play limbo',
+                description: 'Send HIVE with a target multiplier; you win bet x target when the result reaches it:',
+                payload: wrap('limbo', 'bet', '{"target":"2.5"}')
+            },
+            {
+                title: 'Reveal a server seed',
+                description: 'From the app account, broadcast custom_json (active authority) so players can verify past bets:',
+                payload: wrap('hivedice', 'rotateSeed', '{}')
             }
         ]
     },

@@ -42,6 +42,50 @@ This release makes the streamer safe to run money-handling apps on: nothing is p
 - A missing block slept inside the processing loop instead of yielding back to the poller.
 - Invalid payload logging read Zod's removed `.errors` field; it now uses `.issues`.
 
+### Contracts
+- **Provably-fair randomness** (`createFairness`, `FairnessManager`; verifier in `hive-stream/client`)
+  - Commit-reveal server seeds (sha256 commitment published before bets) with HMAC-SHA256 derivation over `clientSeed[:entropy]:nonce:round`
+  - Rejection sampling, so there is no modulo bias
+  - Optional block-id entropy, on by default
+  - Nonces persisted per adapter before any outcome is computed, automatic rotation (`rotateAfter`) and an `onRotate` callback
+  - `verifyOutcome()`, `deriveOutcome()` and a dependency-free SHA-256/HMAC run identically in Node and browsers
+  - Guide: `docs/guide/fairness.md`
+- **Fair mode for dice, coinflip, roulette, rps and lotto**
+  - Pass `fairness: true` (or options / a shared manager) to settle bets from the committed seed
+  - Proofs are recorded in events and memos, and a house-only `rotateSeed` action reveals seeds
+  - Without the option the legacy RNG is unchanged. It is biasable by block producers and players, so fair mode is recommended for real money
+  - Dice gained an optional `seed` payload field. All game `seed` fields are capped at 64 characters
+- **`createBridgeContract`**: custody bridge/peg layer
+  - Deposits carry a destination chain and address. Invalid, paused or over-limit deposits are refunded automatically, including malformed memos
+  - M-of-N operator attestations for mints, refunds and withdrawal releases; operators must agree on the exact external transaction
+  - Fees in basis points, per-transaction, rolling daily and per-account limits
+  - `setPaused` switch: deposits are refunded, releases are queued. Use it rather than `pauseContract()`, which would reject deposits without refunding them
+  - Queued releases are processed by a scheduled action
+  - Two-phase release (`releasing` → `released`, with failed broadcasts marked `release_failed` for admin reconciliation) so a crash never pays twice
+  - Full `bridge_audit` trail
+- **`createTournamentContract`**
+  - Exact entry fees are enforced: wrong assets, amounts, duplicates, late and full entries are refunded
+  - Registration windows, and scores submitted only by the tournament's oracle or a global oracle (single or batch)
+  - Ascending or descending ranking, `split` or `earliest` tie handling, and basis-point prize splits where dust goes to first place and payouts sum exactly to the pool
+  - House fee, and automatic cancellation and refunds for under-subscribed or unscored tournaments
+  - Scheduled finalisation. `calculateTournamentPayouts()` is exported
+- **`createStakingPoolContract`**
+  - Reward-per-share accounting per second of block time or per block
+  - Rewards never exceed the funded reserve and stop at the pool end time
+  - Cooldown-based unbonding with a scheduled release
+  - Claims round down to asset precision and keep the remainder pending
+  - Admin-only pool creation and rate changes (accrued at the old rate first)
+- **`createLimboContract`**: always-fair limbo/crash game
+  - House edge in basis points; payouts are `bet × target`, rounded down
+  - Payouts are capped absolutely and as a share of the live bankroll, with in-flight payouts reserved
+  - Bets are serialized
+  - Invalid bets, and draws that fail, are refunded
+- **`createBadgesContract`**: non-transferable achievements for games and social apps
+  - Issuers, supply caps and revocation with reasons
+  - Rule-based awards from payment totals (`contribute`) and periodic or consecutive check-ins (`checkIn`)
+- New contracts use block time (not wall-clock time) for windows, limits and accrual, so replays are deterministic. They key records by `transactionId:operationIndex`, so multi-operation transactions don't collide
+- Fixed: the `game` scaffold template's dice memo named contract `dice` instead of `hivedice`. The template now enables fairness and adds limbo
+
 ### Tooling
 - **Browser-safe scaffolder (`hive-stream/scaffold`)** - Generate exactly what `npx hive-stream new` writes, in memory
   - `generateProjectFiles(options)` returns `{ files, template, adapter, nextSteps }`; `username`, `api` and `hiveStreamVersion` are now optional (the version defaults to the installed hive-stream)

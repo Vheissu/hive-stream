@@ -85,3 +85,13 @@ export type {
     SupportedFiat
 } from './types/rates';
 export * from './fairness/manager';
+export { createBridgeContract } from './contracts/bridge.contract';
+export type { BridgeContractOptions } from './contracts/bridge.contract';
+export { createTournamentContract, calculateTournamentPayouts } from './contracts/tournament.contract';
+export type { TournamentContractOptions, TournamentPayout } from './contracts/tournament.contract';
+export { createStakingPoolContract } from './contracts/stakingpool.contract';
+export type { StakingPoolContractOptions } from './contracts/stakingpool.contract';
+export { createLimboContract } from './contracts/limbo.contract';
+export type { LimboContractOptions } from './contracts/limbo.contract';
+export { createBadgesContract } from './contracts/badges.contract';
+export type { BadgesContractOptions, BadgeRule } from './contracts/badges.contract';
