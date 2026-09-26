@@ -3,11 +3,10 @@ import BigNumber from '../bignumber';
 import seedrandom from 'seedrandom';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
-import { createFairnessSupport, formatBlockchainAmount, formatFairnessMemo, parseBlockchainAmount } from './helpers';
+import { createFairnessSupport, formatBlockchainAmount, formatFairnessMemo, parseBlockchainAmount, resolveContractAccount } from './helpers';
 import { resolveFairnessOption, type FairDrawProof, type FairnessManager, type FairnessOptions } from '../fairness/manager';
 
 const DEFAULT_NAME = 'hivedice';
-const DEFAULT_ACCOUNT = 'beggars';
 const DEFAULT_TOKEN_SYMBOL = 'HIVE';
 const DEFAULT_HOUSE_EDGE = 0.05;
 const DEFAULT_MIN_BET = 1;
@@ -48,13 +47,14 @@ export interface DiceContractOptions {
 
 export function createDiceContract(options: DiceContractOptions = {}) {
     const name = options.name || DEFAULT_NAME;
-    const account = options.account || DEFAULT_ACCOUNT;
+    // Resolved in the create hook: options.account, else the streamer username.
+    let account = options.account || '';
     const tokenSymbol = options.tokenSymbol || DEFAULT_TOKEN_SYMBOL;
     const houseEdge = options.houseEdge ?? DEFAULT_HOUSE_EDGE;
     const minBet = options.minBet ?? DEFAULT_MIN_BET;
     const maxBet = options.maxBet ?? DEFAULT_MAX_BET;
     const validCurrencies = options.validCurrencies || [tokenSymbol];
-    const fairSupport = createFairnessSupport(name, account, resolveFairnessOption(options.fairness));
+    const fairSupport = createFairnessSupport(name, () => account, resolveFairnessOption(options.fairness));
     const fairness = fairSupport.fairness;
 
     const state = {
@@ -273,7 +273,9 @@ export function createDiceContract(options: DiceContractOptions = {}) {
     return defineContract({
         name,
         hooks: {
-            create: async ({ streamer, adapter }) => {
+            create: async (lifecycle) => {
+                const { streamer, adapter } = lifecycle;
+                account = resolveContractAccount('createDiceContract', options.account, lifecycle);
                 state.streamer = streamer;
                 state.adapter = adapter;
                 await fairSupport.initialize(adapter);

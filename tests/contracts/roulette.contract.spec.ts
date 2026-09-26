@@ -17,7 +17,7 @@ describe('Roulette Contract', () => {
     beforeEach(async () => {
         sut = new Streamer();
         await sut.registerAdapter(createMockAdapter());
-        contract = createRouletteContract();
+        contract = createRouletteContract({ account: 'beggars' });
 
         // @ts-ignore
         sut.api = jest.fn();

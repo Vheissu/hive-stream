@@ -2,10 +2,9 @@ import BigNumber from '../bignumber';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
-import { ensureSqlAdapter } from './helpers';
+import { ensureSqlAdapter, resolveContractAccount } from './helpers';
 
 const DEFAULT_NAME = 'exchange';
-const DEFAULT_ACCOUNT = 'beggars';
 
 const SIDE_VALUES = ['buy', 'sell'] as const;
 
@@ -22,8 +21,9 @@ export interface ExchangeContractOptions {
 
 export function createExchangeContract(options: ExchangeContractOptions = {}) {
     const name = options.name || DEFAULT_NAME;
-    const account = options.account || DEFAULT_ACCOUNT;
-    const feeAccount = options.feeAccount || account;
+    // Resolved in the create hook: options.account, else the streamer username.
+    let account = options.account || '';
+    let feeAccount = options.feeAccount || '';
     const makerFeeBps = options.makerFeeBps ?? 10;
     const takerFeeBps = options.takerFeeBps ?? 20;
     const basePrecision = options.basePrecision ?? 8;
@@ -717,7 +717,10 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
     return defineContract({
         name,
         hooks: {
-            create: async ({ adapter, streamer }) => {
+            create: async (lifecycle) => {
+                const { streamer, adapter } = lifecycle;
+                account = resolveContractAccount('createExchangeContract', options.account, lifecycle);
+                feeAccount = options.feeAccount || account;
                 ensureSqlAdapter(adapter);
                 state.adapter = adapter;
                 state.streamer = streamer;

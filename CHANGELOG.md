@@ -22,6 +22,7 @@ Upgrading? Read the [migration guide](docs/guide/migrating-to-4.md) ([online](ht
 - **Persisted time actions are restored in `init()`**, not only when `registerAction()` is called.
 - **Adapters gained ledger methods** (`hasProcessedOperation`, `markOperationProcessed`, `pruneProcessedOperations`); `AdapterBase` provides an in-memory default. SQL adapters add a `processed_operations` table and a `lastBlockId` column on `params` automatically.
 - `transfers`/`customJson` adapter rows for the second and later operations in a transaction now use `trxId:opIndex` ids (the first operation keeps the bare transaction id), and inserts ignore duplicates so replays don't fail.
+- **Built-in house accounts no longer default to `'beggars'`.** `dice`, `coinflip`, `rps`, `roulette`, `lotto` (house and fee account) and `exchange` resolve their account from `options.account`, else the streamer's configured username, and `registerContract()` throws `createXContract: set options.account or the streamer username` when neither is set. The lotto and exchange fee account defaults to the resolved house account.
 
 ### ✨ Added
 - **Idempotency ledger** (`idempotency`, `idempotencyRetentionBlocks`): every contract action is keyed by transaction id + operation index (time actions by id + block) and skipped if it already ran. `replayBlocks(from, to, { force: true })` bypasses it.

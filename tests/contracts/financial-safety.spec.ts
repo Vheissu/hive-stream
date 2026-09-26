@@ -43,7 +43,7 @@ describe('Financial Safety', () => {
             // Make addEvent fail to simulate mid-processing error
             mockAdapter.addEvent.mockRejectedValue(new Error('Database write failed'));
 
-            const contract = createRpsContract();
+            const contract = createRpsContract({ account: 'beggars' });
             contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             const ctx = {
@@ -76,7 +76,7 @@ describe('Financial Safety', () => {
             // Refund also fails
             mockStreamer.transferHiveTokens.mockRejectedValue(new Error('Transfer failed'));
 
-            const contract = createRpsContract();
+            const contract = createRpsContract({ account: 'beggars' });
             contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             const ctx = {
@@ -98,7 +98,7 @@ describe('Financial Safety', () => {
             const mockStreamer = createMockStreamer();
             const mockAdapter = createMockAdapter();
 
-            const contract = createLottoContract({ cost: 5, minEntriesHourly: 100 });
+            const contract = createLottoContract({ account: 'beggars', cost: 5, minEntriesHourly: 100 });
             contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             // Set up an active hourly draw with too few entries
@@ -135,7 +135,7 @@ describe('Financial Safety', () => {
             const mockStreamer = createMockStreamer();
             const mockAdapter = createMockAdapter();
 
-            const contract = createLottoContract({ cost: 10 });
+            const contract = createLottoContract({ account: 'beggars', cost: 10 });
             contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             // No existing draw
@@ -181,7 +181,7 @@ describe('Financial Safety', () => {
             const mockStreamer = createMockStreamer();
             const mockAdapter = createMockAdapter();
 
-            const contract = createLottoContract();
+            const contract = createLottoContract({ account: 'beggars' });
             contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             const ctx = {
@@ -208,6 +208,7 @@ describe('Financial Safety', () => {
             mockStreamer.client.database.getAccounts.mockResolvedValue([{ balance: '1.000 HIVE' }]);
 
             const contract = createLottoContract({
+                account: 'beggars',
                 cost: 10,
                 minEntriesHourly: 2,
                 hourlyWinnersPick: 1,
@@ -315,7 +316,7 @@ describe('Financial Safety', () => {
             const mockStreamer = createMockStreamer();
             const mockAdapter = createMockAdapter();
 
-            const contract = createLottoContract({ cost: 10 });
+            const contract = createLottoContract({ account: 'beggars', cost: 10 });
             contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             const ctx = {
@@ -348,7 +349,7 @@ describe('Financial Safety', () => {
             const mockStreamer = createMockStreamer();
             const mockAdapter = createMockAdapter();
 
-            const contract = createLottoContract({ cost: 5, minEntriesHourly: 2, hourlyWinnersPick: 1 });
+            const contract = createLottoContract({ account: 'beggars', cost: 5, minEntriesHourly: 2, hourlyWinnersPick: 1 });
             contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             mockAdapter.find.mockResolvedValue([{
@@ -387,7 +388,7 @@ describe('Financial Safety', () => {
             const mockStreamer = createMockStreamer();
             const mockAdapter = createMockAdapter();
 
-            const contract = createLottoContract({ cost: 5, minEntriesHourly: 100 });
+            const contract = createLottoContract({ account: 'beggars', cost: 5, minEntriesHourly: 100 });
             contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             mockAdapter.find.mockResolvedValue([{
@@ -422,7 +423,7 @@ describe('Financial Safety', () => {
             const mockAdapter = createMockAdapter();
 
             // 2 entries but 3 winner slots: both entrants win and share the whole pot.
-            const contract = createLottoContract({ cost: 5, minEntriesHourly: 2, hourlyWinnersPick: 3, feePercentage: 10 });
+            const contract = createLottoContract({ account: 'beggars', cost: 5, minEntriesHourly: 2, hourlyWinnersPick: 3, feePercentage: 10 });
             contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             mockAdapter.find.mockResolvedValue([{
@@ -456,7 +457,7 @@ describe('Financial Safety', () => {
             const mockStreamer = createMockStreamer();
             const mockAdapter = createMockAdapter();
 
-            const contract = createLottoContract({ cost: 0.1, minEntriesHourly: 1, hourlyWinnersPick: 3, feePercentage: 0 });
+            const contract = createLottoContract({ account: 'beggars', cost: 0.1, minEntriesHourly: 1, hourlyWinnersPick: 3, feePercentage: 0 });
             contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             mockAdapter.find.mockResolvedValue([{
@@ -492,7 +493,7 @@ describe('Financial Safety', () => {
             const mockStreamer = createMockStreamer();
             const mockAdapter = createMockAdapter();
 
-            const contract = createLottoContract({ cost: 1, minEntriesHourly: 3, hourlyWinnersPick: 3 });
+            const contract = createLottoContract({ account: 'beggars', cost: 1, minEntriesHourly: 3, hourlyWinnersPick: 3 });
             contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             // 5 unique entries
@@ -540,6 +541,7 @@ describe('Financial Safety', () => {
             mockStreamer.client.database.getAccounts.mockResolvedValue([{ balance: '48.000 HIVE' }]);
 
             const contract = createLottoContract({
+                account: 'beggars',
                 cost: 10,
                 minEntriesHourly: 2,
                 hourlyWinnersPick: 1,

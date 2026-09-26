@@ -177,11 +177,35 @@ export function formatBlockchainAmount(value: string | number | BigNumber, preci
 }
 
 /**
+ * Resolves the account a contract sends payouts and refunds from: the
+ * explicit option, else the streamer's configured username. Throws when
+ * neither is set, so a contract can never silently pay out from a default
+ * account the app doesn't own. Call it from the contract's create hook.
+ */
+export function resolveContractAccount(
+    factory: string,
+    explicit: string | undefined,
+    lifecycle: { streamer?: any; config?: { USERNAME?: string } } = {}
+): string {
+    const account = explicit
+        || lifecycle.config?.USERNAME
+        || lifecycle.streamer?.getConfig?.()?.USERNAME;
+
+    if (!account) {
+        throw new Error(`${factory}: set options.account or the streamer username`);
+    }
+
+    return account;
+}
+
+/**
  * Shared wiring for games that support provably-fair draws: initialises the
  * manager in the contract's create hook and exposes a `rotateSeed` action the
  * house account can call to reveal the current server seed.
  */
-export function createFairnessSupport(contractName: string, houseAccount: string, fairness: FairnessManager | null) {
+export function createFairnessSupport(contractName: string, houseAccount: string | (() => string), fairness: FairnessManager | null) {
+    const resolveHouseAccount = typeof houseAccount === 'function' ? houseAccount : () => houseAccount;
+
     const initialize = async (adapter: any): Promise<void> => {
         if (fairness) {
             await fairness.init({ adapter, scope: contractName });
@@ -196,8 +220,10 @@ export function createFairnessSupport(contractName: string, houseAccount: string
     const actions: Record<string, ContractActionDefinition<any>> = fairness
         ? {
             rotateSeed: action(async (_payload: Record<string, never>, ctx: ContractContext) => {
-                if (ctx.trigger !== 'time' && ctx.sender !== houseAccount) {
-                    throw new Error(`Only ${houseAccount} can rotate the server seed`);
+                const house = resolveHouseAccount();
+
+                if (ctx.trigger !== 'time' && ctx.sender !== house) {
+                    throw new Error(`Only ${house} can rotate the server seed`);
                 }
 
                 const rotation = await fairness.rotate();

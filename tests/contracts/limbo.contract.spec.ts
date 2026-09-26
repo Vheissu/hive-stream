@@ -44,7 +44,7 @@ describe('limbo contract', () => {
         expect(() => createLimboContract({ account: 'h', houseEdgeBps: 10000 })).toThrow('houseEdgeBps');
         expect(() => createLimboContract({ account: 'h', minTarget: '1.00' })).toThrow('Targets');
         expect(() => createLimboContract({ account: 'h', maxPayoutBankrollBps: 0 })).toThrow('maxPayoutBankrollBps');
-        expect(createLimboContract({ account: 'h' }).actions.rotateSeed).toBeDefined();
+        expect((createLimboContract({ account: 'h' }).actions as Record<string, unknown>).rotateSeed).toBeDefined();
     });
 
     test('settles wins and losses exactly as the committed seed dictates', async () => {

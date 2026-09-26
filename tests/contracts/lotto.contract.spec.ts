@@ -14,7 +14,7 @@ describe('Lotto Contract', () => {
         adapter = createMockAdapter();
         await sut.registerAdapter(adapter);
 
-        contract = createLottoContract({ name: 'testlotto' });
+        contract = createLottoContract({ account: 'beggars', name: 'testlotto' });
 
         // @ts-ignore
         sut.api = jest.fn();

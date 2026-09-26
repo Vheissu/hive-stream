@@ -56,7 +56,7 @@ describeIfPostgres('PostgreSQL legacy contract parity', () => {
             token: createTokenContract(),
             polls: createPollContract(),
             tipjar: createTipJarContract(),
-            exchange: createExchangeContract(),
+            exchange: createExchangeContract({ account: 'beggars' }),
             nft: createNFTContract()
         };
 

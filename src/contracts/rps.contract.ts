@@ -4,11 +4,10 @@ import seedrandom from 'seedrandom';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
-import { createFairnessSupport, formatBlockchainAmount, formatFairnessMemo, parseBlockchainAmount } from './helpers';
+import { createFairnessSupport, formatBlockchainAmount, formatFairnessMemo, parseBlockchainAmount, resolveContractAccount } from './helpers';
 import { resolveFairnessOption, type FairDrawProof, type FairnessManager, type FairnessOptions } from '../fairness/manager';
 
 const DEFAULT_NAME = 'rps';
-const DEFAULT_ACCOUNT = 'beggars';
 const DEFAULT_TOKEN_SYMBOL = 'HIVE';
 const DEFAULT_MIN_AMOUNT = 0.001;
 const DEFAULT_MAX_AMOUNT = 20;
@@ -42,12 +41,13 @@ export interface RpsContractOptions {
 
 export function createRpsContract(options: RpsContractOptions = {}) {
     const name = options.name || DEFAULT_NAME;
-    const account = options.account || DEFAULT_ACCOUNT;
+    // Resolved in the create hook: options.account, else the streamer username.
+    let account = options.account || '';
     const tokenSymbol = options.tokenSymbol || DEFAULT_TOKEN_SYMBOL;
     const validCurrencies = options.validCurrencies || [tokenSymbol];
     const minAmount = options.minAmount ?? DEFAULT_MIN_AMOUNT;
     const maxAmount = options.maxAmount ?? DEFAULT_MAX_AMOUNT;
-    const fairSupport = createFairnessSupport(name, account, resolveFairnessOption(options.fairness));
+    const fairSupport = createFairnessSupport(name, () => account, resolveFairnessOption(options.fairness));
     const fairness = fairSupport.fairness;
 
     const state = {
@@ -291,7 +291,9 @@ export function createRpsContract(options: RpsContractOptions = {}) {
     return defineContract({
         name,
         hooks: {
-            create: async ({ streamer, adapter }) => {
+            create: async (lifecycle) => {
+                const { streamer, adapter } = lifecycle;
+                account = resolveContractAccount('createRpsContract', options.account, lifecycle);
                 state.streamer = streamer;
                 state.adapter = adapter;
                 await fairSupport.initialize(adapter);

@@ -17,7 +17,7 @@ describe('Coinflip Contract', () => {
     beforeEach(async () => {
         sut = new Streamer();
         await sut.registerAdapter(createMockAdapter());
-        contract = createCoinflipContract();
+        contract = createCoinflipContract({ account: 'beggars' });
 
         // @ts-ignore
         sut.api = jest.fn();

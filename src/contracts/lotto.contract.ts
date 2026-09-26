@@ -3,13 +3,11 @@ import seedrandom from 'seedrandom';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
 import { Utils } from '../utils';
-import { createFairnessSupport } from './helpers';
+import { createFairnessSupport, resolveContractAccount } from './helpers';
 import { sha256Hex } from '../fairness/sha256';
 import { resolveFairnessOption, type FairDrawProof, type FairnessManager, type FairnessOptions } from '../fairness/manager';
 
 const DEFAULT_NAME = 'hivelotto';
-const DEFAULT_ACCOUNT = 'beggars';
-const DEFAULT_FEE_ACCOUNT = 'beggars';
 const DEFAULT_TOKEN_SYMBOL = 'HIVE';
 const DEFAULT_VALID_DRAW_TYPES = ['hourly', 'daily'];
 
@@ -53,8 +51,9 @@ export interface LottoContractOptions {
 
 export function createLottoContract(options: LottoContractOptions = {}) {
     const name = options.name || DEFAULT_NAME;
-    const account = options.account || DEFAULT_ACCOUNT;
-    const feeAccount = options.feeAccount || DEFAULT_FEE_ACCOUNT;
+    // Resolved in the create hook: options.account, else the streamer username.
+    let account = options.account || '';
+    let feeAccount = options.feeAccount || '';
     const tokenSymbol = options.tokenSymbol || DEFAULT_TOKEN_SYMBOL;
     const validCurrencies = options.validCurrencies || [tokenSymbol];
     const validDrawTypes = options.validDrawTypes || DEFAULT_VALID_DRAW_TYPES;
@@ -65,7 +64,7 @@ export function createLottoContract(options: LottoContractOptions = {}) {
     const dailyWinnersPick = options.dailyWinnersPick ?? DEFAULT_DAILY_WINNERS_PICK;
     const maxTicketsPerUser = options.maxTicketsPerUser ?? DEFAULT_MAX_TICKETS_PER_USER;
     const feePercentage = options.feePercentage ?? DEFAULT_PERCENTAGE;
-    const fairSupport = createFairnessSupport(name, account, resolveFairnessOption(options.fairness));
+    const fairSupport = createFairnessSupport(name, () => account, resolveFairnessOption(options.fairness));
     const fairness = fairSupport.fairness;
 
     const state = {
@@ -354,7 +353,10 @@ export function createLottoContract(options: LottoContractOptions = {}) {
     return defineContract({
         name,
         hooks: {
-            create: async ({ streamer, adapter }) => {
+            create: async (lifecycle) => {
+                const { streamer, adapter } = lifecycle;
+                account = resolveContractAccount('createLottoContract', options.account, lifecycle);
+                feeAccount = options.feeAccount || account;
                 state.streamer = streamer;
                 state.adapter = adapter;
                 await fairSupport.initialize(adapter);

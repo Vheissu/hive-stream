@@ -79,7 +79,7 @@ describe('Contract transactional safety', () => {
             debugMode: false
         });
         const adapter = new SqliteAdapter(':memory:');
-        const contract = createExchangeContract({ name: 'exchange' });
+        const contract = createExchangeContract({ account: 'beggars', name: 'exchange' });
 
         await streamer.registerAdapter(adapter);
         await streamer.registerContract(contract);

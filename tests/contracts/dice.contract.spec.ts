@@ -11,7 +11,7 @@ describe('Dice Contract', () => {
         sut = new Streamer();
         await sut.registerAdapter(createMockAdapter());
 
-        contract = createDiceContract({ name: 'testdice' });
+        contract = createDiceContract({ account: 'beggars', name: 'testdice' });
 
         // @ts-ignore
         sut.api = jest.fn();

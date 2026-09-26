@@ -24,7 +24,7 @@ describe('RPS Contract', () => {
             addEvent: jest.fn().mockResolvedValue(true),
         };
 
-        contract = createRpsContract();
+        contract = createRpsContract({ account: 'beggars' });
     });
 
     function initContract() {
@@ -52,7 +52,7 @@ describe('RPS Contract', () => {
         });
 
         test('accepts custom name', () => {
-            const custom = createRpsContract({ name: 'custom-rps' });
+            const custom = createRpsContract({ account: 'beggars', name: 'custom-rps' });
             expect(custom.name).toBe('custom-rps');
         });
 
@@ -222,6 +222,7 @@ describe('RPS Contract', () => {
 
         test('uses custom token symbol and valid currencies', async () => {
             const custom = createRpsContract({
+                account: 'beggars',
                 tokenSymbol: 'HBD',
                 validCurrencies: ['HBD', 'HIVE'],
             });
@@ -236,7 +237,7 @@ describe('RPS Contract', () => {
         });
 
         test('uses custom min/max amounts', async () => {
-            const custom = createRpsContract({ minAmount: 5, maxAmount: 10 });
+            const custom = createRpsContract({ account: 'beggars', minAmount: 5, maxAmount: 10 });
             custom.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             // Below min

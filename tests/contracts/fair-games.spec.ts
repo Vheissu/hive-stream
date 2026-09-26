@@ -128,7 +128,7 @@ describe('provably-fair game modes', () => {
     });
 
     test('legacy mode is unchanged when fairness is not configured', () => {
-        const contract = createDiceContract({ name: 'legacy' });
+        const contract = createDiceContract({ account: 'beggars', name: 'legacy' });
         expect((contract.actions as any).rotateSeed).toBeUndefined();
     });
 });

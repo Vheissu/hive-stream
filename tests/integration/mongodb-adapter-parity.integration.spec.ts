@@ -81,7 +81,7 @@ describeIfMongo('MongoDB adapter parity', () => {
 
         try {
             await streamer.registerAdapter(adapter);
-            await streamer.registerContract(createLottoContract());
+            await streamer.registerContract(createLottoContract({ account: 'beggars' }));
 
             streamer['client'] = {
                 database: {

@@ -90,6 +90,21 @@ streamer.onBlock((block, blockNumber) => {
 
 If you worked around the off-by-one with `blockNumber + 1`, remove it.
 
+### Built-in contracts need a house account
+
+In 3.x, `dice`, `coinflip`, `rps`, `roulette`, `lotto` and `exchange` quietly defaulted their house account to `beggars`, an account your app doesn't control. In 4.0 they use `options.account`, falling back to the streamer's username, and registration fails if neither is set:
+
+```ts
+// Either pass the account explicitly...
+await streamer.registerContract(createDiceContract({ account: 'myhouse' }));
+
+// ...or configure the streamer username once and let contracts inherit it.
+const streamer = new Streamer({ username: 'myhouse' });
+await streamer.registerContract(createDiceContract());
+```
+
+The `lotto` and `exchange` fee account now defaults to the house account instead of `beggars`.
+
 ### Other changes
 
 - Subscription lists over 1000 handlers log a warning instead of being trimmed.
@@ -134,9 +149,10 @@ The [zod 4 changelog](https://zod.dev/v4/changelog) covers the rest.
 1. Run Node 22 or later.
 2. Install `hive-stream@^4` and `zod@^4`, then `mongodb` or `pg` if you use those adapters.
 3. Fix zod 4 type errors in your schemas.
-4. Decide on `streamMode`. Keep the default unless you need head-block latency, and add an `onFork` hook if you don't.
-5. Look for slow subscription callbacks and move long work to a queue.
-6. Remove any `blockNumber + 1` workaround in `onBlock`.
-7. Check time actions that assumed they ran before a block's operations.
-8. Start the app once against your real config to catch `ConfigValidationError`s.
-9. Run your tests. The [testing kit](./testing) processes blocks the same way as production, including the new ordering.
+4. Pass `account` to built-in game and exchange contracts, or set the streamer `username`.
+5. Decide on `streamMode`. Keep the default unless you need head-block latency, and add an `onFork` hook if you don't.
+6. Look for slow subscription callbacks and move long work to a queue.
+7. Remove any `blockNumber + 1` workaround in `onBlock`.
+8. Check time actions that assumed they ran before a block's operations.
+9. Start the app once against your real config to catch `ConfigValidationError`s.
+10. Run your tests. The [testing kit](./testing) processes blocks the same way as production, including the new ordering.

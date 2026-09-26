@@ -16,7 +16,7 @@ describe('Exchange Contract', () => {
         adapter = new SqliteAdapter(':memory:');
         await streamer.registerAdapter(adapter);
 
-        contract = createExchangeContract({ name: 'exchange' });
+        contract = createExchangeContract({ account: 'beggars', name: 'exchange' });
         await streamer.registerContract(contract);
     });
 
