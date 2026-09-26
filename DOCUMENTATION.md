@@ -7,15 +7,27 @@ Hive Stream is a Node.js library for streaming Hive blockchain activity and rout
 - time-based actions
 - escrow operations
 
-This document focuses on the contract system and how to build robust contracts using the new `defineContract`/`action` API.
+This document focuses on the contract system and how to build robust contracts with `defineContract` and `action`. The [docs site](https://vheissu.github.io/hive-stream/) has the guides, recipes and a generated reference page for every built-in contract.
 
-`new Streamer()` is side-effect free. The default SQLite adapter is initialized lazily, and the built-in Express API only starts when you call `startApiServer()` or enable it through config before `start()`.
+`new Streamer()` has no side effects. The default SQLite adapter is created on first use, and the built-in Express API only starts when you call `startApiServer()` or enable it through config before `start()`.
+
+### What 4.0 changed
+
+- Blocks are processed once they're irreversible (`streamMode: 'irreversible'`, the default). `streamMode: 'head'` restores head-block processing, with fork detection.
+- The cursor is saved after every block, and an idempotency ledger records each contract action by transaction id and operation index, so a replayed block never runs an action twice.
+- `errorPolicy` (`'skip' | 'halt' | 'retry'`) decides what a failing handler does to the stream.
+- Streamer hooks, contract hooks and declarative guards. See [Hooks and Guards](#hooks-and-guards).
+- Provably fair randomness for the built-in games. See [Provably Fair Randomness](#provably-fair-randomness).
+- Config is validated when the streamer is built.
+- Node 22 or later, zod 4, and optional `mongodb`/`pg` peer dependencies.
+
+Upgrading from 3.x: read [Migrating to 4.0](https://vheissu.github.io/hive-stream/guide/migrating-to-4).
 
 ---
 
 ## CLI
 
-Hive Stream ships a scaffolding CLI. It generates a complete TypeScript app — package.json, tsconfig, `.env.example`, a wired-up `src/index.ts`, a starter custom contract, and a README with payload examples for every registered contract action.
+Hive Stream ships a scaffolding CLI. It generates a complete TypeScript app: package.json, tsconfig, `.env.example`, a wired-up `src/index.ts`, a starter custom contract, and a README with payload examples for every registered contract action. The same generator is available in memory, with no Node dependencies, as `hive-stream/scaffold`.
 
 ```shell
 npx hive-stream new <name> [options]   # scaffold a new app
@@ -163,11 +175,16 @@ const MyContract = defineContract({
         },
         destroy: async ({ streamer, adapter }) => {
             // cleanup resources
-        }
+        },
+        beforeAction: ({ action, payload, ctx }) => ctx.sender !== 'mallory',   // false vetoes the action
+        afterAction: ({ action, durationMs }) => { /* metrics */ },
+        onError: ({ action, error, ctx }) => { /* alerting */ }
     },
     actions: { ... }
 });
 ```
+
+See [Hooks and Guards](#hooks-and-guards) for streamer-wide hooks and declarative guards.
 
 ---
 
@@ -180,9 +197,9 @@ Every action receives a `ContractContext` with:
 - `adapter`: database adapter
 - `config`: resolved config values
 - `block`: `{ number, id, previousId, time }`
-- `transaction`: `{ id }`
+- `transaction`: `{ id, operationIndex }` (`operationIndex` is the operation's position in its transaction; absent for time triggers)
 - `sender`: Hive account invoking the action
-- `transfer`: transfer details (only for `transfer` trigger)
+- `transfer`: `{ from, to, amount, asset, rawAmount, memo }` for `transfer` and `recurrent_transfer` triggers
 - `customJson`: custom JSON details (only for `custom_json` trigger)
 - `escrow`: escrow details (only for escrow triggers)
 - `operation`: raw operation data and operation type for advanced use cases
@@ -223,7 +240,9 @@ const MyContract = defineContract({
 });
 ```
 
-If validation fails, the action is not executed and the error is logged.
+If validation fails, the action is not executed, the issues are logged, and the `onInvalidPayload` hook fires with them.
+
+Schemas are zod 4. Contract specs shared with a frontend through `hive-stream/client` use the same schemas, so the browser rejects a bad payload before the user signs it.
 
 ---
 
@@ -266,10 +285,87 @@ This prevents posting-key JSONs from triggering sensitive actions like withdrawa
 
 ## Error Handling
 
-- Errors inside contract actions are caught and logged.
-- **Time actions** bubble errors back into the scheduler so the action does **not** increment execution count if it fails.
+What happens when a handler throws depends on `errorPolicy`:
 
-Write actions defensively and always validate inputs.
+| Policy | Effect |
+| --- | --- |
+| `'skip'` (default) | The error is logged and reported to `onContractError` and `onError`; the stream moves on. |
+| `'halt'` | The stream stops at the failing block. `getHealth()` reports `halted` and `getStatus().lastError` has the error. Nothing after that block is processed until you restart. |
+| `'retry'` | The handler is retried `errorMaxRetries` times with doubling delays (`errorRetryDelayMs`), then the stream halts. |
+
+A failed time action does not count as an execution, so it runs again on its next tick.
+
+Use `'halt'` for anything that moves money. A stream that skips a failed payout keeps going and the missing payment is easy to overlook.
+
+Subscription callbacks (`onTransfer` and friends) are awaited in order. A throwing callback is logged and reported to `onError` with phase `subscription`, and the other callbacks still run.
+
+---
+
+## Hooks and Guards
+
+Streamer hooks observe or steer processing. Register them in config (`hooks: { ... }`), one at a time with `streamer.hook(name, handler)`, or as a plugin with `streamer.use(plugin)`. `defineHooks()` types a plugin object.
+
+| Hook | Runs | Can change the outcome |
+| --- | --- | --- |
+| `onStart` / `onStop` | Around the streamer's lifetime | No |
+| `beforeBlock` / `afterBlock` | Around each block; `afterBlock` runs after the checkpoint | No |
+| `beforeOperation` | Before each operation reaches subscriptions and contracts | Return `false` to skip it |
+| `afterOperation` | After each operation | No |
+| `beforeContractAction` | After validation and guards, before the handler | Return `false` to veto, `{ payload }` to replace the payload |
+| `afterContractAction` | After a handler succeeds, with `durationMs` | No |
+| `onContractError` | Each failed handler attempt, with `attempt` and `willRetry` | No |
+| `onInvalidPayload` | A payload failed its schema | No |
+| `onActionRejected` | An action was not run, with a `reason` | No |
+| `onFork` | A fork was detected in `head` mode | No |
+| `onError` | Any reported error, with `phase` and `fatal` | No |
+| `onCaughtUp` | The streamer reached its target block after being behind | No |
+| `onCheckpoint` | The cursor was saved | No |
+
+A hook that throws is logged and reported to `onError`. The exception is `beforeContractAction`: if it throws, the action is vetoed, so a crashing check can't let a payout through.
+
+Guards are declarative checks on contracts or single actions. Action guards override contract guards field by field:
+
+```ts
+defineContract({
+    name: 'shop',
+    guards: { allowedAssets: ['HIVE', 'HBD'] },
+    actions: {
+        buy: action(handler, {
+            trigger: 'transfer',
+            guards: {
+                minAmount: '1.000',
+                maxAmount: 500,
+                rateLimit: { max: 5, windowSeconds: 60 },
+                blockedSenders: ['known-abuser']
+            }
+        }),
+        withdraw: action(handler, {
+            trigger: 'custom_json',
+            requiresActiveKey: true,
+            guards: { allowedSenders: ['shop-admin'] }
+        })
+    }
+});
+```
+
+Guards: `allowedSenders`, `blockedSenders`, `allowedAssets`, `minAmount`, `maxAmount`, `rateLimit` and `paused`. Amount and asset guards only apply to triggers that carry an amount. A rejected transfer is not refunded automatically; handle `onActionRejected` if you need that (see the dice recipe for a replay-safe refund). `streamer.pauseContract(name, action?)` and `resumeContract()` pause at runtime.
+
+---
+
+## Provably Fair Randomness
+
+The legacy RNG in dice, coinflip, roulette, rps and lotto seeds from block and transaction ids. A block producer or a player can influence those. Pass `fairness` to use commit-reveal seeds instead:
+
+```ts
+import { createDiceContract, createFairness } from 'hive-stream';
+
+await streamer.registerContract(createDiceContract({ account: 'myhouse', fairness: true }));
+
+// or share one manager, rotate every 1000 bets and publish commitments
+const fairness = createFairness({ rotateAfter: 1000, onRotate: async ({ commitment }) => publish(commitment) });
+```
+
+The operator commits to `sha256(serverSeed)` before any bet. Each outcome is derived from `HMAC-SHA256(serverSeed, clientSeed:blockId:nonce:round)` with rejection sampling, so there is no modulo bias. Rotating the seed reveals it. Players check outcomes with `verifyOutcome()` from `hive-stream/client`, which runs in a browser. `createLimboContract` always uses this scheme. For your own contracts, call `fairness.draw(spec, { clientSeed, blockId })` inside the handler after `fairness.init({ adapter, scope })` in the create hook.
 
 ---
 
@@ -284,13 +380,13 @@ const matchAction = new TimeAction('30s', 'exchange-matcher', 'exchange', 'match
 await streamer.registerAction(matchAction);
 ```
 
-The action must have `trigger: 'time'` in its definition.
+The action must have `trigger: 'time'` in its definition. Due time actions run after each block's operations and are measured against the block's timestamp, so replays fire them at the same points as live streaming. Actions stored by the adapter are restored during `init()`.
 
 ---
 
 ## Testing Contracts
 
-The `hive-stream/testing` module runs a real `Streamer` against simulated infrastructure: an in-memory block provider, a fake Hive client that records broadcasts, and an in-memory SQLite database. Nothing touches the network or disk, and no keys are needed (unless your handlers broadcast — then any valid-format key works, since nothing is sent).
+The `hive-stream/testing` module runs a real `Streamer` against simulated infrastructure: an in-memory block provider, a fake Hive client that records broadcasts, and an in-memory SQLite database. Nothing touches the network or disk, and no keys are needed: handlers that broadcast use throwaway keys, and the fake client records the operation instead of sending it. Built-in games that re-read their transaction get it from the simulated blocks.
 
 ### Setup
 
@@ -394,7 +490,7 @@ If a contract uses `adapter.query`, it must document that it requires a SQL adap
 3. **Use hooks** (`create`, `destroy`) to initialize tables or cache configuration.
 4. **Validate input** using Zod.
 5. **Use `ctx`** for block/transaction context.
-6. **Return void** (actions are fire-and-forget).
+6. **Return when the work is done.** Handlers are awaited in order, so a slow handler slows the stream. Queue long work instead of awaiting it.
 7. **Register the contract** with the streamer.
 
 ---
@@ -433,13 +529,18 @@ export const TipJar = defineContract({
 
 ## Built-in Contract Examples
 
-- `createDiceContract` - Dice game using transfer bets
-- `createCoinflipContract` - Coin flip game using transfer bets
-- `createLottoContract` - Lottery system with scheduled draws
+- `createDiceContract` - Dice game using transfer bets (optional provably fair mode)
+- `createCoinflipContract` - Coin flip game using transfer bets (optional provably fair mode)
+- `createLottoContract` - Lottery system with scheduled draws (optional provably fair mode)
+- `createLimboContract` - Provably fair limbo/crash game with payouts capped against the bankroll
+- `createTournamentContract` - Paid tournaments with oracle-submitted scores and basis-point prize splits
+- `createBadgesContract` - Non-transferable achievements issued by accounts or earned by rules
+- `createStakingPoolContract` - Stake an asset and earn rewards with reward-per-share accounting
+- `createBridgeContract` - Custody bridge with M-of-N operator attestations, limits and an audit trail
 - `createTokenContract` - SQL-backed fungible tokens
 - `createNFTContract` - SQL-backed NFTs
 - `createRpsContract` - Rock/Paper/Scissors
-- `createRouletteContract` - Roulette with straight, color, parity, dozen, column, and low/high bets
+- `createRouletteContract` - Roulette with straight, color, parity, dozen, column, and low/high bets (optional provably fair mode)
 - `createPollContract` - Polls and votes
 - `createTipJarContract` - Tip jar + message log
 - `createExchangeContract` - Deposits/withdrawals/orders/matching (SQL)
@@ -475,6 +576,8 @@ export const TipJar = defineContract({
 - `createCheckpointContract` - Periodic on-chain state hashes so independent operators can verify they derive identical state
 
 ### Example Snippets
+
+Use-case recipes (dice with fairness, tournaments, tipping with hooks, a bridge and a browser frontend) live in `examples/recipes/` and are explained in the [Recipes guide](https://vheissu.github.io/hive-stream/guide/recipes). A test type-checks every file under `examples/`.
 
 Quick-start snippets live in `examples/contracts/`:
 
