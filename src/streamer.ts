@@ -3474,7 +3474,12 @@ export class Streamer {
             'feed_publish'
         ]);
 
-        const needsActive = operations.some(([opType]) => activeOps.has(opType));
+        // custom_json declares its authority explicitly: required_auths means
+        // active (Hive Engine ops, active-key contract actions).
+        const needsActive = operations.some(([opType, data]) =>
+            activeOps.has(opType) ||
+            (opType === 'custom_json' && Array.isArray(data?.required_auths) && data.required_auths.length > 0)
+        );
         const key = needsActive
             ? (this.config.ACTIVE_KEY || this.config.POSTING_KEY)
             : (this.config.POSTING_KEY || this.config.ACTIVE_KEY);
