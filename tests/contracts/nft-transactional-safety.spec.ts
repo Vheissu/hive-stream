@@ -36,7 +36,7 @@ describe('NFT transactional safety', () => {
     test('rolls back minting when the final event write fails', async () => {
         const streamer = new Streamer({ debugMode: false });
         const adapter = new SqliteAdapter(':memory:');
-        const contract = createNFTContract();
+        const contract = createNFTContract({ account: 'nftmarket' });
 
         await streamer.registerAdapter(adapter);
         await streamer.registerContract(contract);
@@ -82,7 +82,7 @@ describe('NFT transactional safety', () => {
     test('rolls back NFT sales when the final event write fails', async () => {
         const streamer = new Streamer({ debugMode: false });
         const adapter = new SqliteAdapter(':memory:');
-        const contract = createNFTContract();
+        const contract = createNFTContract({ account: 'nftmarket' });
 
         await streamer.registerAdapter(adapter);
         await streamer.registerContract(contract);
@@ -137,6 +137,69 @@ describe('NFT transactional safety', () => {
         expect(listingRows[0].active).toBe(1);
         expect(saleTransfers).toHaveLength(0);
 
+        await streamer.stop();
+    });
+    test('pays sellers from the configured marketplace account, not a hardcoded one', async () => {
+        const streamer = new Streamer({ debugMode: false, username: 'streameruser' });
+        const adapter = new SqliteAdapter(':memory:');
+        const contract = createNFTContract({ account: 'nftmarket' });
+
+        await streamer.registerAdapter(adapter);
+        await streamer.registerContract(contract);
+
+        await contract.actions.createCollection.handler({
+            symbol: 'TESTNFT',
+            name: 'Test Collection',
+            maxSupply: 10
+        }, createCustomJsonContext(streamer, adapter, 'alice', 'trx-create-collection'));
+
+        await contract.actions.mintNFT.handler({
+            collectionSymbol: 'TESTNFT',
+            tokenId: 'token001',
+            to: 'alice'
+        }, createCustomJsonContext(streamer, adapter, 'alice', 'trx-mint-token'));
+
+        await contract.actions.listNFT.handler({
+            collectionSymbol: 'TESTNFT',
+            tokenId: 'token001',
+            price: '10.000',
+            currency: 'HIVE'
+        }, createCustomJsonContext(streamer, adapter, 'alice', 'trx-list-token'));
+
+        jest.spyOn(Utils, 'getTransaction').mockResolvedValue({ operations: [] } as any);
+        const verifySpy = jest.spyOn(Utils, 'verifyTransfer').mockResolvedValue(true);
+        const transferSpy = jest.spyOn(streamer, 'transferHiveTokens').mockResolvedValue(true as any);
+
+        await contract.actions.buyNFT.handler({
+            collectionSymbol: 'TESTNFT',
+            tokenId: 'token001'
+        }, createTransferContext(streamer, adapter, 'bob', '10.000 HIVE', 'trx-buy-token'));
+
+        // The buyer's payment must have gone to the marketplace account...
+        expect(verifySpy).toHaveBeenCalledWith(expect.anything(), 'bob', 'nftmarket', '10.000 HIVE');
+        // ...and the seller is paid from it.
+        expect(transferSpy).toHaveBeenCalledWith('nftmarket', 'alice', '10.000', 'HIVE', expect.stringContaining('NFT sale'));
+
+        await streamer.stop();
+    });
+
+    test('defaults the marketplace account to the streamer username', async () => {
+        const streamer = new Streamer({ debugMode: false, username: 'streameruser' });
+        const adapter = new SqliteAdapter(':memory:');
+        const contract = createNFTContract();
+
+        await streamer.registerAdapter(adapter);
+        await streamer.registerContract(contract);
+
+        jest.spyOn(Utils, 'getTransaction').mockResolvedValue({ operations: [] } as any);
+        const verifySpy = jest.spyOn(Utils, 'verifyTransfer').mockResolvedValue(false);
+
+        await expect(contract.actions.buyNFT.handler({
+            collectionSymbol: 'TESTNFT',
+            tokenId: 'token001'
+        }, createTransferContext(streamer, adapter, 'bob', '10.000 HIVE', 'trx-buy-token'))).rejects.toThrow('Transfer verification failed');
+
+        expect(verifySpy).toHaveBeenCalledWith(expect.anything(), 'bob', 'streameruser', '10.000 HIVE');
         await streamer.stop();
     });
 });

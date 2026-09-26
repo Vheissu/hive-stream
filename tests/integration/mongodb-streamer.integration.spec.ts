@@ -138,7 +138,7 @@ describeIfMongo('MongoDB streamer integration', () => {
             const sqlBackedContracts = [
                 createRevenueSplitContract(),
                 createTokenContract(),
-                createNFTContract(),
+                createNFTContract({ account: 'nftmarket' }),
                 createPollContract(),
                 createTipJarContract(),
                 createExchangeContract({ account: 'beggars' })

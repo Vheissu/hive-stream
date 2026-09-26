@@ -4,7 +4,7 @@ import { Streamer } from '../streamer';
 import { Utils } from '../utils';
 import { action, defineContract } from './contract';
 import { parseBlockchainAmount } from './helpers';
-import { ensureSqlAdapter } from './helpers';
+import { ensureSqlAdapter, resolveContractAccount } from './helpers';
 
 const CONTRACT_NAME = 'hivenft';
 
@@ -56,6 +56,8 @@ interface NFTTransfer {
 
 export class NFTContract {
     public _instance: Streamer;
+    /** Account that receives marketplace payments and pays sellers and royalties. */
+    public account = '';
     private adapter;
 
     private blockNumber: number;
@@ -886,7 +888,7 @@ export class NFTContract {
             });
 
             // Pay the seller using the Streamer's transfer method
-            const contractAccount = (this._instance as any).config?.HIVE_ACCOUNT || 'beggars';
+            const contractAccount = this.account;
             await this._instance.transferHiveTokens(
                 contractAccount,
                 listingData.seller,
@@ -1122,6 +1124,11 @@ export class NFTContract {
 
 export interface NFTContractOptions {
     name?: string;
+    /**
+     * Marketplace account that receives `buyNFT` payments and pays sellers and
+     * royalties. Defaults to the streamer's configured username.
+     */
+    account?: string;
 }
 
 export function createNFTContract(options: NFTContractOptions = {}) {
@@ -1136,8 +1143,9 @@ export function createNFTContract(options: NFTContractOptions = {}) {
     return defineContract({
         name,
         hooks: {
-            create: async ({ streamer }) => {
-                instance._instance = streamer as any;
+            create: async (lifecycle) => {
+                instance.account = resolveContractAccount('createNFTContract', options.account, lifecycle);
+                instance._instance = lifecycle.streamer as any;
                 await instance.create();
             },
             destroy: async () => {
@@ -1175,8 +1183,7 @@ export function createNFTContract(options: NFTContractOptions = {}) {
 
                 // Verify the transfer actually happened on-chain
                 const transaction = await Utils.getTransaction(instance._instance['client'], ctx.block.number, ctx.transaction.id);
-                const contractAccount = (instance._instance as any).config?.HIVE_ACCOUNT || 'beggars';
-                const verified = await Utils.verifyTransfer(transaction, ctx.sender, contractAccount, amountRaw);
+                const verified = await Utils.verifyTransfer(transaction, ctx.sender, instance.account, amountRaw);
                 if (!verified) {
                     throw new Error('Transfer verification failed');
                 }

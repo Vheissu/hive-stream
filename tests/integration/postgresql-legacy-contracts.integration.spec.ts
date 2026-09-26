@@ -57,7 +57,7 @@ describeIfPostgres('PostgreSQL legacy contract parity', () => {
             polls: createPollContract(),
             tipjar: createTipJarContract(),
             exchange: createExchangeContract({ account: 'beggars' }),
-            nft: createNFTContract()
+            nft: createNFTContract({ account: 'nftmarket' })
         };
 
         await streamer.registerContract(contracts.token);

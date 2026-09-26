@@ -105,6 +105,8 @@ await streamer.registerContract(createDiceContract());
 
 The `lotto` and `exchange` fee account now defaults to the house account instead of `beggars`.
 
+`createNFTContract()` also takes an `account` option for the marketplace account that receives `buyNFT` payments and pays sellers and royalties. It defaults to the streamer username; 3.x always used `beggars` here, so custodial NFT sales never worked for other accounts.
+
 ### Other changes
 
 - Subscription lists over 1000 handlers log a warning instead of being trimmed.

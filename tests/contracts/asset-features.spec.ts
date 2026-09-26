@@ -61,7 +61,7 @@ describe('Non-custodial asset features', () => {
 
     describe('NFT batch minting', () => {
         const setupCollection = async (maxSupply?: number) => {
-            const contract = createNFTContract({ name: 'nft' });
+            const contract = createNFTContract({ account: 'nftmarket', name: 'nft' });
             await streamer.registerContract(contract);
 
             await contract.actions.createCollection.handler({
@@ -144,7 +144,7 @@ describe('Non-custodial asset features', () => {
 
     describe('NFT non-custodial direct sales', () => {
         const setupListing = async () => {
-            const contract = createNFTContract({ name: 'nft' });
+            const contract = createNFTContract({ account: 'nftmarket', name: 'nft' });
             await streamer.registerContract(contract);
 
             await contract.actions.createCollection.handler({
@@ -352,7 +352,7 @@ describe('Non-custodial asset features', () => {
 
     describe('On-chain state checkpoints', () => {
         const setupCheckpoint = async () => {
-            const nftContract = createNFTContract({ name: 'nft' });
+            const nftContract = createNFTContract({ account: 'nftmarket', name: 'nft' });
             await streamer.registerContract(nftContract);
 
             const contract = createCheckpointContract({
