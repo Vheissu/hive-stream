@@ -2598,7 +2598,8 @@ export class Streamer {
         reason: ActionRejectionReason,
         message: string,
         context: ContractContext,
-        level: 'warn' | 'debug' = 'warn'
+        level: 'warn' | 'debug' = 'warn',
+        ledgerKey?: string
     ): Promise<ContractDispatchResult> {
         if (level === 'warn') {
             getLogger().warn(`[Streamer] ${message}`);
@@ -2614,6 +2615,13 @@ export class Streamer {
             message,
             context
         });
+
+        // Record rejections so a replay doesn't fire onActionRejected (and any
+        // refund it issues) a second time. Missing contracts/actions are left
+        // out: that's a deployment problem the app may fix and then replay.
+        if (reason !== 'duplicate' && reason !== 'contract_not_found' && reason !== 'action_not_found') {
+            await this.recordLedger(ledgerKey, { contract, action } as ContractPayload, context, 'rejected');
+        }
 
         return reason === 'duplicate' ? 'duplicate' : 'rejected';
     }
@@ -2733,7 +2741,7 @@ export class Streamer {
         ledgerKey: string | undefined,
         payload: ContractPayload,
         context: ContractContext,
-        status: 'success' | 'failed'
+        status: 'success' | 'failed' | 'rejected'
     ): Promise<void> {
         if (!ledgerKey || !this.config.IDEMPOTENCY_ENABLED || !this.adapter?.markOperationProcessed) {
             return;
@@ -2775,6 +2783,11 @@ export class Streamer {
         context: ContractContext,
         options: { ledgerKey?: string } = {}
     ): Promise<ContractDispatchResult> {
+        if (await this.isDuplicate(options.ledgerKey)) {
+            return this.rejectAction(payload.contract, payload.action, 'duplicate',
+                `Skipping ${payload.contract}.${payload.action}: operation ${options.ledgerKey} was already processed`, context, 'debug');
+        }
+
         const contract = this.contractCache.get(payload.contract) ||
             this.contracts.find(c => c.name === payload.contract);
 
@@ -2796,7 +2809,7 @@ export class Streamer {
 
         if (!this.isActionTriggerAllowed(actionDefinition, context.trigger)) {
             return this.rejectAction(payload.contract, payload.action, 'trigger_not_allowed',
-                `Action '${payload.action}' does not allow trigger '${context.trigger}'`, context);
+                `Action '${payload.action}' does not allow trigger '${context.trigger}'`, context, 'warn', options.ledgerKey);
         }
 
         const errorMeta: ErrorMeta = {
@@ -2805,16 +2818,11 @@ export class Streamer {
             operationIndex: context.transaction.operationIndex
         };
 
-        if (await this.isDuplicate(options.ledgerKey)) {
-            return this.rejectAction(payload.contract, payload.action, 'duplicate',
-                `Skipping ${payload.contract}.${payload.action}: operation ${options.ledgerKey} was already processed`, context, 'debug');
-        }
-
         if (actionDefinition.requiresActiveKey &&
             context.trigger === 'custom_json' &&
             !context.customJson?.isSignedWithActiveKey) {
             return this.rejectAction(payload.contract, payload.action, 'active_key_required',
-                `Action '${payload.action}' requires active key signature`, context);
+                `Action '${payload.action}' requires active key signature`, context, 'warn', options.ledgerKey);
         }
 
         let actionPayload: any = payload.payload ?? {};
@@ -2838,6 +2846,8 @@ export class Streamer {
                     context
                 });
 
+                await this.recordLedger(options.ledgerKey, payload, context, 'rejected');
+
                 return 'rejected';
             }
 
@@ -2848,7 +2858,7 @@ export class Streamer {
         const rejection = this.evaluateGuards(payload.contract, payload.action, guards, context);
 
         if (rejection) {
-            return this.rejectAction(payload.contract, payload.action, rejection.reason, rejection.message, context);
+            return this.rejectAction(payload.contract, payload.action, rejection.reason, rejection.message, context, 'warn', options.ledgerKey);
         }
 
         const hookContext: ContractActionHookContext = {
@@ -2873,7 +2883,7 @@ export class Streamer {
 
             if (outcome === false) {
                 return this.rejectAction(payload.contract, payload.action, 'vetoed',
-                    `Action ${payload.contract}.${payload.action} vetoed by beforeContractAction hook`, context, 'debug');
+                    `Action ${payload.contract}.${payload.action} vetoed by beforeContractAction hook`, context, 'debug', options.ledgerKey);
             }
 
             if (outcome && typeof outcome === 'object' && 'payload' in (outcome as any)) {
@@ -2895,7 +2905,7 @@ export class Streamer {
 
             if (proceed === false) {
                 return this.rejectAction(payload.contract, payload.action, 'vetoed',
-                    `Action ${payload.contract}.${payload.action} vetoed by contract beforeAction hook`, context, 'debug');
+                    `Action ${payload.contract}.${payload.action} vetoed by contract beforeAction hook`, context, 'debug', options.ledgerKey);
             }
         }
 

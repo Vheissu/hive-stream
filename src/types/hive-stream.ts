@@ -157,7 +157,7 @@ export interface ProcessedOperationRecord {
     operationIndex?: number;
     contract?: string;
     action?: string;
-    status: 'success' | 'failed';
+    status: 'success' | 'failed' | 'rejected';
     processedAt?: Date;
 }
 

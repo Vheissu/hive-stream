@@ -167,4 +167,25 @@ describe('Declarative action guards', () => {
         expect(() => defineContract({ name: 'y', guards: { allowedAssets: [''] } as any, actions: { go: action(() => undefined) } }))
             .toThrow(/allowedAssets/);
     });
+    test('rejections are recorded in the ledger so a replay does not reject (and refund) twice', async () => {
+        const { streamer, provider, calls, rejected } = await setup({ minAmount: 5 });
+
+        provider.addBlock([
+            transferOp('alice', '1.000 HIVE', memo('bet', 'place')),
+            transferOp('bob', '10.000 HIVE', memo('bet', 'place'))
+        ]);
+        await streamer.processPendingBlocks();
+
+        expect(calls).toEqual(['bob']);
+        expect(rejected).toEqual(['alice:amount_too_low']);
+
+        const block = streamer.getStatus().lastBlockNumber;
+        await streamer.replayBlocks(block, block);
+
+        // Replayed operations are reported as duplicates, never re-rejected.
+        expect(calls).toEqual(['bob']);
+        expect(rejected.filter((entry) => !entry.endsWith(':duplicate'))).toEqual(['alice:amount_too_low']);
+        expect(rejected.filter((entry) => entry.endsWith(':duplicate'))).toEqual(['alice:duplicate', 'bob:duplicate']);
+        await streamer.stop();
+    });
 });
