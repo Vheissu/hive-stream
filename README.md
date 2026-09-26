@@ -30,6 +30,8 @@ SQLite and PostgreSQL work with every template. MongoDB is offered for the `mini
 npm install hive-stream
 ```
 
+Requires Node.js 22 or later. SQLite works out of the box; for the MongoDB or PostgreSQL adapters (or the HAF provider) also install the driver: `npm install mongodb` or `npm install pg`.
+
 Hive Stream works in both module systems — `import` and `require` resolve to the same implementation, so classes and `instanceof` checks are always consistent:
 
 ```javascript

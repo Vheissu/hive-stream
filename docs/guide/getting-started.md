@@ -8,7 +8,7 @@ Hive Stream is a Node.js library for building applications on the [Hive blockcha
 npm install hive-stream
 ```
 
-Node.js 18 or later is required. Both module systems work and share one implementation:
+Node.js 22 or later is required. SQLite support is included; the MongoDB and PostgreSQL drivers are optional peer dependencies, so install `mongodb` or `pg` only if you use those adapters (or the HAF provider, which needs `pg`). Both module systems work and share one implementation:
 
 ```ts
 import { Streamer } from 'hive-stream';        // ESM / TypeScript

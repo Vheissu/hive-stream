@@ -1,4 +1,5 @@
-import { Client as PgClient } from 'pg';
+import type { Client as PgClient } from 'pg';
+import { requireOptionalDependency } from '../optional-dependency';
 import { BlockProvider, BlockData, DynamicGlobalProperties } from './block-provider';
 
 export interface HafProviderConfig {
@@ -113,7 +114,8 @@ export class HafProvider implements BlockProvider {
             pgOptions.ssl = this.config.ssl;
         }
 
-        return new PgClient(pgOptions);
+        const { Client } = requireOptionalDependency<typeof import('pg')>('pg', 'HafProvider');
+        return new Client(pgOptions);
     }
 
     public async create(): Promise<void> {

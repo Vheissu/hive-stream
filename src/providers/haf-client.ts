@@ -1,4 +1,5 @@
-import { Client as PgClient } from 'pg';
+import type { Client as PgClient } from 'pg';
+import { requireOptionalDependency } from '../optional-dependency';
 
 export interface HafClientConfig {
     host?: string;
@@ -51,7 +52,8 @@ export class HafClient {
             pgOptions.ssl = this.config.ssl;
         }
 
-        this.client = new PgClient(pgOptions);
+        const { Client } = requireOptionalDependency<typeof import('pg')>('pg', 'HafClient');
+        this.client = new Client(pgOptions);
     }
 
     public async connect(): Promise<void> {

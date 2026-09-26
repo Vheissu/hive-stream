@@ -3,7 +3,9 @@ import { TimeAction } from './../actions';
 import { ContractPayload, TransferMetadata, CustomJsonMetadata } from './../types/hive-stream';
 import { AdapterBase } from './base.adapter';
 
-import { MongoClient, Db } from 'mongodb';
+import * as os from 'os';
+import type { MongoClient, Db } from 'mongodb';
+import { requireOptionalDependency } from '../optional-dependency';
 
 export class MongodbAdapter extends AdapterBase {
     protected client: MongoClient = null;
@@ -29,7 +31,10 @@ export class MongodbAdapter extends AdapterBase {
 
         this.mongo.uri = uri;
         this.mongo.database = database;
-        this.mongo.options = options;
+        // Driver 7 loads `os` through a dynamic import(), which fails inside
+        // vm sandboxes such as Jest and leaves the handshake without client
+        // metadata. Supplying the module up front avoids that failure mode.
+        this.mongo.options = { runtimeAdapters: { os }, ...options };
     }
 
     public async getDbInstance() {
@@ -38,6 +43,7 @@ export class MongodbAdapter extends AdapterBase {
         }
 
         if (!this.client) {
+            const { MongoClient } = requireOptionalDependency<typeof import('mongodb')>('mongodb', 'MongodbAdapter');
             this.client = new MongoClient(this.mongo.uri, this.mongo.options);
         }
 

@@ -27,6 +27,8 @@ export interface AdapterDefinition {
     construct: string;
     envLines: string[];
     capabilities: AdapterCapability[];
+    /** Driver packages hive-stream treats as optional peers for this adapter. */
+    dependencies?: Record<string, string>;
 }
 
 const wrap = (contract: string, actionName: string, payload: string): string => {
@@ -341,7 +343,8 @@ export const ADAPTERS: AdapterDefinition[] = [
             'MONGODB_URI=mongodb://localhost:27017',
             'MONGODB_DATABASE=APP_NAME_PLACEHOLDER'
         ],
-        capabilities: []
+        capabilities: [],
+        dependencies: { mongodb: '^7.6.0' }
     },
     {
         id: 'postgresql',
@@ -353,7 +356,8 @@ export const ADAPTERS: AdapterDefinition[] = [
             '# PostgreSQL connection',
             'DATABASE_URL=postgres://localhost:5432/APP_NAME_PLACEHOLDER'
         ],
-        capabilities: ['sql']
+        capabilities: ['sql'],
+        dependencies: { pg: '^8.23.0' }
     }
 ];
 

@@ -17,6 +17,12 @@ await streamer.registerAdapter(new SqliteAdapter('./data/my-app.db'));
 
 ## PostgreSQL
 
+The PostgreSQL driver is an optional peer dependency:
+
+```shell
+npm install pg
+```
+
 ```ts
 import { Streamer, PostgreSQLAdapter } from 'hive-stream';
 
@@ -29,6 +35,12 @@ await streamer.registerAdapter(adapter);
 ```
 
 ## MongoDB
+
+The MongoDB driver (v7) is an optional peer dependency:
+
+```shell
+npm install mongodb
+```
 
 ```ts
 import { Streamer, MongodbAdapter } from 'hive-stream';

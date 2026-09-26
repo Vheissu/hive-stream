@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import * as os from 'os';
 import { spawnSync } from 'child_process';
 import { MongoClient } from 'mongodb';
 import { Client, type ClientConfig } from 'pg';
@@ -172,7 +173,7 @@ export async function createIsolatedMongoDatabase(prefix: string = 'hive_stream_
         uri,
         dbName,
         cleanup: async () => {
-            const client = new MongoClient(uri);
+            const client = new MongoClient(uri, { runtimeAdapters: { os } });
             await client.connect();
             await client.db(dbName).dropDatabase();
             await client.close();
