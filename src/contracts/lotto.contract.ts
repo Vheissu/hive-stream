@@ -274,7 +274,7 @@ export function createLottoContract(options: LottoContractOptions = {}) {
                 draw.entries.push({
                     account: sender,
                     transactionId: ctx.transaction.id,
-                    date: new Date()
+                    date: blockTime(ctx)
                 });
 
                 await store.save(draw, blockTime(ctx));
@@ -284,7 +284,7 @@ export function createLottoContract(options: LottoContractOptions = {}) {
             const entries = [{
                 account: sender,
                 transactionId: ctx.transaction.id,
-                date: new Date()
+                date: blockTime(ctx)
             }];
 
             const drawId = `${name}:${payload.type}:${ctx.transaction.id}:${ctx.transaction.operationIndex ?? 0}`;

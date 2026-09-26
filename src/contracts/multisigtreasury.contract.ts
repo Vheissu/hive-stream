@@ -3,6 +3,7 @@ import { action, defineContract } from './contract';
 import {
     amountSchema,
     assetSchema,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     identifierSchema,
@@ -113,7 +114,7 @@ export function createMultisigTreasuryContract(options: MultisigTreasuryContract
                 JSON.stringify(signers),
                 'active',
                 JSON.stringify(payload.metadata || {}),
-                new Date()
+                blockTimeOf(ctx)
             ]
         );
 
@@ -125,7 +126,7 @@ export function createMultisigTreasuryContract(options: MultisigTreasuryContract
                 threshold: payload.threshold,
                 signers
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const proposeTransfer = async (payload: z.infer<typeof proposeTransferSchema>, ctx: any) => {
@@ -164,7 +165,7 @@ export function createMultisigTreasuryContract(options: MultisigTreasuryContract
                 }),
                 0,
                 'pending',
-                new Date(),
+                blockTimeOf(ctx),
                 null
             ]
         );
@@ -176,7 +177,7 @@ export function createMultisigTreasuryContract(options: MultisigTreasuryContract
                 vaultId: payload.vaultId,
                 proposer
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const approveProposal = async (payload: z.infer<typeof proposalSchema>, ctx: any) => {
@@ -200,7 +201,7 @@ export function createMultisigTreasuryContract(options: MultisigTreasuryContract
 
         await state.adapter.query(
             'INSERT INTO treasury_approvals (proposal_id, signer, approved_at) VALUES (?, ?, ?)',
-            [payload.proposalId, signer, new Date()]
+            [payload.proposalId, signer, blockTimeOf(ctx)]
         );
 
         const approvalCountRows = await state.adapter.query('SELECT COUNT(*) AS count FROM treasury_approvals WHERE proposal_id = ?', [payload.proposalId]);
@@ -222,7 +223,7 @@ export function createMultisigTreasuryContract(options: MultisigTreasuryContract
                 approvalsCount,
                 threshold: vault.threshold
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const cancelProposal = async (payload: z.infer<typeof proposalSchema>, ctx: any) => {
@@ -250,7 +251,7 @@ export function createMultisigTreasuryContract(options: MultisigTreasuryContract
                 proposalId: payload.proposalId,
                 cancelledBy: sender
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const markExecuted = async (payload: z.infer<typeof markExecutedSchema>, ctx: any) => {
@@ -274,7 +275,7 @@ export function createMultisigTreasuryContract(options: MultisigTreasuryContract
 
         await state.adapter.query(
             'UPDATE treasury_proposals SET status = ?, executed_at = ? WHERE proposal_id = ?',
-            ['executed', new Date(), payload.proposalId]
+            ['executed', blockTimeOf(ctx), payload.proposalId]
         );
 
         await emitContractEvent(state.adapter, name, 'markExecuted', payload, {
@@ -284,7 +285,7 @@ export function createMultisigTreasuryContract(options: MultisigTreasuryContract
                 executedBy: sender,
                 txId: payload.txId || null
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     return defineContract({

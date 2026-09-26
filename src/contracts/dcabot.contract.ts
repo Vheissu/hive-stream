@@ -3,6 +3,7 @@ import { action, defineContract } from './contract';
 import {
     amountSchema,
     assetSchema,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     identifierSchema,
@@ -90,7 +91,7 @@ export function createDcaBotContract(options: DcaBotContractOptions = {}) {
             throw new Error(`Bot ${payload.botId} already exists`);
         }
 
-        const startsAt = parseDateValue(payload.startsAt) || new Date();
+        const startsAt = parseDateValue(payload.startsAt) || blockTimeOf(ctx);
         await state.adapter.query(
             `INSERT INTO dca_bots (
                 bot_id, owner, base_asset, quote_asset, amount_per_interval, interval_hours, max_executions, execution_count, slippage_bps,
@@ -109,8 +110,8 @@ export function createDcaBotContract(options: DcaBotContractOptions = {}) {
                 startsAt,
                 'active',
                 JSON.stringify(payload.metadata || {}),
-                new Date(),
-                new Date()
+                blockTimeOf(ctx),
+                blockTimeOf(ctx)
             ]
         );
 
@@ -120,7 +121,7 @@ export function createDcaBotContract(options: DcaBotContractOptions = {}) {
                 botId: payload.botId,
                 owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const pauseBot = async (payload: z.infer<typeof botIdSchema>, ctx: any) => {
@@ -135,14 +136,14 @@ export function createDcaBotContract(options: DcaBotContractOptions = {}) {
             throw new Error('Only the bot owner can pause this bot');
         }
 
-        await state.adapter.query('UPDATE dca_bots SET status = ?, updated_at = ? WHERE bot_id = ?', ['paused', new Date(), payload.botId]);
+        await state.adapter.query('UPDATE dca_bots SET status = ?, updated_at = ? WHERE bot_id = ?', ['paused', blockTimeOf(ctx), payload.botId]);
         await emitContractEvent(state.adapter, name, 'pauseBot', payload, {
             action: 'dca_bot_paused',
             data: {
                 botId: payload.botId,
                 owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const resumeBot = async (payload: z.infer<typeof botIdSchema>, ctx: any) => {
@@ -157,21 +158,21 @@ export function createDcaBotContract(options: DcaBotContractOptions = {}) {
             throw new Error('Only the bot owner can resume this bot');
         }
 
-        await state.adapter.query('UPDATE dca_bots SET status = ?, updated_at = ? WHERE bot_id = ?', ['active', new Date(), payload.botId]);
+        await state.adapter.query('UPDATE dca_bots SET status = ?, updated_at = ? WHERE bot_id = ?', ['active', blockTimeOf(ctx), payload.botId]);
         await emitContractEvent(state.adapter, name, 'resumeBot', payload, {
             action: 'dca_bot_resumed',
             data: {
                 botId: payload.botId,
                 owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const executeDueBots = async (payload: { botId?: string } = {}, _ctx: any) => {
         const bots = payload.botId
             ? await state.adapter.query('SELECT * FROM dca_bots WHERE bot_id = ?', [payload.botId])
             : await state.adapter.query('SELECT * FROM dca_bots WHERE status = ?', ['active']);
-        const now = new Date();
+        const now = blockTimeOf(_ctx);
 
         for (const bot of bots) {
             if (bot.status !== 'active') {
@@ -210,7 +211,7 @@ export function createDcaBotContract(options: DcaBotContractOptions = {}) {
                     amountPerInterval: bot.amount_per_interval,
                     slippageBps: bot.slippage_bps
                 }
-            });
+            }, blockTimeOf(_ctx));
         }
     };
 
@@ -244,7 +245,7 @@ export function createDcaBotContract(options: DcaBotContractOptions = {}) {
                 status: payload.status,
                 externalRef: payload.externalRef || null
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     return defineContract({

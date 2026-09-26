@@ -4,7 +4,7 @@ import seedrandom from 'seedrandom';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
-import { createFairnessSupport, formatBlockchainAmount, formatFairnessMemo, parseBlockchainAmount, resolveContractAccount } from './helpers';
+import { createFairnessSupport, formatBlockchainAmount, formatFairnessMemo, parseBlockchainAmount, resolveContractAccount, blockTimeOf } from './helpers';
 import { resolveFairnessOption, type FairDrawProof, type FairnessManager, type FairnessOptions } from '../fairness/manager';
 
 const DEFAULT_NAME = 'roulette';
@@ -361,7 +361,7 @@ export function createRouletteContract(options: RouletteContractOptions = {}) {
                 const won = isWinningBet(bet, winningNumber);
 
                 if (state.adapter?.addEvent) {
-                    await state.adapter.addEvent(new Date(), name, 'spin', payload, {
+                    await state.adapter.addEvent(blockTimeOf(ctx), name, 'spin', payload, {
                         action: 'spin_result',
                         data: {
                             player: sender,

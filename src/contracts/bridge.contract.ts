@@ -5,6 +5,7 @@ import { action, defineContract } from './contract';
 import {
     amountSchema,
     assetSchema,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     initializeTables,
@@ -211,7 +212,7 @@ export function createBridgeContract(options: BridgeContractOptions) {
         await emitContractEvent(state.adapter, name, event, { refType, refId }, {
             action: `bridge_${event}`,
             data: { refType, refId, actor, ...details }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const isPaused = async (): Promise<boolean> => {

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { action, defineContract } from './contract';
-import { ensureSqlAdapter } from './helpers';
+import { ensureSqlAdapter, blockTimeOf } from './helpers';
 
 const DEFAULT_NAME = 'tipjar';
 
@@ -41,10 +41,10 @@ export function createTipJarContract(options: TipJarContractOptions = {}) {
 
         await state.adapter.query(
             'INSERT INTO tipjar_tips (from_account, amount, asset, message, block_number, transaction_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [ctx.sender, ctx.transfer.amount, ctx.transfer.asset, payload.message || '', ctx.block.number, ctx.transaction.id, new Date()]
+            [ctx.sender, ctx.transfer.amount, ctx.transfer.asset, payload.message || '', ctx.block.number, ctx.transaction.id, blockTimeOf(ctx)]
         );
 
-        await state.adapter.addEvent(new Date(), name, 'tip', payload, {
+        await state.adapter.addEvent(blockTimeOf(ctx), name, 'tip', payload, {
             action: 'tip_received',
             data: {
                 from: ctx.sender,

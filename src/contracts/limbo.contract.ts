@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { getLogger } from '../logger';
 import { action, defineContract } from './contract';
 import {
+    blockTimeOf,
     createFairnessSupport,
     emitContractEvent,
     formatFairnessMemo,
@@ -116,7 +117,7 @@ export function createLimboContract(options: LimboContractOptions) {
             await emitContractEvent(state.adapter, name, 'bet', payload, {
                 action: 'limbo_refund',
                 data: { player, reason, amount: amount.toFixed(PRECISION), asset, transactionId: operationRecordId(ctx.transaction.id, ctx.transaction.operationIndex) }
-            });
+            }, blockTimeOf(ctx));
         };
 
         if (!assets.includes(asset)) {
@@ -183,7 +184,7 @@ export function createLimboContract(options: LimboContractOptions) {
                     fairness: draw.proof,
                     outcomeSpec: { type: 'crash', houseEdgeBps }
                 }
-            });
+            }, blockTimeOf(ctx));
 
             const fairMemo = formatFairnessMemo(draw.proof);
 

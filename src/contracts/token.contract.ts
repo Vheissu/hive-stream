@@ -2,7 +2,7 @@ import { getLogger } from '../logger';
 import BigNumber from '../bignumber';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
-import { ensureSqlAdapter } from './helpers';
+import { ensureSqlAdapter, blockTimeOf } from './helpers';
 
 const DEFAULT_NAME = 'hivetoken';
 
@@ -157,9 +157,9 @@ export function createTokenContract(options: TokenContractOptions = {}) {
                 await adapter.query(`
                     INSERT INTO tokens (symbol, name, url, precision, max_supply, current_supply, creator, created_at)
                     VALUES (?, ?, ?, ?, ?, '0', ?, ?)
-                `, [symbol, tokenName, url, precision, maxSupply, ctx.sender, new Date()]);
+                `, [symbol, tokenName, url, precision, maxSupply, ctx.sender, blockTimeOf(ctx)]);
 
-                await adapter.addEvent(new Date(), name, 'createToken', payload, {
+                await adapter.addEvent(blockTimeOf(ctx), name, 'createToken', payload, {
                     action: 'token_created',
                     data: {
                         symbol,
@@ -234,9 +234,9 @@ export function createTokenContract(options: TokenContractOptions = {}) {
                 await adapter.query(`
                     INSERT INTO token_transfers (from_account, to_account, amount, symbol, memo, block_number, transaction_id, timestamp)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                `, ['null', to, amount, symbol, memo, ctx.block.number, ctx.transaction.id, new Date()]);
+                `, ['null', to, amount, symbol, memo, ctx.block.number, ctx.transaction.id, blockTimeOf(ctx)]);
 
-                await adapter.addEvent(new Date(), name, 'issueTokens', payload, {
+                await adapter.addEvent(blockTimeOf(ctx), name, 'issueTokens', payload, {
                     action: 'tokens_issued',
                     data: {
                         to,
@@ -315,9 +315,9 @@ export function createTokenContract(options: TokenContractOptions = {}) {
                 await adapter.query(`
                     INSERT INTO token_transfers (from_account, to_account, amount, symbol, memo, block_number, transaction_id, timestamp)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                `, [ctx.sender, to, amount, symbol, memo, ctx.block.number, ctx.transaction.id, new Date()]);
+                `, [ctx.sender, to, amount, symbol, memo, ctx.block.number, ctx.transaction.id, blockTimeOf(ctx)]);
 
-                await adapter.addEvent(new Date(), name, 'transferTokens', payload, {
+                await adapter.addEvent(blockTimeOf(ctx), name, 'transferTokens', payload, {
                     action: 'tokens_transferred',
                     data: {
                         from: ctx.sender,
@@ -346,7 +346,7 @@ export function createTokenContract(options: TokenContractOptions = {}) {
 
             const balanceAmount = balance && balance.length > 0 ? balance[0].balance : '0';
 
-            await state.adapter.addEvent(new Date(), name, 'getBalance', payload, {
+            await state.adapter.addEvent(blockTimeOf(ctx), name, 'getBalance', payload, {
                 action: 'balance_query',
                 data: {
                     account,
@@ -375,7 +375,7 @@ export function createTokenContract(options: TokenContractOptions = {}) {
 
             const tokenData = token[0];
 
-            await state.adapter.addEvent(new Date(), name, 'getTokenInfo', payload, {
+            await state.adapter.addEvent(blockTimeOf(ctx), name, 'getTokenInfo', payload, {
                 action: 'token_info_query',
                 data: {
                     symbol,

@@ -4,6 +4,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -106,8 +107,8 @@ export function createSubscriptionContract(options: SubscriptionContractOptions 
                 payload.graceDays || 0,
                 1,
                 JSON.stringify(payload.metadata || {}),
-                new Date(),
-                new Date()
+                blockTimeOf(ctx),
+                blockTimeOf(ctx)
             ]
         );
 
@@ -117,7 +118,7 @@ export function createSubscriptionContract(options: SubscriptionContractOptions 
                 planId: payload.planId,
                 creator
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const updatePlan = async (payload: z.infer<typeof updatePlanSchema>, ctx: any) => {
@@ -144,7 +145,7 @@ export function createSubscriptionContract(options: SubscriptionContractOptions 
                 typeof payload.graceDays === 'number' ? payload.graceDays : plan.grace_days,
                 typeof payload.active === 'boolean' ? (payload.active ? 1 : 0) : plan.active,
                 JSON.stringify(payload.metadata || JSON.parse(plan.metadata || '{}')),
-                new Date(),
+                blockTimeOf(ctx),
                 payload.planId
             ]
         );
@@ -155,7 +156,7 @@ export function createSubscriptionContract(options: SubscriptionContractOptions 
                 planId: payload.planId,
                 creator: sender
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const subscribe = async (payload: z.infer<typeof planIdSchema>, ctx: any) => {
@@ -181,7 +182,7 @@ export function createSubscriptionContract(options: SubscriptionContractOptions 
             [payload.planId, subscriber]
         );
 
-        const now = new Date();
+        const now = blockTimeOf(ctx);
         const baseDate = membershipRows.length > 0 && parseDateValue(membershipRows[0].active_until) && parseDateValue(membershipRows[0].active_until)! > now
             ? parseDateValue(membershipRows[0].active_until)!
             : now;
@@ -222,7 +223,7 @@ export function createSubscriptionContract(options: SubscriptionContractOptions 
                 activeUntil,
                 source: payment.source
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const cancel = async (payload: z.infer<typeof planIdSchema>, ctx: any) => {
@@ -237,7 +238,7 @@ export function createSubscriptionContract(options: SubscriptionContractOptions 
 
         await state.adapter.query(
             'UPDATE subscription_memberships SET status = ?, updated_at = ? WHERE plan_id = ? AND subscriber = ?',
-            ['cancelled', new Date(), payload.planId, sender]
+            ['cancelled', blockTimeOf(ctx), payload.planId, sender]
         );
 
         await emitContractEvent(state.adapter, name, 'cancelSubscription', payload, {
@@ -246,7 +247,7 @@ export function createSubscriptionContract(options: SubscriptionContractOptions 
                 planId: payload.planId,
                 subscriber: sender
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const expireMemberships = async (payload: { planId?: string } = {}, ctx: any) => {
@@ -254,7 +255,7 @@ export function createSubscriptionContract(options: SubscriptionContractOptions 
             ? await state.adapter.query('SELECT * FROM subscription_plans WHERE plan_id = ?', [payload.planId])
             : await state.adapter.query('SELECT * FROM subscription_plans', []);
 
-        const now = new Date();
+        const now = blockTimeOf(ctx);
         for (const plan of plans) {
             const memberships = await state.adapter.query(
                 'SELECT * FROM subscription_memberships WHERE plan_id = ? AND status = ?',
@@ -280,7 +281,7 @@ export function createSubscriptionContract(options: SubscriptionContractOptions 
                             planId: membership.plan_id,
                             subscriber: membership.subscriber
                         }
-                    });
+                    }, blockTimeOf(ctx));
                 }
             }
         }

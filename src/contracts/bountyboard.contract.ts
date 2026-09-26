@@ -3,6 +3,7 @@ import { action, defineContract } from './contract';
 import {
     amountSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -103,7 +104,7 @@ export function createBountyBoardContract(options: BountyBoardContractOptions = 
         }
 
         const deadline = parseDateValue(payload.deadline);
-        if (deadline && deadline <= new Date()) {
+        if (deadline && deadline <= blockTimeOf(ctx)) {
             throw new Error('Bounty deadline must be in the future');
         }
 
@@ -123,8 +124,8 @@ export function createBountyBoardContract(options: BountyBoardContractOptions = 
                 payload.maxWinners || 1,
                 'open',
                 JSON.stringify(payload.metadata || {}),
-                new Date(),
-                new Date()
+                blockTimeOf(ctx),
+                blockTimeOf(ctx)
             ]
         );
 
@@ -136,7 +137,7 @@ export function createBountyBoardContract(options: BountyBoardContractOptions = 
                 rewardPool: payment.amount,
                 asset: payment.asset
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const submitWork = async (payload: z.infer<typeof submitWorkSchema>, ctx: any) => {
@@ -152,7 +153,7 @@ export function createBountyBoardContract(options: BountyBoardContractOptions = 
         }
 
         const deadline = parseDateValue(bounty.deadline);
-        if (deadline && deadline <= new Date()) {
+        if (deadline && deadline <= blockTimeOf(ctx)) {
             throw new Error('Bounty submission window has closed');
         }
 
@@ -165,7 +166,7 @@ export function createBountyBoardContract(options: BountyBoardContractOptions = 
             `INSERT INTO bounty_board_submissions (
                 submission_id, bounty_id, submitter, url, description, status, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [payload.submissionId, payload.bountyId, submitter, payload.url, payload.description || '', 'submitted', new Date()]
+            [payload.submissionId, payload.bountyId, submitter, payload.url, payload.description || '', 'submitted', blockTimeOf(ctx)]
         );
 
         await emitContractEvent(state.adapter, name, 'submitWork', payload, {
@@ -175,7 +176,7 @@ export function createBountyBoardContract(options: BountyBoardContractOptions = 
                 submissionId: payload.submissionId,
                 submitter
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const awardBounty = async (payload: z.infer<typeof awardSchema>, ctx: any) => {
@@ -217,7 +218,7 @@ export function createBountyBoardContract(options: BountyBoardContractOptions = 
 
         await state.adapter.query(
             'INSERT INTO bounty_board_awards (bounty_id, submission_id, winner, amount, note, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-            [payload.bountyId, payload.submissionId, submission.submitter, amount, payload.note || '', new Date()]
+            [payload.bountyId, payload.submissionId, submission.submitter, amount, payload.note || '', blockTimeOf(ctx)]
         );
         await state.adapter.query(
             'UPDATE bounty_board_submissions SET status = ? WHERE submission_id = ?',
@@ -231,7 +232,7 @@ export function createBountyBoardContract(options: BountyBoardContractOptions = 
 
         await state.adapter.query(
             'UPDATE bounty_board_bounties SET remaining_reward = ?, status = ?, updated_at = ? WHERE bounty_id = ?',
-            [remainingReward.toFixed(), nextStatus, new Date(), payload.bountyId]
+            [remainingReward.toFixed(), nextStatus, blockTimeOf(ctx), payload.bountyId]
         );
 
         await emitContractEvent(state.adapter, name, 'awardBounty', payload, {
@@ -244,7 +245,7 @@ export function createBountyBoardContract(options: BountyBoardContractOptions = 
                 asset: bounty.asset,
                 remainingReward: remainingReward.toFixed()
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const closeBounty = async (payload: z.infer<typeof closeSchema>, ctx: any) => {
@@ -263,7 +264,7 @@ export function createBountyBoardContract(options: BountyBoardContractOptions = 
 
         await state.adapter.query(
             'UPDATE bounty_board_bounties SET status = ?, updated_at = ? WHERE bounty_id = ?',
-            ['closed', new Date(), payload.bountyId]
+            ['closed', blockTimeOf(ctx), payload.bountyId]
         );
 
         await emitContractEvent(state.adapter, name, 'closeBounty', payload, {
@@ -274,7 +275,7 @@ export function createBountyBoardContract(options: BountyBoardContractOptions = 
                 remainingReward: bounty.remaining_reward,
                 asset: bounty.asset
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     return defineContract({

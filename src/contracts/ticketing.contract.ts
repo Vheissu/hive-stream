@@ -4,6 +4,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -113,7 +114,7 @@ export function createTicketingContract(options: TicketingContractOptions = {}) 
         }
 
         const startsAt = parseDateValue(payload.startsAt);
-        if (!startsAt || startsAt <= new Date()) {
+        if (!startsAt || startsAt <= blockTimeOf(ctx)) {
             throw new Error('Event start time must be in the future');
         }
 
@@ -121,7 +122,7 @@ export function createTicketingContract(options: TicketingContractOptions = {}) 
             `INSERT INTO ticket_events (
                 event_id, owner, title, venue, starts_at, ticket_price, asset, capacity, sold_count, status, metadata, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [payload.eventId, owner, payload.title, payload.venue, startsAt, payload.ticketPrice, payload.asset, payload.capacity, 0, 'active', JSON.stringify(payload.metadata || {}), new Date()]
+            [payload.eventId, owner, payload.title, payload.venue, startsAt, payload.ticketPrice, payload.asset, payload.capacity, 0, 'active', JSON.stringify(payload.metadata || {}), blockTimeOf(ctx)]
         );
 
         await emitContractEvent(state.adapter, name, 'createEvent', payload, {
@@ -130,7 +131,7 @@ export function createTicketingContract(options: TicketingContractOptions = {}) 
                 eventId: payload.eventId,
                 owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const purchaseTicket = async (payload: z.infer<typeof purchaseSchema>, ctx: any) => {
@@ -146,7 +147,7 @@ export function createTicketingContract(options: TicketingContractOptions = {}) 
             throw new Error('Event is not active');
         }
 
-        if ((parseDateValue(event.starts_at) || new Date()) <= new Date()) {
+        if ((parseDateValue(event.starts_at) || blockTimeOf(ctx)) <= blockTimeOf(ctx)) {
             throw new Error('Ticket sales are closed for this event');
         }
 
@@ -166,7 +167,7 @@ export function createTicketingContract(options: TicketingContractOptions = {}) 
 
         await state.adapter.query(
             'INSERT INTO tickets (ticket_id, event_id, owner, status, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [payload.ticketId, payload.eventId, buyer, 'valid', '', new Date(), new Date()]
+            [payload.ticketId, payload.eventId, buyer, 'valid', '', blockTimeOf(ctx), blockTimeOf(ctx)]
         );
         await state.adapter.query(
             'UPDATE ticket_events SET sold_count = ? WHERE event_id = ?',
@@ -180,7 +181,7 @@ export function createTicketingContract(options: TicketingContractOptions = {}) 
                 eventId: payload.eventId,
                 buyer
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const checkInTicket = async (payload: z.infer<typeof ticketIdSchema>, ctx: any) => {
@@ -203,7 +204,7 @@ export function createTicketingContract(options: TicketingContractOptions = {}) 
 
         await state.adapter.query(
             'UPDATE tickets SET status = ?, note = ?, updated_at = ? WHERE ticket_id = ?',
-            ['checked_in', payload.note || '', new Date(), payload.ticketId]
+            ['checked_in', payload.note || '', blockTimeOf(ctx), payload.ticketId]
         );
 
         await emitContractEvent(state.adapter, name, 'checkInTicket', payload, {
@@ -213,7 +214,7 @@ export function createTicketingContract(options: TicketingContractOptions = {}) 
                 eventId: ticket.event_id,
                 owner: ticket.owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const refundTicket = async (payload: z.infer<typeof ticketIdSchema>, ctx: any) => {
@@ -236,7 +237,7 @@ export function createTicketingContract(options: TicketingContractOptions = {}) 
 
         await state.adapter.query(
             'UPDATE tickets SET status = ?, note = ?, updated_at = ? WHERE ticket_id = ?',
-            ['refunded', payload.note || '', new Date(), payload.ticketId]
+            ['refunded', payload.note || '', blockTimeOf(ctx), payload.ticketId]
         );
 
         await emitContractEvent(state.adapter, name, 'refundTicket', payload, {
@@ -248,13 +249,13 @@ export function createTicketingContract(options: TicketingContractOptions = {}) 
                 amount: event.ticket_price,
                 asset: event.asset
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
-    const deactivateListing = async (ticketId: string) => {
+    const deactivateListing = async (ticketId: string, ctx: any) => {
         await state.adapter.query(
             'UPDATE ticket_listings SET active = 0, updated_at = ? WHERE ticket_id = ? AND active = 1',
-            [new Date(), ticketId]
+            [blockTimeOf(ctx), ticketId]
         );
     };
 
@@ -289,10 +290,10 @@ export function createTicketingContract(options: TicketingContractOptions = {}) 
             throw new Error('Cannot transfer a ticket to yourself');
         }
 
-        await deactivateListing(payload.ticketId);
+        await deactivateListing(payload.ticketId, ctx);
         await state.adapter.query(
             'UPDATE tickets SET owner = ?, note = ?, updated_at = ? WHERE ticket_id = ?',
-            [payload.to, payload.note || '', new Date(), payload.ticketId]
+            [payload.to, payload.note || '', blockTimeOf(ctx), payload.ticketId]
         );
 
         await emitContractEvent(state.adapter, name, 'transferTicket', payload, {
@@ -303,7 +304,7 @@ export function createTicketingContract(options: TicketingContractOptions = {}) 
                 from: sender,
                 to: payload.to
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const listTicket = async (payload: z.infer<typeof listTicketSchema>, ctx: any) => {
@@ -314,13 +315,13 @@ export function createTicketingContract(options: TicketingContractOptions = {}) 
             throw new Error('Only the ticket owner can list the ticket for resale');
         }
 
-        if ((parseDateValue(event.starts_at) || new Date()) <= new Date()) {
+        if ((parseDateValue(event.starts_at) || blockTimeOf(ctx)) <= blockTimeOf(ctx)) {
             throw new Error('Resale is closed for this event');
         }
 
         const asset = payload.asset || event.asset;
 
-        await deactivateListing(payload.ticketId);
+        await deactivateListing(payload.ticketId, ctx);
         await state.adapter.query(
             `INSERT INTO ticket_listings (ticket_id, event_id, seller, price, asset, active, listed_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -331,7 +332,7 @@ export function createTicketingContract(options: TicketingContractOptions = {}) 
                 active = excluded.active,
                 listed_at = excluded.listed_at,
                 updated_at = excluded.updated_at`,
-            [payload.ticketId, ticket.event_id, sender, payload.price, asset, 1, new Date(), new Date()]
+            [payload.ticketId, ticket.event_id, sender, payload.price, asset, 1, blockTimeOf(ctx), blockTimeOf(ctx)]
         );
 
         await emitContractEvent(state.adapter, name, 'listTicket', payload, {
@@ -343,7 +344,7 @@ export function createTicketingContract(options: TicketingContractOptions = {}) 
                 price: payload.price,
                 asset
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const unlistTicket = async (payload: z.infer<typeof buyTicketSchema>, ctx: any) => {
@@ -361,7 +362,7 @@ export function createTicketingContract(options: TicketingContractOptions = {}) 
             throw new Error('Only the seller can unlist the ticket');
         }
 
-        await deactivateListing(payload.ticketId);
+        await deactivateListing(payload.ticketId, ctx);
 
         await emitContractEvent(state.adapter, name, 'unlistTicket', payload, {
             action: 'ticket_unlisted',
@@ -369,7 +370,7 @@ export function createTicketingContract(options: TicketingContractOptions = {}) 
                 ticketId: payload.ticketId,
                 seller: sender
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const buyTicketDirect = async (payload: z.infer<typeof buyTicketSchema>, ctx: any) => {
@@ -399,7 +400,7 @@ export function createTicketingContract(options: TicketingContractOptions = {}) 
             throw new Error('Listing is stale: the seller no longer owns this ticket');
         }
 
-        if ((parseDateValue(event.starts_at) || new Date()) <= new Date()) {
+        if ((parseDateValue(event.starts_at) || blockTimeOf(ctx)) <= blockTimeOf(ctx)) {
             throw new Error('Resale is closed for this event');
         }
 
@@ -408,10 +409,10 @@ export function createTicketingContract(options: TicketingContractOptions = {}) 
             throw new Error(`Ticket resale price is ${listing.price} ${listing.asset}`);
         }
 
-        await deactivateListing(payload.ticketId);
+        await deactivateListing(payload.ticketId, ctx);
         await state.adapter.query(
             'UPDATE tickets SET owner = ?, updated_at = ? WHERE ticket_id = ?',
-            [buyer, new Date(), payload.ticketId]
+            [buyer, blockTimeOf(ctx), payload.ticketId]
         );
 
         await emitContractEvent(state.adapter, name, 'buyTicketDirect', payload, {
@@ -424,7 +425,7 @@ export function createTicketingContract(options: TicketingContractOptions = {}) 
                 price: listing.price,
                 asset: listing.asset
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     return defineContract({

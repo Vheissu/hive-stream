@@ -4,6 +4,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -127,7 +128,7 @@ export function createOracleBountyContract(options: OracleBountyContractOptions 
                 payload.toleranceBps || 0,
                 '0',
                 JSON.stringify(payload.metadata || {}),
-                new Date()
+                blockTimeOf(ctx)
             ]
         );
 
@@ -137,7 +138,7 @@ export function createOracleBountyContract(options: OracleBountyContractOptions 
                 feedId: payload.feedId,
                 owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const fundFeed = async (payload: z.infer<typeof idSchema>, ctx: any) => {
@@ -166,7 +167,7 @@ export function createOracleBountyContract(options: OracleBountyContractOptions 
                 feedId: payload.feedId,
                 budgetBalance: budget.toFixed()
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const submitReport = async (payload: z.infer<typeof submitReportSchema>, ctx: any) => {
@@ -181,11 +182,11 @@ export function createOracleBountyContract(options: OracleBountyContractOptions 
              VALUES (?, ?, ?, ?, ?, ?)
              ON CONFLICT(feed_id, round_id)
              DO NOTHING`,
-            [payload.feedId, payload.roundId, null, 'open', new Date(), new Date()]
+            [payload.feedId, payload.roundId, null, 'open', blockTimeOf(ctx), blockTimeOf(ctx)]
         );
         await state.adapter.query(
             'INSERT INTO oracle_reports (feed_id, round_id, reporter, value, rewarded, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [payload.feedId, payload.roundId, reporter, payload.value, 0, payload.note || '', new Date()]
+            [payload.feedId, payload.roundId, reporter, payload.value, 0, payload.note || '', blockTimeOf(ctx)]
         );
 
         await emitContractEvent(state.adapter, name, 'submitReport', payload, {
@@ -196,7 +197,7 @@ export function createOracleBountyContract(options: OracleBountyContractOptions 
                 reporter,
                 value: payload.value
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const finalizeRound = async (payload: z.infer<typeof finalizeRoundSchema>, ctx: any) => {
@@ -246,7 +247,7 @@ export function createOracleBountyContract(options: OracleBountyContractOptions 
                  VALUES (?, ?, ?, ?, ?)
                  ON CONFLICT(feed_id, account, asset)
                  DO UPDATE SET balance = excluded.balance, updated_at = excluded.updated_at`,
-                [payload.feedId, report.reporter, feed.reward_asset, nextBalance.toFixed(), new Date()]
+                [payload.feedId, report.reporter, feed.reward_asset, nextBalance.toFixed(), blockTimeOf(ctx)]
             );
             await state.adapter.query(
                 'UPDATE oracle_reports SET rewarded = ? WHERE id = ?',
@@ -260,7 +261,7 @@ export function createOracleBountyContract(options: OracleBountyContractOptions 
         );
         await state.adapter.query(
             'UPDATE oracle_rounds SET median_value = ?, status = ?, updated_at = ? WHERE feed_id = ? AND round_id = ?',
-            [median, 'finalized', new Date(), payload.feedId, payload.roundId]
+            [median, 'finalized', blockTimeOf(ctx), payload.feedId, payload.roundId]
         );
 
         await emitContractEvent(state.adapter, name, 'finalizeRound', payload, {
@@ -271,7 +272,7 @@ export function createOracleBountyContract(options: OracleBountyContractOptions 
                 median,
                 rewardedCount
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const withdrawRewards = async (payload: { feedId?: string } = {}, ctx: any) => {
@@ -290,7 +291,7 @@ export function createOracleBountyContract(options: OracleBountyContractOptions 
 
             await state.adapter.query(
                 'UPDATE oracle_reward_balances SET balance = ?, updated_at = ? WHERE feed_id = ? AND account = ? AND asset = ?',
-                ['0', new Date(), balance.feed_id, account, balance.asset]
+                ['0', blockTimeOf(ctx), balance.feed_id, account, balance.asset]
             );
 
             await emitContractEvent(state.adapter, name, 'withdrawRewards', payload, {
@@ -301,7 +302,7 @@ export function createOracleBountyContract(options: OracleBountyContractOptions 
                     amount: balance.balance,
                     asset: balance.asset
                 }
-            });
+            }, blockTimeOf(ctx));
         }
     };
 

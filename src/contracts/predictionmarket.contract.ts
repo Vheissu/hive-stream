@@ -4,6 +4,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -89,7 +90,7 @@ export function createPredictionMarketContract(options: PredictionMarketContract
         }
 
         const closesAt = parseDateValue(payload.closesAt);
-        if (!closesAt || closesAt <= new Date()) {
+        if (!closesAt || closesAt <= blockTimeOf(ctx)) {
             throw new Error('Market close time must be in the future');
         }
 
@@ -108,7 +109,7 @@ export function createPredictionMarketContract(options: PredictionMarketContract
                 null,
                 'open',
                 JSON.stringify(payload.metadata || {}),
-                new Date(),
+                blockTimeOf(ctx),
                 null
             ]
         );
@@ -119,7 +120,7 @@ export function createPredictionMarketContract(options: PredictionMarketContract
                 marketId: payload.marketId,
                 creator
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const buyPosition = async (payload: z.infer<typeof buyPositionSchema>, ctx: any) => {
@@ -140,7 +141,7 @@ export function createPredictionMarketContract(options: PredictionMarketContract
             throw new Error('Market is not open');
         }
 
-        if ((parseDateValue(market.closes_at) || new Date()) <= new Date()) {
+        if ((parseDateValue(market.closes_at) || blockTimeOf(ctx)) <= blockTimeOf(ctx)) {
             throw new Error('Market is closed');
         }
 
@@ -158,7 +159,7 @@ export function createPredictionMarketContract(options: PredictionMarketContract
              VALUES (?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(market_id, account, option_index)
              DO UPDATE SET stake_amount = excluded.stake_amount, updated_at = excluded.updated_at`,
-            [payload.marketId, account, payload.option, nextStake.toFixed(), 0, new Date(), new Date()]
+            [payload.marketId, account, payload.option, nextStake.toFixed(), 0, blockTimeOf(ctx), blockTimeOf(ctx)]
         );
         await state.adapter.query(
             'UPDATE prediction_markets SET total_pool = ? WHERE market_id = ?',
@@ -173,7 +174,7 @@ export function createPredictionMarketContract(options: PredictionMarketContract
                 option: payload.option,
                 amount: payment.amount
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const resolveMarket = async (payload: z.infer<typeof resolveSchema>, ctx: any) => {
@@ -195,13 +196,13 @@ export function createPredictionMarketContract(options: PredictionMarketContract
             }
         }
 
-        if ((parseDateValue(market.closes_at) || new Date()) > new Date()) {
+        if ((parseDateValue(market.closes_at) || blockTimeOf(ctx)) > blockTimeOf(ctx)) {
             throw new Error('Market cannot be resolved before close');
         }
 
         await state.adapter.query(
             'UPDATE prediction_markets SET winning_option = ?, status = ?, resolved_at = ? WHERE market_id = ?',
-            [payload.winningOption, 'resolved', new Date(), payload.marketId]
+            [payload.winningOption, 'resolved', blockTimeOf(ctx), payload.marketId]
         );
 
         await emitContractEvent(state.adapter, name, 'resolveMarket', payload, {
@@ -210,7 +211,7 @@ export function createPredictionMarketContract(options: PredictionMarketContract
                 marketId: payload.marketId,
                 winningOption: payload.winningOption
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const claimWinnings = async (payload: z.infer<typeof claimSchema>, ctx: any) => {
@@ -251,7 +252,7 @@ export function createPredictionMarketContract(options: PredictionMarketContract
 
         await state.adapter.query(
             'UPDATE prediction_positions SET claimed = ?, updated_at = ? WHERE id = ?',
-            [1, new Date(), position.id]
+            [1, blockTimeOf(ctx), position.id]
         );
 
         await emitContractEvent(state.adapter, name, 'claimWinnings', payload, {
@@ -262,7 +263,7 @@ export function createPredictionMarketContract(options: PredictionMarketContract
                 payout: payout.toFixed(),
                 asset: market.asset
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     return defineContract({

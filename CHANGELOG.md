@@ -38,6 +38,7 @@ Upgrading? Read the [migration guide](docs/guide/migrating-to-4.md) ([online](ht
 - `ctx.transaction.operationIndex`, and `ctx.transfer` is now populated for `recurrent_transfer` triggers.
 
 ### 🐛 Fixed
+- **Built-in contracts used the wall clock for deadlines and records.** Checks like "deadline has passed" and every `created_at`/`updated_at`/event timestamp used `new Date()`, so catching up on old blocks rejected contributions, bids and entries that were on time when sent, and replays wrote different timestamps. All built-in contracts now use the block timestamp (`blockTimeOf(ctx)`); `emitContractEvent()` takes an optional time.
 - **NFT marketplace sales paid sellers and royalties from `beggars`.** `buyNFT` read a non-existent `config.HIVE_ACCOUNT`, so it verified buyer payments against `beggars` and broadcast seller/royalty payouts from it. The marketplace account is now `options.account` on `createNFTContract()`, defaulting to the streamer username.
 - `lotto` never created its tables on SQL adapters, so `registerContract()` failed on a fresh SQLite/PostgreSQL database (`no such table: settings`). It now creates `lotto_draws` and `lotto_settings` (entries, winners and fairness proofs stored as JSON) on SQL adapters and keeps the `lottery`/`settings` collections on MongoDB. A test registers every built-in factory on a fresh SQLite database.
 - A crash within 5 seconds of processing a block replayed it and could re-run payouts.

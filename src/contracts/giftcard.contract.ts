@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { action, defineContract } from './contract';
 import {
     amountSchema,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -87,7 +88,7 @@ export function createGiftCardContract(options: GiftCardContractOptions = {}) {
                 payload.message || '',
                 expiresAt,
                 'active',
-                new Date()
+                blockTimeOf(ctx)
             ]
         );
 
@@ -100,7 +101,7 @@ export function createGiftCardContract(options: GiftCardContractOptions = {}) {
                 asset: payment.asset,
                 recipient: payload.recipient || null
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const redeemGiftCard = async (payload: z.infer<typeof redeemSchema>, ctx: any) => {
@@ -116,7 +117,7 @@ export function createGiftCardContract(options: GiftCardContractOptions = {}) {
         }
 
         const expiresAt = parseDateValue(card.expires_at);
-        if (expiresAt && expiresAt < new Date()) {
+        if (expiresAt && expiresAt < blockTimeOf(ctx)) {
             throw new Error('Gift card has expired');
         }
 
@@ -136,7 +137,7 @@ export function createGiftCardContract(options: GiftCardContractOptions = {}) {
 
         await state.adapter.query(
             'INSERT INTO gift_card_redemptions (code, redeemer, amount, created_at) VALUES (?, ?, ?, ?)',
-            [payload.code, redeemer, amount, new Date()]
+            [payload.code, redeemer, amount, blockTimeOf(ctx)]
         );
         await state.adapter.query(
             'UPDATE gift_cards SET remaining_amount = ?, status = ? WHERE code = ?',
@@ -152,7 +153,7 @@ export function createGiftCardContract(options: GiftCardContractOptions = {}) {
                 asset: card.asset,
                 remainingAmount: remaining.toFixed()
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const cancelGiftCard = async (payload: z.infer<typeof redeemSchema>, ctx: any) => {
@@ -182,7 +183,7 @@ export function createGiftCardContract(options: GiftCardContractOptions = {}) {
                 code: payload.code,
                 issuer
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     return defineContract({

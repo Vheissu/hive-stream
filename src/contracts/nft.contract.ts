@@ -4,7 +4,7 @@ import { Streamer } from '../streamer';
 import { Utils } from '../utils';
 import { action, defineContract } from './contract';
 import { parseBlockchainAmount } from './helpers';
-import { ensureSqlAdapter, resolveContractAccount } from './helpers';
+import { blockTimeOf, ensureSqlAdapter, resolveContractAccount } from './helpers';
 
 const CONTRACT_NAME = 'hivenft';
 
@@ -64,6 +64,7 @@ export class NFTContract {
     private blockId: string;
     private previousBlockId: string;
     private transactionId: string;
+    private blockTime: Date | null = null;
 
     public async create() {
         this.adapter = this._instance.getAdapter();
@@ -75,11 +76,17 @@ export class NFTContract {
         // Cleanup logic if needed
     }
 
-    public updateBlockInfo(blockNumber: number, blockId: string, previousBlockId: string, transactionId: string) {
+    public updateBlockInfo(blockNumber: number, blockId: string, previousBlockId: string, transactionId: string, blockTime?: Date | string) {
         this.blockNumber = blockNumber;
         this.blockId = blockId;
         this.previousBlockId = previousBlockId;
         this.transactionId = transactionId;
+        this.blockTime = blockTime ? blockTimeOf({ block: { time: blockTime } }) : null;
+    }
+
+    /** Block time of the operation being processed; wall clock only outside the streamer. */
+    private now(): Date {
+        return this.blockTime ?? new Date();
     }
 
     private async initializeNFTTables() {
@@ -217,9 +224,9 @@ export class NFTContract {
                 await adapter.query(`
                     INSERT INTO nft_collections (symbol, name, description, creator, max_supply, royalty, base_uri, allow_updates, updateable_by_owner, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                `, [symbol, name, description, sender, normalizedMaxSupply, royalty, baseUri, allowUpdates, updateableByOwner, new Date()]);
+                `, [symbol, name, description, sender, normalizedMaxSupply, royalty, baseUri, allowUpdates, updateableByOwner, this.now()]);
 
-                await adapter.addEvent(new Date(), CONTRACT_NAME, 'createCollection', payload, {
+                await adapter.addEvent(this.now(), CONTRACT_NAME, 'createCollection', payload, {
                     action: 'collection_created',
                     data: {
                         symbol,
@@ -298,7 +305,7 @@ export class NFTContract {
                 await adapter.query(`
                     INSERT INTO nft_tokens (token_id, collection_symbol, owner, metadata, attributes, minted_at, minted_by)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                `, [tokenId, collectionSymbol, to, metadata, attributes, new Date(), sender]);
+                `, [tokenId, collectionSymbol, to, metadata, attributes, this.now(), sender]);
 
                 await adapter.query(
                     'UPDATE nft_collections SET current_supply = current_supply + 1 WHERE symbol = ?',
@@ -308,9 +315,9 @@ export class NFTContract {
                 await adapter.query(`
                     INSERT INTO nft_transfers (token_id, collection_symbol, from_account, to_account, transfer_type, block_number, transaction_id, timestamp)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                `, [tokenId, collectionSymbol, 'null', to, 'mint', this.blockNumber, this.transactionId, new Date()]);
+                `, [tokenId, collectionSymbol, 'null', to, 'mint', this.blockNumber, this.transactionId, this.now()]);
 
-                await adapter.addEvent(new Date(), CONTRACT_NAME, 'mintNFT', payload, {
+                await adapter.addEvent(this.now(), CONTRACT_NAME, 'mintNFT', payload, {
                     action: 'nft_minted',
                     data: {
                         tokenId,
@@ -439,12 +446,12 @@ export class NFTContract {
                     await adapter.query(`
                         INSERT INTO nft_tokens (token_id, collection_symbol, owner, metadata, attributes, minted_at, minted_by)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
-                    `, [token.tokenId, collectionSymbol, to, token.metadata, token.attributes, new Date(), sender]);
+                    `, [token.tokenId, collectionSymbol, to, token.metadata, token.attributes, this.now(), sender]);
 
                     await adapter.query(`
                         INSERT INTO nft_transfers (token_id, collection_symbol, from_account, to_account, transfer_type, block_number, transaction_id, timestamp)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    `, [token.tokenId, collectionSymbol, 'null', to, 'mint', this.blockNumber, this.transactionId, new Date()]);
+                    `, [token.tokenId, collectionSymbol, 'null', to, 'mint', this.blockNumber, this.transactionId, this.now()]);
                 }
 
                 await adapter.query(
@@ -452,7 +459,7 @@ export class NFTContract {
                     [mintList.length, collectionSymbol]
                 );
 
-                await adapter.addEvent(new Date(), CONTRACT_NAME, 'mintBatchNFT', payload, {
+                await adapter.addEvent(this.now(), CONTRACT_NAME, 'mintBatchNFT', payload, {
                     action: 'nft_batch_minted',
                     data: {
                         collectionSymbol,
@@ -551,7 +558,7 @@ export class NFTContract {
                     updateValues
                 );
 
-                await adapter.addEvent(new Date(), CONTRACT_NAME, 'updateNFT', payload, {
+                await adapter.addEvent(this.now(), CONTRACT_NAME, 'updateNFT', payload, {
                     action: 'nft_updated',
                     data: {
                         tokenId,
@@ -619,9 +626,9 @@ export class NFTContract {
                 await adapter.query(`
                     INSERT INTO nft_transfers (token_id, collection_symbol, from_account, to_account, transfer_type, block_number, transaction_id, timestamp)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                `, [tokenId, collectionSymbol, sender, to, 'transfer', this.blockNumber, this.transactionId, new Date()]);
+                `, [tokenId, collectionSymbol, sender, to, 'transfer', this.blockNumber, this.transactionId, this.now()]);
 
-                await adapter.addEvent(new Date(), CONTRACT_NAME, 'transferNFT', payload, {
+                await adapter.addEvent(this.now(), CONTRACT_NAME, 'transferNFT', payload, {
                     action: 'nft_transferred',
                     data: {
                         tokenId,
@@ -681,9 +688,9 @@ export class NFTContract {
                 await adapter.query(`
                     INSERT INTO nft_transfers (token_id, collection_symbol, from_account, to_account, transfer_type, block_number, transaction_id, timestamp)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                `, [tokenId, collectionSymbol, sender, 'null', 'burn', this.blockNumber, this.transactionId, new Date()]);
+                `, [tokenId, collectionSymbol, sender, 'null', 'burn', this.blockNumber, this.transactionId, this.now()]);
 
-                await adapter.addEvent(new Date(), CONTRACT_NAME, 'burnNFT', payload, {
+                await adapter.addEvent(this.now(), CONTRACT_NAME, 'burnNFT', payload, {
                     action: 'nft_burned',
                     data: {
                         tokenId,
@@ -743,9 +750,9 @@ export class NFTContract {
                 await adapter.query(`
                     INSERT INTO nft_listings (token_id, collection_symbol, seller, price, currency, listed_at)
                     VALUES (?, ?, ?, ?, ?, ?)
-                `, [tokenId, collectionSymbol, sender, price, currency, new Date()]);
+                `, [tokenId, collectionSymbol, sender, price, currency, this.now()]);
 
-                await adapter.addEvent(new Date(), CONTRACT_NAME, 'listNFT', payload, {
+                await adapter.addEvent(this.now(), CONTRACT_NAME, 'listNFT', payload, {
                     action: 'nft_listed',
                     data: {
                         tokenId,
@@ -787,7 +794,7 @@ export class NFTContract {
                     [tokenId, collectionSymbol, sender]
                 );
 
-                await adapter.addEvent(new Date(), CONTRACT_NAME, 'unlistNFT', payload, {
+                await adapter.addEvent(this.now(), CONTRACT_NAME, 'unlistNFT', payload, {
                     action: 'nft_unlisted',
                     data: {
                         tokenId,
@@ -870,9 +877,9 @@ export class NFTContract {
                 await adapter.query(`
                     INSERT INTO nft_transfers (token_id, collection_symbol, from_account, to_account, transfer_type, price, currency, block_number, transaction_id, timestamp)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                `, [tokenId, collectionSymbol, listingData.seller, sender, 'sale', amount, asset, this.blockNumber, this.transactionId, new Date()]);
+                `, [tokenId, collectionSymbol, listingData.seller, sender, 'sale', amount, asset, this.blockNumber, this.transactionId, this.now()]);
 
-                await adapter.addEvent(new Date(), CONTRACT_NAME, 'buyNFT', payload, {
+                await adapter.addEvent(this.now(), CONTRACT_NAME, 'buyNFT', payload, {
                     action: 'nft_sold',
                     data: {
                         tokenId,
@@ -981,9 +988,9 @@ export class NFTContract {
                 await adapter.query(`
                     INSERT INTO nft_transfers (token_id, collection_symbol, from_account, to_account, transfer_type, price, currency, block_number, transaction_id, timestamp)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                `, [tokenId, collectionSymbol, listingData.seller, sender, 'sale', amount, asset, this.blockNumber, this.transactionId, new Date()]);
+                `, [tokenId, collectionSymbol, listingData.seller, sender, 'sale', amount, asset, this.blockNumber, this.transactionId, this.now()]);
 
-                await adapter.addEvent(new Date(), CONTRACT_NAME, 'buyNFTDirect', payload, {
+                await adapter.addEvent(this.now(), CONTRACT_NAME, 'buyNFTDirect', payload, {
                     action: 'nft_sold_direct',
                     data: {
                         tokenId,
@@ -1033,7 +1040,7 @@ export class NFTContract {
 
             const listingData = listing && listing.length > 0 ? listing[0] : null;
 
-            await this.adapter.addEvent(new Date(), CONTRACT_NAME, 'getTokenInfo', payload, {
+            await this.adapter.addEvent(this.now(), CONTRACT_NAME, 'getTokenInfo', payload, {
                 action: 'token_info_query',
                 data: {
                     tokenId,
@@ -1069,7 +1076,7 @@ export class NFTContract {
 
             const collectionData = collection[0];
 
-            await this.adapter.addEvent(new Date(), CONTRACT_NAME, 'getCollectionInfo', payload, {
+            await this.adapter.addEvent(this.now(), CONTRACT_NAME, 'getCollectionInfo', payload, {
                 action: 'collection_info_query',
                 data: {
                     symbol,
@@ -1103,7 +1110,7 @@ export class NFTContract {
 
             const tokens = await this.adapter.query(query, params);
 
-            await this.adapter.addEvent(new Date(), CONTRACT_NAME, 'getUserTokens', payload, {
+            await this.adapter.addEvent(this.now(), CONTRACT_NAME, 'getUserTokens', payload, {
                 action: 'user_tokens_query',
                 data: {
                     account,
@@ -1136,7 +1143,7 @@ export function createNFTContract(options: NFTContractOptions = {}) {
     const instance = new NFTContract();
 
     const callWithContext = async (payload: any, ctx: any, handler: (data: any, meta: any) => any, meta: any) => {
-        instance.updateBlockInfo(ctx.block.number, ctx.block.id, ctx.block.previousId, ctx.transaction.id);
+        instance.updateBlockInfo(ctx.block.number, ctx.block.id, ctx.block.previousId, ctx.transaction.id, ctx.block.time);
         return handler(payload, meta);
     };
 

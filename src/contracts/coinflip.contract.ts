@@ -4,7 +4,7 @@ import seedrandom from 'seedrandom';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
-import { createFairnessSupport, formatBlockchainAmount, formatFairnessMemo, parseBlockchainAmount, resolveContractAccount } from './helpers';
+import { createFairnessSupport, formatBlockchainAmount, formatFairnessMemo, parseBlockchainAmount, resolveContractAccount, blockTimeOf } from './helpers';
 import { resolveFairnessOption, type FairDrawProof, type FairnessManager, type FairnessOptions } from '../fairness/manager';
 
 const DEFAULT_NAME = 'coinflip';
@@ -207,9 +207,9 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
                     }
 
                     if (userWon) {
-                        await state.adapter.addEvent(new Date(), name, 'flip', payload, {
+                        await state.adapter.addEvent(blockTimeOf(ctx), name, 'flip', payload, {
                             action: 'transfer',
-                            data: { date: new Date(), ...eventData }
+                            data: { date: blockTimeOf(ctx), ...eventData }
                         });
 
                         const winMemo = proof
@@ -221,7 +221,7 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
                         return;
                     }
 
-                    await state.adapter.addEvent(new Date(), name, 'flip', payload, {
+                    await state.adapter.addEvent(blockTimeOf(ctx), name, 'flip', payload, {
                         action: 'transfer',
                         data: eventData
                     });

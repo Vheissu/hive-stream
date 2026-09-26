@@ -4,6 +4,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -124,8 +125,8 @@ export function createInsurancePoolContract(options: InsurancePoolContractOption
                 payload.coverageDays,
                 '0',
                 JSON.stringify(payload.metadata || {}),
-                new Date(),
-                new Date()
+                blockTimeOf(ctx),
+                blockTimeOf(ctx)
             ]
         );
 
@@ -135,7 +136,7 @@ export function createInsurancePoolContract(options: InsurancePoolContractOption
                 poolId: payload.poolId,
                 owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const fundPool = async (payload: z.infer<typeof poolIdSchema>, ctx: any) => {
@@ -155,7 +156,7 @@ export function createInsurancePoolContract(options: InsurancePoolContractOption
         const reserve = toBigNumber(pool.reserve_balance).plus(payment.amount);
         await state.adapter.query(
             'UPDATE insurance_pools SET reserve_balance = ?, updated_at = ? WHERE pool_id = ?',
-            [reserve.toFixed(), new Date(), payload.poolId]
+            [reserve.toFixed(), blockTimeOf(ctx), payload.poolId]
         );
 
         await emitContractEvent(state.adapter, name, 'fundPool', payload, {
@@ -165,7 +166,7 @@ export function createInsurancePoolContract(options: InsurancePoolContractOption
                 owner,
                 reserveBalance: reserve.toFixed()
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const buyPolicy = async (payload: z.infer<typeof poolIdSchema>, ctx: any) => {
@@ -183,7 +184,7 @@ export function createInsurancePoolContract(options: InsurancePoolContractOption
         }
 
         const policyRows = await state.adapter.query('SELECT * FROM insurance_policies WHERE pool_id = ? AND holder = ?', [payload.poolId, holder]);
-        const now = new Date();
+        const now = blockTimeOf(ctx);
         const baseDate = policyRows.length > 0 && parseDateValue(policyRows[0].expires_at) && parseDateValue(policyRows[0].expires_at)! > now
             ? parseDateValue(policyRows[0].expires_at)!
             : now;
@@ -201,7 +202,7 @@ export function createInsurancePoolContract(options: InsurancePoolContractOption
         const reserve = toBigNumber(pool.reserve_balance).plus(payment.amount);
         await state.adapter.query(
             'UPDATE insurance_pools SET reserve_balance = ?, updated_at = ? WHERE pool_id = ?',
-            [reserve.toFixed(), new Date(), payload.poolId]
+            [reserve.toFixed(), blockTimeOf(ctx), payload.poolId]
         );
 
         await emitContractEvent(state.adapter, name, 'buyPolicy', payload, {
@@ -211,7 +212,7 @@ export function createInsurancePoolContract(options: InsurancePoolContractOption
                 holder,
                 expiresAt
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const fileClaim = async (payload: z.infer<typeof fileClaimSchema>, ctx: any) => {
@@ -228,7 +229,7 @@ export function createInsurancePoolContract(options: InsurancePoolContractOption
             throw new Error('Insurance policy is not active');
         }
 
-        if ((parseDateValue(policy.expires_at) || new Date()) <= new Date()) {
+        if ((parseDateValue(policy.expires_at) || blockTimeOf(ctx)) <= blockTimeOf(ctx)) {
             throw new Error('Insurance policy has expired');
         }
 
@@ -245,7 +246,7 @@ export function createInsurancePoolContract(options: InsurancePoolContractOption
             `INSERT INTO insurance_claims (
                 claim_id, pool_id, holder, requested_amount, approved_amount, reason, status, note, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [payload.claimId, payload.poolId, holder, payload.amount, null, payload.reason, 'pending', '', new Date(), new Date()]
+            [payload.claimId, payload.poolId, holder, payload.amount, null, payload.reason, 'pending', '', blockTimeOf(ctx), blockTimeOf(ctx)]
         );
 
         await emitContractEvent(state.adapter, name, 'fileClaim', payload, {
@@ -256,7 +257,7 @@ export function createInsurancePoolContract(options: InsurancePoolContractOption
                 holder,
                 amount: payload.amount
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const approveClaim = async (payload: z.infer<typeof approveClaimSchema>, ctx: any) => {
@@ -285,11 +286,11 @@ export function createInsurancePoolContract(options: InsurancePoolContractOption
         const nextReserve = toBigNumber(pool.reserve_balance).minus(approvedAmount);
         await state.adapter.query(
             'UPDATE insurance_pools SET reserve_balance = ?, updated_at = ? WHERE pool_id = ?',
-            [nextReserve.toFixed(), new Date(), pool.pool_id]
+            [nextReserve.toFixed(), blockTimeOf(ctx), pool.pool_id]
         );
         await state.adapter.query(
             'UPDATE insurance_claims SET approved_amount = ?, status = ?, note = ?, updated_at = ? WHERE claim_id = ?',
-            [approvedAmount, 'approved', payload.note || '', new Date(), payload.claimId]
+            [approvedAmount, 'approved', payload.note || '', blockTimeOf(ctx), payload.claimId]
         );
 
         // Actually pay the claimant
@@ -313,14 +314,14 @@ export function createInsurancePoolContract(options: InsurancePoolContractOption
                 approvedAmount,
                 asset: pool.asset
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const expirePolicies = async (payload: { poolId?: string } = {}, _ctx: any) => {
         const policies = payload.poolId
             ? await state.adapter.query('SELECT * FROM insurance_policies WHERE pool_id = ?', [payload.poolId])
             : await state.adapter.query('SELECT * FROM insurance_policies', []);
-        const now = new Date();
+        const now = blockTimeOf(_ctx);
 
         for (const policy of policies) {
             const expiresAt = parseDateValue(policy.expires_at);
@@ -336,7 +337,7 @@ export function createInsurancePoolContract(options: InsurancePoolContractOption
                         poolId: policy.pool_id,
                         holder: policy.holder
                     }
-                });
+                }, blockTimeOf(_ctx));
             }
         }
     };

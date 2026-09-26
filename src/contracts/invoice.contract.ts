@@ -4,6 +4,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -100,8 +101,8 @@ export function createInvoiceContract(options: InvoiceContractOptions = {}) {
                 payload.allowPartial ? 1 : 0,
                 'open',
                 JSON.stringify(payload.metadata || {}),
-                new Date(),
-                new Date()
+                blockTimeOf(ctx),
+                blockTimeOf(ctx)
             ]
         );
 
@@ -114,7 +115,7 @@ export function createInvoiceContract(options: InvoiceContractOptions = {}) {
                 amount: payload.amount,
                 asset: payload.asset
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const payInvoice = async (payload: z.infer<typeof invoiceIdSchema>, ctx: any) => {
@@ -152,12 +153,12 @@ export function createInvoiceContract(options: InvoiceContractOptions = {}) {
 
         await state.adapter.query(
             'INSERT INTO invoice_payments (invoice_id, payer, amount, asset, source, transaction_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [payload.invoiceId, payer, payment.amount, payment.asset, payment.source, ctx.transaction.id, new Date()]
+            [payload.invoiceId, payer, payment.amount, payment.asset, payment.source, ctx.transaction.id, blockTimeOf(ctx)]
         );
 
         await state.adapter.query(
             'UPDATE invoices SET outstanding_amount = ?, status = ?, updated_at = ? WHERE invoice_id = ?',
-            [nextOutstanding.toFixed(), nextStatus, new Date(), payload.invoiceId]
+            [nextOutstanding.toFixed(), nextStatus, blockTimeOf(ctx), payload.invoiceId]
         );
 
         await emitContractEvent(state.adapter, name, 'payInvoice', payload, {
@@ -170,7 +171,7 @@ export function createInvoiceContract(options: InvoiceContractOptions = {}) {
                 outstandingAmount: nextOutstanding.toFixed(),
                 status: nextStatus
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const cancelInvoice = async (payload: z.infer<typeof invoiceIdSchema>, ctx: any) => {
@@ -191,7 +192,7 @@ export function createInvoiceContract(options: InvoiceContractOptions = {}) {
 
         await state.adapter.query(
             'UPDATE invoices SET status = ?, updated_at = ? WHERE invoice_id = ?',
-            ['cancelled', new Date(), payload.invoiceId]
+            ['cancelled', blockTimeOf(ctx), payload.invoiceId]
         );
 
         await emitContractEvent(state.adapter, name, 'cancelInvoice', payload, {
@@ -200,7 +201,7 @@ export function createInvoiceContract(options: InvoiceContractOptions = {}) {
                 invoiceId: payload.invoiceId,
                 issuer
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const closeOverdueInvoices = async (_payload: { invoiceId?: string } = {}, _ctx: any) => {
@@ -208,7 +209,7 @@ export function createInvoiceContract(options: InvoiceContractOptions = {}) {
             'SELECT * FROM invoices WHERE status IN (?, ?)',
             ['open', 'partially_paid']
         );
-        const now = new Date();
+        const now = blockTimeOf(_ctx);
 
         for (const invoice of invoices) {
             const dueAt = parseDateValue(invoice.due_at);
@@ -224,7 +225,7 @@ export function createInvoiceContract(options: InvoiceContractOptions = {}) {
                         invoiceId: invoice.invoice_id,
                         payer: invoice.payer
                     }
-                });
+                }, blockTimeOf(_ctx));
             }
         }
     };

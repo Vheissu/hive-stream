@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { action, defineContract } from './contract';
 import {
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     identifierSchema,
@@ -114,7 +115,7 @@ export function createProposalTimelockContract(options: ProposalTimelockContract
                 payload.threshold,
                 payload.minDelayHours,
                 JSON.stringify(payload.metadata || {}),
-                new Date()
+                blockTimeOf(ctx)
             ]
         );
 
@@ -125,7 +126,7 @@ export function createProposalTimelockContract(options: ProposalTimelockContract
                 owner,
                 threshold: payload.threshold
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const createProposal = async (payload: z.infer<typeof createProposalSchema>, ctx: any) => {
@@ -146,7 +147,7 @@ export function createProposalTimelockContract(options: ProposalTimelockContract
             throw new Error(`Proposal ${payload.proposalId} already exists`);
         }
 
-        const readyAt = new Date(Date.now() + Number(queue.min_delay_hours) * 60 * 60 * 1000);
+        const readyAt = new Date(blockTimeOf(ctx).getTime() + Number(queue.min_delay_hours) * 60 * 60 * 1000);
         await state.adapter.query(
             `INSERT INTO timelock_proposals (
                 proposal_id, queue_id, proposer, title, action_type, action_payload, note, approvals_count, ready_at, status, created_at, executed_at, execution_ref
@@ -162,7 +163,7 @@ export function createProposalTimelockContract(options: ProposalTimelockContract
                 0,
                 readyAt,
                 'pending',
-                new Date(),
+                blockTimeOf(ctx),
                 null,
                 null
             ]
@@ -176,7 +177,7 @@ export function createProposalTimelockContract(options: ProposalTimelockContract
                 proposer,
                 readyAt
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const approveProposal = async (payload: z.infer<typeof proposalIdSchema>, ctx: any) => {
@@ -200,7 +201,7 @@ export function createProposalTimelockContract(options: ProposalTimelockContract
 
         await state.adapter.query(
             'INSERT INTO timelock_approvals (proposal_id, approver, created_at) VALUES (?, ?, ?)',
-            [payload.proposalId, approver, new Date()]
+            [payload.proposalId, approver, blockTimeOf(ctx)]
         );
         const counts = await state.adapter.query('SELECT COUNT(*) AS count FROM timelock_approvals WHERE proposal_id = ?', [payload.proposalId]);
         const approvalsCount = Number(counts[0]?.count || 0);
@@ -219,7 +220,7 @@ export function createProposalTimelockContract(options: ProposalTimelockContract
                 approvalsCount,
                 threshold: queue.threshold
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const executeProposal = async (payload: z.infer<typeof executeSchema>, ctx: any) => {
@@ -241,13 +242,13 @@ export function createProposalTimelockContract(options: ProposalTimelockContract
             throw new Error('Proposal is not approved for execution');
         }
 
-        if (new Date(proposal.ready_at) > new Date()) {
+        if (new Date(proposal.ready_at) > blockTimeOf(ctx)) {
             throw new Error('Proposal timelock has not expired yet');
         }
 
         await state.adapter.query(
             'UPDATE timelock_proposals SET status = ?, executed_at = ?, execution_ref = ? WHERE proposal_id = ?',
-            ['executed', new Date(), payload.executionRef || null, payload.proposalId]
+            ['executed', blockTimeOf(ctx), payload.executionRef || null, payload.proposalId]
         );
 
         await emitContractEvent(state.adapter, name, 'executeProposal', payload, {
@@ -259,7 +260,7 @@ export function createProposalTimelockContract(options: ProposalTimelockContract
                 actionPayload: parseJson(proposal.action_payload, {}),
                 executionRef: payload.executionRef || null
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const cancelProposal = async (payload: z.infer<typeof proposalIdSchema>, ctx: any) => {
@@ -287,7 +288,7 @@ export function createProposalTimelockContract(options: ProposalTimelockContract
                 proposalId: payload.proposalId,
                 cancelledBy: sender
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     return defineContract({

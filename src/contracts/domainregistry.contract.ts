@@ -4,6 +4,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -103,7 +104,7 @@ export function createDomainRegistryContract(options: DomainRegistryContractOpti
                 payload.asset,
                 payload.renewalDays,
                 JSON.stringify(payload.metadata || {}),
-                new Date()
+                blockTimeOf(ctx)
             ]
         );
 
@@ -113,7 +114,7 @@ export function createDomainRegistryContract(options: DomainRegistryContractOpti
                 namespace: payload.namespace,
                 owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const registerName = async (payload: z.infer<typeof registerNameSchema>, ctx: any) => {
@@ -137,12 +138,12 @@ export function createDomainRegistryContract(options: DomainRegistryContractOpti
         if (existing.length > 0) {
             const record = existing[0];
             const expiresAt = parseDateValue(record.expires_at);
-            if (record.status === 'active' && expiresAt && expiresAt > new Date()) {
+            if (record.status === 'active' && expiresAt && expiresAt > blockTimeOf(ctx)) {
                 throw new Error('Domain name is already registered');
             }
         }
 
-        const expiresAt = new Date(Date.now() + termYears * Number(namespace.renewal_days) * 24 * 60 * 60 * 1000);
+        const expiresAt = new Date(blockTimeOf(ctx).getTime() + termYears * Number(namespace.renewal_days) * 24 * 60 * 60 * 1000);
         await state.adapter.query(
             `INSERT INTO domain_records (
                 namespace, label, owner, target, status, expires_at, metadata, created_at, updated_at
@@ -157,8 +158,8 @@ export function createDomainRegistryContract(options: DomainRegistryContractOpti
                 'active',
                 expiresAt,
                 JSON.stringify(payload.metadata || {}),
-                new Date(),
-                new Date()
+                blockTimeOf(ctx),
+                blockTimeOf(ctx)
             ]
         );
 
@@ -170,7 +171,7 @@ export function createDomainRegistryContract(options: DomainRegistryContractOpti
                 owner,
                 expiresAt
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const renewName = async (payload: z.infer<typeof registerNameSchema>, ctx: any) => {
@@ -195,14 +196,14 @@ export function createDomainRegistryContract(options: DomainRegistryContractOpti
             throw new Error(`Renewal requires ${expectedAmount.toFixed()} ${namespace.asset}`);
         }
 
-        const baseDate = parseDateValue(record.expires_at) && parseDateValue(record.expires_at)! > new Date()
+        const baseDate = parseDateValue(record.expires_at) && parseDateValue(record.expires_at)! > blockTimeOf(ctx)
             ? parseDateValue(record.expires_at)!
-            : new Date();
+            : blockTimeOf(ctx);
         const expiresAt = new Date(baseDate.getTime() + termYears * Number(namespace.renewal_days) * 24 * 60 * 60 * 1000);
 
         await state.adapter.query(
             'UPDATE domain_records SET expires_at = ?, status = ?, updated_at = ? WHERE namespace = ? AND label = ?',
-            [expiresAt, 'active', new Date(), payload.namespace, payload.label]
+            [expiresAt, 'active', blockTimeOf(ctx), payload.namespace, payload.label]
         );
 
         await emitContractEvent(state.adapter, name, 'renewName', payload, {
@@ -213,7 +214,7 @@ export function createDomainRegistryContract(options: DomainRegistryContractOpti
                 owner,
                 expiresAt
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const transferName = async (payload: z.infer<typeof transferSchema>, ctx: any) => {
@@ -230,7 +231,7 @@ export function createDomainRegistryContract(options: DomainRegistryContractOpti
 
         await state.adapter.query(
             'UPDATE domain_records SET owner = ?, updated_at = ? WHERE namespace = ? AND label = ?',
-            [payload.to, new Date(), payload.namespace, payload.label]
+            [payload.to, blockTimeOf(ctx), payload.namespace, payload.label]
         );
 
         await emitContractEvent(state.adapter, name, 'transferName', payload, {
@@ -241,14 +242,14 @@ export function createDomainRegistryContract(options: DomainRegistryContractOpti
                 from: owner,
                 to: payload.to
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const expireNames = async (payload: { namespace?: string } = {}, _ctx: any) => {
         const rows = payload.namespace
             ? await state.adapter.query('SELECT * FROM domain_records WHERE namespace = ?', [payload.namespace])
             : await state.adapter.query('SELECT * FROM domain_records', []);
-        const now = new Date();
+        const now = blockTimeOf(_ctx);
 
         for (const record of rows) {
             const expiresAt = parseDateValue(record.expires_at);
@@ -265,7 +266,7 @@ export function createDomainRegistryContract(options: DomainRegistryContractOpti
                         label: record.label,
                         owner: record.owner
                     }
-                });
+                }, blockTimeOf(_ctx));
             }
         }
     };

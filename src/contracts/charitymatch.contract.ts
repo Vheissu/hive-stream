@@ -4,6 +4,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -80,7 +81,7 @@ export function createCharityMatchContract(options: CharityMatchContractOptions 
         }
 
         const closesAt = parseDateValue(payload.closesAt);
-        if (!closesAt || closesAt <= new Date()) {
+        if (!closesAt || closesAt <= blockTimeOf(ctx)) {
             throw new Error('Campaign close time must be in the future');
         }
 
@@ -101,7 +102,7 @@ export function createCharityMatchContract(options: CharityMatchContractOptions 
                 'open',
                 closesAt,
                 JSON.stringify(payload.metadata || {}),
-                new Date(),
+                blockTimeOf(ctx),
                 null
             ]
         );
@@ -113,7 +114,7 @@ export function createCharityMatchContract(options: CharityMatchContractOptions 
                 sponsor,
                 beneficiary: payload.beneficiary
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const donate = async (payload: z.infer<typeof campaignIdSchema>, ctx: any) => {
@@ -129,7 +130,7 @@ export function createCharityMatchContract(options: CharityMatchContractOptions 
             throw new Error('Campaign is not open');
         }
 
-        if ((parseDateValue(campaign.closes_at) || new Date()) <= new Date()) {
+        if ((parseDateValue(campaign.closes_at) || blockTimeOf(ctx)) <= blockTimeOf(ctx)) {
             throw new Error('Campaign has already closed');
         }
 
@@ -143,7 +144,7 @@ export function createCharityMatchContract(options: CharityMatchContractOptions 
 
         await state.adapter.query(
             'INSERT INTO charity_match_donations (campaign_id, donor, amount, asset, created_at) VALUES (?, ?, ?, ?, ?)',
-            [payload.campaignId, donor, payment.amount, payment.asset, new Date()]
+            [payload.campaignId, donor, payment.amount, payment.asset, blockTimeOf(ctx)]
         );
         await state.adapter.query(
             'UPDATE charity_match_campaigns SET total_donations = ?, matched_total = ? WHERE campaign_id = ?',
@@ -160,7 +161,7 @@ export function createCharityMatchContract(options: CharityMatchContractOptions 
                 totalDonations: totalDonations.toFixed(),
                 matchedTotal: nextMatched.toFixed()
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const closeCampaign = async (payload: z.infer<typeof campaignIdSchema>, ctx: any) => {
@@ -181,13 +182,13 @@ export function createCharityMatchContract(options: CharityMatchContractOptions 
             }
         }
 
-        if ((parseDateValue(campaign.closes_at) || new Date()) > new Date()) {
+        if ((parseDateValue(campaign.closes_at) || blockTimeOf(ctx)) > blockTimeOf(ctx)) {
             throw new Error('Campaign cannot be closed before its close time');
         }
 
         await state.adapter.query(
             'UPDATE charity_match_campaigns SET status = ?, closed_at = ? WHERE campaign_id = ?',
-            ['closed', new Date(), payload.campaignId]
+            ['closed', blockTimeOf(ctx), payload.campaignId]
         );
 
         await emitContractEvent(state.adapter, name, 'closeCampaign', payload, {
@@ -199,7 +200,7 @@ export function createCharityMatchContract(options: CharityMatchContractOptions 
                 matchedTotal: campaign.matched_total,
                 asset: campaign.asset
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     return defineContract({

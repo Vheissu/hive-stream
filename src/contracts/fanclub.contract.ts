@@ -4,6 +4,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -105,7 +106,7 @@ export function createFanClubContract(options: FanClubContractOptions = {}) {
             `INSERT INTO fan_clubs (
                 club_id, owner, title, join_price, asset, perks_json, metadata, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [payload.clubId, owner, payload.title, payload.joinPrice, payload.asset, JSON.stringify(payload.perks || []), JSON.stringify(payload.metadata || {}), new Date()]
+            [payload.clubId, owner, payload.title, payload.joinPrice, payload.asset, JSON.stringify(payload.perks || []), JSON.stringify(payload.metadata || {}), blockTimeOf(ctx)]
         );
 
         await emitContractEvent(state.adapter, name, 'createClub', payload, {
@@ -114,7 +115,7 @@ export function createFanClubContract(options: FanClubContractOptions = {}) {
                 clubId: payload.clubId,
                 owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const joinClub = async (payload: z.infer<typeof clubIdSchema>, ctx: any) => {
@@ -140,7 +141,7 @@ export function createFanClubContract(options: FanClubContractOptions = {}) {
              VALUES (?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(club_id, account)
              DO UPDATE SET status = excluded.status, renewals = excluded.renewals, updated_at = excluded.updated_at`,
-            [payload.clubId, account, 'active', renewals, points, new Date(), new Date()]
+            [payload.clubId, account, 'active', renewals, points, blockTimeOf(ctx), blockTimeOf(ctx)]
         );
 
         await emitContractEvent(state.adapter, name, 'joinClub', payload, {
@@ -150,7 +151,7 @@ export function createFanClubContract(options: FanClubContractOptions = {}) {
                 account,
                 renewals
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const recordEngagement = async (payload: z.infer<typeof progressSchema>, ctx: any) => {
@@ -170,7 +171,7 @@ export function createFanClubContract(options: FanClubContractOptions = {}) {
         const nextPoints = Number(member.points) + payload.points;
         await state.adapter.query(
             'UPDATE fan_club_members SET points = ?, updated_at = ? WHERE club_id = ? AND account = ?',
-            [nextPoints, new Date(), payload.clubId, payload.account]
+            [nextPoints, blockTimeOf(ctx), payload.clubId, payload.account]
         );
 
         await emitContractEvent(state.adapter, name, 'recordEngagement', payload, {
@@ -181,7 +182,7 @@ export function createFanClubContract(options: FanClubContractOptions = {}) {
                 totalPoints: nextPoints,
                 note: payload.note || ''
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const redeemPerk = async (payload: z.infer<typeof redeemSchema>, ctx: any) => {
@@ -214,7 +215,7 @@ export function createFanClubContract(options: FanClubContractOptions = {}) {
 
         await state.adapter.query(
             'INSERT INTO fan_club_redemptions (club_id, account, perk_id, created_at) VALUES (?, ?, ?, ?)',
-            [payload.clubId, account, payload.perkId, new Date()]
+            [payload.clubId, account, payload.perkId, blockTimeOf(ctx)]
         );
 
         await emitContractEvent(state.adapter, name, 'redeemPerk', payload, {
@@ -225,7 +226,7 @@ export function createFanClubContract(options: FanClubContractOptions = {}) {
                 perkId: payload.perkId,
                 title: perk.title
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     return defineContract({

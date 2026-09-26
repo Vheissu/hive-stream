@@ -4,6 +4,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getEscrowPayment,
@@ -111,7 +112,7 @@ export function createRentalContract(options: RentalContractOptions = {}) {
                 payload.maxDurationDays || null,
                 1,
                 JSON.stringify(payload.metadata || {}),
-                new Date()
+                blockTimeOf(ctx)
             ]
         );
 
@@ -121,7 +122,7 @@ export function createRentalContract(options: RentalContractOptions = {}) {
                 listingId: payload.listingId,
                 owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const initiateRental = async (payload: z.infer<typeof initiateSchema>, ctx: any) => {
@@ -182,8 +183,8 @@ export function createRentalContract(options: RentalContractOptions = {}) {
                 endsAt,
                 'active',
                 payload.note || '',
-                new Date(),
-                new Date()
+                blockTimeOf(ctx),
+                blockTimeOf(ctx)
             ]
         );
 
@@ -197,7 +198,7 @@ export function createRentalContract(options: RentalContractOptions = {}) {
                 escrowId: escrow.escrowId,
                 escrowAgent: escrow.agent
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const confirmReturn = async (payload: z.infer<typeof rentalIdSchema>, ctx: any) => {
@@ -214,7 +215,7 @@ export function createRentalContract(options: RentalContractOptions = {}) {
 
         await state.adapter.query(
             'UPDATE rental_agreements SET status = ?, note = ?, updated_at = ? WHERE rental_id = ?',
-            ['returned', payload.note || rental.note || '', new Date(), payload.rentalId]
+            ['returned', payload.note || rental.note || '', blockTimeOf(ctx), payload.rentalId]
         );
 
         await emitContractEvent(state.adapter, name, 'confirmReturn', payload, {
@@ -224,7 +225,7 @@ export function createRentalContract(options: RentalContractOptions = {}) {
                 confirmedBy: sender,
                 escrowId: rental.escrow_id
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const closeRental = async (payload: z.infer<typeof rentalIdSchema>, ctx: any) => {
@@ -243,7 +244,7 @@ export function createRentalContract(options: RentalContractOptions = {}) {
 
         await state.adapter.query(
             'UPDATE rental_agreements SET status = ?, note = ?, updated_at = ? WHERE rental_id = ?',
-            ['closed', payload.note || rental.note || '', new Date(), payload.rentalId]
+            ['closed', payload.note || rental.note || '', blockTimeOf(ctx), payload.rentalId]
         );
 
         await emitContractEvent(state.adapter, name, 'closeRental', payload, {
@@ -254,7 +255,7 @@ export function createRentalContract(options: RentalContractOptions = {}) {
                 owner: rental.owner,
                 renter: rental.renter
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     return defineContract({

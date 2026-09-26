@@ -4,7 +4,7 @@ import seedrandom from 'seedrandom';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
-import { createFairnessSupport, formatBlockchainAmount, formatFairnessMemo, parseBlockchainAmount, resolveContractAccount } from './helpers';
+import { createFairnessSupport, formatBlockchainAmount, formatFairnessMemo, parseBlockchainAmount, resolveContractAccount, blockTimeOf } from './helpers';
 import { resolveFairnessOption, type FairDrawProof, type FairnessManager, type FairnessOptions } from '../fairness/manager';
 
 const DEFAULT_NAME = 'rps';
@@ -217,7 +217,7 @@ export function createRpsContract(options: RpsContractOptions = {}) {
                         result = 'win';
                     }
 
-                    await state.adapter.addEvent(new Date(), name, 'play', payload, {
+                    await state.adapter.addEvent(blockTimeOf(ctx), name, 'play', payload, {
                         action: 'rps_result',
                         data: {
                             player: sender,

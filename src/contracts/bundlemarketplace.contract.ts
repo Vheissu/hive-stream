@@ -4,6 +4,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -108,8 +109,8 @@ export function createBundleMarketplaceContract(options: BundleMarketplaceContra
                 0,
                 1,
                 JSON.stringify(payload.metadata || {}),
-                new Date(),
-                new Date()
+                blockTimeOf(ctx),
+                blockTimeOf(ctx)
             ]
         );
 
@@ -119,7 +120,7 @@ export function createBundleMarketplaceContract(options: BundleMarketplaceContra
                 bundleId: payload.bundleId,
                 owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const updateBundle = async (payload: z.infer<typeof updateSchema>, ctx: any) => {
@@ -144,7 +145,7 @@ export function createBundleMarketplaceContract(options: BundleMarketplaceContra
                 typeof payload.inventory === 'number' ? payload.inventory : bundle.inventory,
                 typeof payload.active === 'boolean' ? (payload.active ? 1 : 0) : bundle.active,
                 JSON.stringify(payload.metadata || parseJson(bundle.metadata, {})),
-                new Date(),
+                blockTimeOf(ctx),
                 payload.bundleId
             ]
         );
@@ -155,7 +156,7 @@ export function createBundleMarketplaceContract(options: BundleMarketplaceContra
                 bundleId: payload.bundleId,
                 owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const buyBundle = async (payload: z.infer<typeof idSchema>, ctx: any) => {
@@ -182,13 +183,13 @@ export function createBundleMarketplaceContract(options: BundleMarketplaceContra
 
         await state.adapter.query(
             'INSERT INTO bundle_marketplace_purchases (bundle_id, buyer, amount_paid, asset, status, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [payload.bundleId, buyer, payment.amount, payment.asset, 'paid', '', new Date(), new Date()]
+            [payload.bundleId, buyer, payment.amount, payment.asset, 'paid', '', blockTimeOf(ctx), blockTimeOf(ctx)]
         );
 
         const nextInventory = bundle.inventory === null ? null : Number(bundle.inventory) - 1;
         await state.adapter.query(
             'UPDATE bundle_marketplace_bundles SET inventory = ?, sold_count = ?, updated_at = ? WHERE bundle_id = ?',
-            [nextInventory, Number(bundle.sold_count) + 1, new Date(), payload.bundleId]
+            [nextInventory, Number(bundle.sold_count) + 1, blockTimeOf(ctx), payload.bundleId]
         );
 
         await emitContractEvent(state.adapter, name, 'buyBundle', payload, {
@@ -198,7 +199,7 @@ export function createBundleMarketplaceContract(options: BundleMarketplaceContra
                 buyer,
                 items: parseJson<string[]>(bundle.items_json, [])
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const fulfillPurchase = async (payload: z.infer<typeof fulfillSchema>, ctx: any) => {
@@ -217,7 +218,7 @@ export function createBundleMarketplaceContract(options: BundleMarketplaceContra
 
         await state.adapter.query(
             'UPDATE bundle_marketplace_purchases SET status = ?, notes = ?, updated_at = ? WHERE id = ?',
-            ['fulfilled', payload.notes || '', new Date(), payload.purchaseId]
+            ['fulfilled', payload.notes || '', blockTimeOf(ctx), payload.purchaseId]
         );
 
         await emitContractEvent(state.adapter, name, 'fulfillPurchase', payload, {
@@ -227,7 +228,7 @@ export function createBundleMarketplaceContract(options: BundleMarketplaceContra
                 bundleId: purchase.bundle_id,
                 buyer: purchase.buyer
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     return defineContract({

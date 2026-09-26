@@ -112,8 +112,8 @@ describe('SQLite utility contract integration', () => {
             blockNumber += 1;
         };
 
-        const futureClose = new Date(Date.now() + 3600_000).toISOString();
-        const futureEvent = new Date(Date.now() + 24 * 3600_000).toISOString();
+        const futureClose = new Date(now.getTime() + 3600_000).toISOString();
+        const futureEvent = new Date(now.getTime() + 24 * 3600_000).toISOString();
 
         await runOperation(customJsonOp('alice', 'insurancepool', 'createPool', {
             poolId: 'pool-live',
@@ -174,7 +174,7 @@ describe('SQLite utility contract integration', () => {
             roundId: 'grant-live',
             projectId: 'project-live'
         }));
-        await adapter.query('UPDATE grant_rounds SET closes_at = ? WHERE round_id = ?', [new Date(Date.now() - 1000), 'grant-live']);
+        await adapter.query('UPDATE grant_rounds SET closes_at = ? WHERE round_id = ?', [new Date(now.getTime() - 1000), 'grant-live']);
         await runOperation(customJsonOp('alice', 'grantrounds', 'finalizeRound', { roundId: 'grant-live' }));
         await runOperation(customJsonOp('dave', 'grantrounds', 'withdrawGrant', {
             roundId: 'grant-live',
@@ -219,7 +219,7 @@ describe('SQLite utility contract integration', () => {
         }));
         await runOperation(customJsonOp('bob', 'proposaltimelock', 'approveProposal', { proposalId: 'proposal-live' }));
         await runOperation(customJsonOp('carol', 'proposaltimelock', 'approveProposal', { proposalId: 'proposal-live' }));
-        await adapter.query('UPDATE timelock_proposals SET ready_at = ? WHERE proposal_id = ?', [new Date(Date.now() - 1000), 'proposal-live']);
+        await adapter.query('UPDATE timelock_proposals SET ready_at = ? WHERE proposal_id = ?', [new Date(now.getTime() - 1000), 'proposal-live']);
         await runOperation(customJsonOp('alice', 'proposaltimelock', 'executeProposal', {
             proposalId: 'proposal-live',
             executionRef: 'deploy-1'

@@ -4,6 +4,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -105,7 +106,7 @@ export function createGrantRoundsContract(options: GrantRoundsContractOptions = 
         }
 
         const closesAt = parseDateValue(payload.closesAt);
-        if (!closesAt || closesAt <= new Date()) {
+        if (!closesAt || closesAt <= blockTimeOf(ctx)) {
             throw new Error('Grant round close time must be in the future');
         }
 
@@ -113,7 +114,7 @@ export function createGrantRoundsContract(options: GrantRoundsContractOptions = 
             `INSERT INTO grant_rounds (
                 round_id, owner, title, asset, matching_pool, status, closes_at, metadata, created_at, finalized_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [payload.roundId, owner, payload.title, payload.asset, '0', 'open', closesAt, JSON.stringify(payload.metadata || {}), new Date(), null]
+            [payload.roundId, owner, payload.title, payload.asset, '0', 'open', closesAt, JSON.stringify(payload.metadata || {}), blockTimeOf(ctx), null]
         );
 
         await emitContractEvent(state.adapter, name, 'createRound', payload, {
@@ -122,7 +123,7 @@ export function createGrantRoundsContract(options: GrantRoundsContractOptions = 
                 roundId: payload.roundId,
                 owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const fundRound = async (payload: z.infer<typeof idSchema>, ctx: any) => {
@@ -151,7 +152,7 @@ export function createGrantRoundsContract(options: GrantRoundsContractOptions = 
                 roundId: payload.roundId,
                 matchingPool: matchingPool.toFixed()
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const submitProject = async (payload: z.infer<typeof projectSchema>, ctx: any) => {
@@ -170,7 +171,7 @@ export function createGrantRoundsContract(options: GrantRoundsContractOptions = 
             `INSERT INTO grant_projects (
                 project_id, round_id, title, recipient, summary, donations_total, matching_award, withdrawn, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [payload.projectId, payload.roundId, payload.title, payload.recipient, payload.summary || '', '0', '0', 0, new Date()]
+            [payload.projectId, payload.roundId, payload.title, payload.recipient, payload.summary || '', '0', '0', 0, blockTimeOf(ctx)]
         );
 
         await emitContractEvent(state.adapter, name, 'submitProject', payload, {
@@ -181,7 +182,7 @@ export function createGrantRoundsContract(options: GrantRoundsContractOptions = 
                 submitter: sender,
                 recipient: payload.recipient
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const donateToProject = async (payload: z.infer<typeof donateSchema>, ctx: any) => {
@@ -199,7 +200,7 @@ export function createGrantRoundsContract(options: GrantRoundsContractOptions = 
             throw new Error('Grant round is not open');
         }
 
-        if ((parseDateValue(round.closes_at) || new Date()) <= new Date()) {
+        if ((parseDateValue(round.closes_at) || blockTimeOf(ctx)) <= blockTimeOf(ctx)) {
             throw new Error('Grant round has already closed');
         }
 
@@ -207,7 +208,7 @@ export function createGrantRoundsContract(options: GrantRoundsContractOptions = 
         const total = toBigNumber(project.donations_total).plus(payment.amount);
         await state.adapter.query(
             'INSERT INTO grant_donations (round_id, project_id, donor, amount, asset, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-            [payload.roundId, payload.projectId, donor, payment.amount, payment.asset, new Date()]
+            [payload.roundId, payload.projectId, donor, payment.amount, payment.asset, blockTimeOf(ctx)]
         );
         await state.adapter.query(
             'UPDATE grant_projects SET donations_total = ? WHERE project_id = ?',
@@ -222,7 +223,7 @@ export function createGrantRoundsContract(options: GrantRoundsContractOptions = 
                 donor,
                 amount: payment.amount
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const finalizeRound = async (payload: z.infer<typeof idSchema>, ctx: any) => {
@@ -243,7 +244,7 @@ export function createGrantRoundsContract(options: GrantRoundsContractOptions = 
             }
         }
 
-        if ((parseDateValue(round.closes_at) || new Date()) > new Date()) {
+        if ((parseDateValue(round.closes_at) || blockTimeOf(ctx)) > blockTimeOf(ctx)) {
             throw new Error('Grant round cannot be finalized before close');
         }
 
@@ -274,7 +275,7 @@ export function createGrantRoundsContract(options: GrantRoundsContractOptions = 
 
         await state.adapter.query(
             'UPDATE grant_rounds SET status = ?, finalized_at = ? WHERE round_id = ?',
-            ['finalized', new Date(), payload.roundId]
+            ['finalized', blockTimeOf(ctx), payload.roundId]
         );
 
         await emitContractEvent(state.adapter, name, 'finalizeRound', payload, {
@@ -283,7 +284,7 @@ export function createGrantRoundsContract(options: GrantRoundsContractOptions = 
                 roundId: payload.roundId,
                 projectCount: projects.length
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const withdrawGrant = async (payload: z.infer<typeof withdrawSchema>, ctx: any) => {
@@ -322,7 +323,7 @@ export function createGrantRoundsContract(options: GrantRoundsContractOptions = 
                 totalAmount: toBigNumber(project.donations_total).plus(project.matching_award).toFixed(),
                 asset: round.asset
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     return defineContract({

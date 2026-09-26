@@ -4,6 +4,7 @@ import { action, defineContract } from './contract';
 import {
     amountSchema,
     assetSchema,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     identifierSchema,
@@ -302,7 +303,7 @@ export function createTournamentContract(options: TournamentContractOptions) {
         await emitContractEvent(state.adapter, name, 'createTournament', payload, {
             action: 'tournament_created',
             data: { tournamentId: payload.tournamentId, organizer, entryFee: payload.entryFee, asset: payload.asset }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const enter = async (payload: z.infer<typeof tournamentIdSchema>, ctx: ContractContext) => {
@@ -329,7 +330,7 @@ export function createTournamentContract(options: TournamentContractOptions) {
             await emitContractEvent(state.adapter, name, 'enter', payload, {
                 action: 'tournament_entry_refunded',
                 data: { tournamentId: payload.tournamentId, player, reason, amount: amount.toFixed(PRECISION), asset: transferCtx.asset }
-            });
+            }, blockTimeOf(ctx));
         };
 
         const rows = await state.adapter.query('SELECT * FROM tournaments WHERE tournament_id = ?', [payload.tournamentId]);
@@ -393,7 +394,7 @@ export function createTournamentContract(options: TournamentContractOptions) {
         await emitContractEvent(state.adapter, name, 'enter', payload, {
             action: 'tournament_entered',
             data: { tournamentId: payload.tournamentId, player, pot: pot.toFixed(PRECISION) }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const recordScores = async (tournamentId: string, scores: Array<{ player: string; score: number | string }>, ctx: ContractContext) => {
@@ -448,7 +449,7 @@ export function createTournamentContract(options: TournamentContractOptions) {
         await emitContractEvent(state.adapter, name, 'submitScores', { tournamentId }, {
             action: 'tournament_scores_submitted',
             data: { tournamentId, oracle: sender, scores }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const submitScore = async (payload: z.infer<typeof submitScoreSchema>, ctx: ContractContext) => {
@@ -505,7 +506,7 @@ export function createTournamentContract(options: TournamentContractOptions) {
         await emitContractEvent(state.adapter, name, 'cancelTournament', payload, {
             action: 'tournament_cancelled',
             data: { tournamentId: payload.tournamentId, refunded }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const rankEntries = (entries: any[], order: 'asc' | 'desc', tieBreak: 'split' | 'earliest'): RankedEntry[] => {
@@ -550,7 +551,7 @@ export function createTournamentContract(options: TournamentContractOptions) {
             await emitContractEvent(state.adapter, name, 'finalize', { tournamentId: tournament.tournament_id }, {
                 action: 'tournament_cancelled',
                 data: { tournamentId: tournament.tournament_id, reason: 'Not enough players', refunded }
-            });
+            }, blockTimeOf(ctx));
             return;
         }
 
@@ -566,7 +567,7 @@ export function createTournamentContract(options: TournamentContractOptions) {
             await emitContractEvent(state.adapter, name, 'finalize', { tournamentId: tournament.tournament_id }, {
                 action: 'tournament_cancelled',
                 data: { tournamentId: tournament.tournament_id, reason: 'No scores submitted', refunded }
-            });
+            }, blockTimeOf(ctx));
             return;
         }
 
@@ -609,7 +610,7 @@ export function createTournamentContract(options: TournamentContractOptions) {
                 payouts,
                 standings: ranked.map((entry, index) => ({ position: index + 1, player: entry.player, score: entry.score.toFixed() }))
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const finalize = async (payload: z.infer<typeof tournamentIdSchema>, ctx: ContractContext) => {

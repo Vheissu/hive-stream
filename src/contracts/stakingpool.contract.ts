@@ -4,6 +4,7 @@ import { action, defineContract } from './contract';
 import {
     amountSchema,
     assetSchema,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     identifierSchema,
@@ -284,7 +285,7 @@ export function createStakingPoolContract(options: StakingPoolContractOptions) {
         await emitContractEvent(state.adapter, name, 'createPool', payload, {
             action: 'staking_pool_created',
             data: { poolId: payload.poolId, creator: sender, accrual }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const refund = async (to: string, amount: string, asset: string, reason: string) => {
@@ -321,7 +322,7 @@ export function createStakingPoolContract(options: StakingPoolContractOptions) {
         await emitContractEvent(state.adapter, name, 'fundRewards', payload, {
             action: 'staking_rewards_funded',
             data: { poolId: payload.poolId, funder: sender, amount: amount.toFixed(PRECISION), asset: transferCtx.asset }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const stake = async (payload: z.infer<typeof poolIdSchema>, ctx: ContractContext) => {
@@ -372,10 +373,10 @@ export function createStakingPoolContract(options: StakingPoolContractOptions) {
         await emitContractEvent(state.adapter, name, 'stake', payload, {
             action: 'staking_staked',
             data: { poolId: payload.poolId, account: staker, amount: amount.toFixed(PRECISION), staked: position.staked }
-        });
+        }, blockTimeOf(ctx));
     };
 
-    const releaseUnbonding = async (entry: any) => {
+    const releaseUnbonding = async (entry: any, ctx: ContractContext) => {
         // Claim the row first; only the caller that flips it may transfer.
         await state.adapter.query(
             'UPDATE staking_unbonding SET status = ? WHERE id = ? AND status = ?',
@@ -390,7 +391,7 @@ export function createStakingPoolContract(options: StakingPoolContractOptions) {
         await transfer(entry.account, entry.amount, entry.asset, `Unstaked from ${entry.pool_id}`);
         await state.adapter.query(
             'UPDATE staking_unbonding SET status = ?, released_at = ? WHERE id = ?',
-            ['released', new Date().toISOString(), entry.id]
+            ['released', nowOf(ctx).toISOString(), entry.id]
         );
 
         return true;
@@ -440,12 +441,12 @@ export function createStakingPoolContract(options: StakingPoolContractOptions) {
         await emitContractEvent(state.adapter, name, 'unstake', payload, {
             action: 'staking_unstaked',
             data: { poolId: payload.poolId, account: staker, amount: amount.toFixed(PRECISION), availableAt: availableAt.toISOString() }
-        });
+        }, blockTimeOf(ctx));
 
         if (Number(pool.cooldown_seconds) === 0) {
             const rows = await state.adapter.query('SELECT * FROM staking_unbonding WHERE id = ?', [entryId]);
             if (rows[0]) {
-                await releaseUnbonding(rows[0]);
+                await releaseUnbonding(rows[0], ctx);
             }
         }
     };
@@ -464,7 +465,7 @@ export function createStakingPoolContract(options: StakingPoolContractOptions) {
         let released = 0;
 
         for (const entry of matured) {
-            if (await releaseUnbonding(entry)) {
+            if (await releaseUnbonding(entry, ctx)) {
                 released++;
             }
         }
@@ -531,7 +532,7 @@ export function createStakingPoolContract(options: StakingPoolContractOptions) {
         await emitContractEvent(state.adapter, name, 'claim', payload, {
             action: 'staking_rewards_claimed',
             data: { poolId: payload.poolId, account: staker, amount: payout, asset: pool.reward_asset }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const setRewardRate = async (payload: z.infer<typeof setRewardRateSchema>, ctx: ContractContext) => {
@@ -557,7 +558,7 @@ export function createStakingPoolContract(options: StakingPoolContractOptions) {
         await emitContractEvent(state.adapter, name, 'setRewardRate', payload, {
             action: 'staking_rate_changed',
             data: { poolId: payload.poolId, rewardRate: payload.rewardRate }
-        });
+        }, blockTimeOf(ctx));
     };
 
     return defineContract({

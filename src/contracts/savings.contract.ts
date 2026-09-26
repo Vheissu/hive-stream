@@ -4,6 +4,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -95,7 +96,7 @@ export function createSavingsContract(options: SavingsContractOptions = {}) {
         }
 
         const deadline = parseDateValue(payload.deadline);
-        if (deadline && deadline <= new Date()) {
+        if (deadline && deadline <= blockTimeOf(ctx)) {
             throw new Error('Goal deadline must be in the future');
         }
 
@@ -114,8 +115,8 @@ export function createSavingsContract(options: SavingsContractOptions = {}) {
                 payload.allowEarlyWithdraw ? 1 : 0,
                 'open',
                 JSON.stringify(payload.metadata || {}),
-                new Date(),
-                new Date()
+                blockTimeOf(ctx),
+                blockTimeOf(ctx)
             ]
         );
 
@@ -125,7 +126,7 @@ export function createSavingsContract(options: SavingsContractOptions = {}) {
                 goalId: payload.goalId,
                 owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const contribute = async (payload: z.infer<typeof goalIdSchema>, ctx: any) => {
@@ -149,12 +150,12 @@ export function createSavingsContract(options: SavingsContractOptions = {}) {
 
         await state.adapter.query(
             'INSERT INTO savings_contributions (goal_id, contributor, amount, asset, source, transaction_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [payload.goalId, contributor, payment.amount, payment.asset, payment.source, ctx.transaction.id, new Date()]
+            [payload.goalId, contributor, payment.amount, payment.asset, payment.source, ctx.transaction.id, blockTimeOf(ctx)]
         );
 
         await state.adapter.query(
             'UPDATE savings_goals SET current_amount = ?, status = ?, updated_at = ? WHERE goal_id = ?',
-            [currentAmount.toFixed(), status, new Date(), payload.goalId]
+            [currentAmount.toFixed(), status, blockTimeOf(ctx), payload.goalId]
         );
 
         await emitContractEvent(state.adapter, name, 'contribute', payload, {
@@ -167,7 +168,7 @@ export function createSavingsContract(options: SavingsContractOptions = {}) {
                 currentAmount: currentAmount.toFixed(),
                 status
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const withdraw = async (payload: z.infer<typeof withdrawSchema>, ctx: any) => {
@@ -199,11 +200,11 @@ export function createSavingsContract(options: SavingsContractOptions = {}) {
 
         await state.adapter.query(
             'INSERT INTO savings_withdrawals (goal_id, owner, amount, note, created_at) VALUES (?, ?, ?, ?, ?)',
-            [payload.goalId, owner, amount, payload.note || '', new Date()]
+            [payload.goalId, owner, amount, payload.note || '', blockTimeOf(ctx)]
         );
         await state.adapter.query(
             'UPDATE savings_goals SET current_amount = ?, status = ?, updated_at = ? WHERE goal_id = ?',
-            [remaining.toFixed(), nextStatus, new Date(), payload.goalId]
+            [remaining.toFixed(), nextStatus, blockTimeOf(ctx), payload.goalId]
         );
 
         await emitContractEvent(state.adapter, name, 'withdraw', payload, {
@@ -215,7 +216,7 @@ export function createSavingsContract(options: SavingsContractOptions = {}) {
                 asset: goal.asset,
                 remainingAmount: remaining.toFixed()
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const closeGoal = async (payload: z.infer<typeof goalIdSchema>, ctx: any) => {
@@ -234,7 +235,7 @@ export function createSavingsContract(options: SavingsContractOptions = {}) {
 
         await state.adapter.query(
             'UPDATE savings_goals SET status = ?, updated_at = ? WHERE goal_id = ?',
-            ['closed', new Date(), payload.goalId]
+            ['closed', blockTimeOf(ctx), payload.goalId]
         );
 
         await emitContractEvent(state.adapter, name, 'closeGoal', payload, {
@@ -245,7 +246,7 @@ export function createSavingsContract(options: SavingsContractOptions = {}) {
                 currentAmount: goal.current_amount,
                 asset: goal.asset
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     return defineContract({

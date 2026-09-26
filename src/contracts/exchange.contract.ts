@@ -2,7 +2,7 @@ import BigNumber from '../bignumber';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
-import { ensureSqlAdapter, resolveContractAccount } from './helpers';
+import { ensureSqlAdapter, resolveContractAccount, blockTimeOf } from './helpers';
 
 const DEFAULT_NAME = 'exchange';
 
@@ -255,7 +255,7 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
                 [payload.base, payload.quote]
             );
 
-            await adapter.addEvent(new Date(), name, 'createPair', payload, {
+            await adapter.addEvent(blockTimeOf(ctx), name, 'createPair', payload, {
                 action: 'pair_created',
                 data: {
                     base: payload.base,
@@ -284,10 +284,10 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
 
             await adapter.query(
                 'INSERT INTO exchange_deposits (account, asset, amount, block_number, transaction_id, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-                [ctx.sender, ctx.transfer.asset, ctx.transfer.amount, ctx.block.number, ctx.transaction.id, new Date()]
+                [ctx.sender, ctx.transfer.asset, ctx.transfer.amount, ctx.block.number, ctx.transaction.id, blockTimeOf(ctx)]
             );
 
-            await adapter.addEvent(new Date(), name, 'deposit', { asset: ctx.transfer.asset, amount: ctx.transfer.amount }, {
+            await adapter.addEvent(blockTimeOf(ctx), name, 'deposit', { asset: ctx.transfer.asset, amount: ctx.transfer.amount }, {
                 action: 'deposit',
                 data: {
                     account: ctx.sender,
@@ -309,7 +309,7 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
             throw new Error('Insufficient available balance');
         }
 
-        const createdAt = new Date();
+        const createdAt = blockTimeOf(ctx);
         const withdrawalId = await withTransaction(async (adapter) => {
             const currentBalance = await getBalanceRow(ctx.sender, payload.asset, adapter);
             if (currentBalance.available.lt(amount)) {
@@ -398,11 +398,11 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
                     formatAmount(amount, basePrecision),
                     formatAmount(amount, basePrecision),
                     'open',
-                    new Date()
+                    blockTimeOf(ctx)
                 ]
             );
 
-            await adapter.addEvent(new Date(), name, 'placeOrder', payload, {
+            await adapter.addEvent(blockTimeOf(ctx), name, 'placeOrder', payload, {
                 action: 'order_opened',
                 data: {
                     orderId,
@@ -455,7 +455,7 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
                 ['canceled', '0', payload.orderId]
             );
 
-            await adapter.addEvent(new Date(), name, 'cancelOrder', payload, {
+            await adapter.addEvent(blockTimeOf(ctx), name, 'cancelOrder', payload, {
                 action: 'order_canceled',
                 data: {
                     orderId: payload.orderId,
@@ -465,7 +465,7 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
         });
     };
 
-    const snapshotOrderBook = async (payload: { base: string; quote: string; depth?: number }) => {
+    const snapshotOrderBook = async (payload: { base: string; quote: string; depth?: number }, ctx?: any) => {
         const depth = payload.depth ?? 20;
 
         const buys = await state.adapter.query(
@@ -505,7 +505,7 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
 
         await state.adapter.query(
             'INSERT INTO exchange_orderbook_snapshots (base_asset, quote_asset, bids, asks, created_at) VALUES (?, ?, ?, ?, ?)',
-            [payload.base, payload.quote, JSON.stringify(bids), JSON.stringify(asks), new Date()]
+            [payload.base, payload.quote, JSON.stringify(bids), JSON.stringify(asks), blockTimeOf(ctx)]
         );
     };
 
@@ -656,11 +656,11 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
                             buy.quote_asset,
                             buy.account,
                             sell.account,
-                            new Date()
+                            blockTimeOf(_ctx)
                         ]
                     );
 
-                    await adapter.addEvent(new Date(), name, 'matchOrders', { base: pair.base_asset, quote: pair.quote_asset }, {
+                    await adapter.addEvent(blockTimeOf(_ctx), name, 'matchOrders', { base: pair.base_asset, quote: pair.quote_asset }, {
                         action: 'trade',
                         data: {
                             buyOrderId: buy.id,
@@ -681,7 +681,7 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
             }
 
             if (payload.snapshot) {
-                await snapshotOrderBook({ base: pair.base_asset, quote: pair.quote_asset, depth: payload.depth });
+                await snapshotOrderBook({ base: pair.base_asset, quote: pair.quote_asset, depth: payload.depth }, _ctx);
             }
         }
     };
@@ -702,7 +702,7 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
             await setBalanceRow(ctx.sender, payload.asset, senderBalance.available.minus(amount), senderBalance.locked, adapter);
             await setBalanceRow(payload.to, payload.asset, recipientBalance.available.plus(amount), recipientBalance.locked, adapter);
 
-            await adapter.addEvent(new Date(), name, 'transfer', payload, {
+            await adapter.addEvent(blockTimeOf(ctx), name, 'transfer', payload, {
                 action: 'internal_transfer',
                 data: {
                     from: ctx.sender,

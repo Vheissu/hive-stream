@@ -4,6 +4,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -101,8 +102,8 @@ export function createPaywallContract(options: PaywallContractOptions = {}) {
                 payload.maxPurchasesPerAccount || null,
                 1,
                 JSON.stringify(payload.metadata || {}),
-                new Date(),
-                new Date()
+                blockTimeOf(ctx),
+                blockTimeOf(ctx)
             ]
         );
 
@@ -112,7 +113,7 @@ export function createPaywallContract(options: PaywallContractOptions = {}) {
                 resourceId: payload.resourceId,
                 owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const grantAccess = async (payload: z.infer<typeof resourceIdSchema>, ctx: any) => {
@@ -138,7 +139,7 @@ export function createPaywallContract(options: PaywallContractOptions = {}) {
             [payload.resourceId, account]
         );
 
-        const now = new Date();
+        const now = blockTimeOf(ctx);
         const baseDate = accessRows.length > 0 && parseDateValue(accessRows[0].expires_at) && parseDateValue(accessRows[0].expires_at)! > now
             ? parseDateValue(accessRows[0].expires_at)!
             : now;
@@ -165,7 +166,7 @@ export function createPaywallContract(options: PaywallContractOptions = {}) {
                 expiresAt: nextExpires,
                 source: payment.source
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const revokeAccess = async (payload: z.infer<typeof revokeSchema>, ctx: any) => {
@@ -182,7 +183,7 @@ export function createPaywallContract(options: PaywallContractOptions = {}) {
 
         await state.adapter.query(
             'UPDATE paywall_access SET status = ?, updated_at = ? WHERE resource_id = ? AND account = ?',
-            ['revoked', new Date(), payload.resourceId, payload.account]
+            ['revoked', blockTimeOf(ctx), payload.resourceId, payload.account]
         );
 
         await emitContractEvent(state.adapter, name, 'revokeAccess', payload, {
@@ -192,14 +193,14 @@ export function createPaywallContract(options: PaywallContractOptions = {}) {
                 account: payload.account,
                 revokedBy: owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const expireAccess = async (payload: { resourceId?: string } = {}, _ctx: any) => {
         const rows = payload.resourceId
             ? await state.adapter.query('SELECT * FROM paywall_access WHERE resource_id = ?', [payload.resourceId])
             : await state.adapter.query('SELECT * FROM paywall_access', []);
-        const now = new Date();
+        const now = blockTimeOf(_ctx);
 
         for (const access of rows) {
             const expiresAt = parseDateValue(access.expires_at);
@@ -215,7 +216,7 @@ export function createPaywallContract(options: PaywallContractOptions = {}) {
                         resourceId: access.resource_id,
                         account: access.account
                     }
-                });
+                }, blockTimeOf(_ctx));
             }
         }
     };

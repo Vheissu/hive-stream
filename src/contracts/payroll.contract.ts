@@ -4,6 +4,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -113,10 +114,10 @@ export function createPayrollContract(options: PayrollContractOptions = {}) {
                 payload.asset,
                 payload.intervalDays,
                 '0',
-                new Date(),
+                blockTimeOf(ctx),
                 JSON.stringify(payload.metadata || {}),
-                new Date(),
-                new Date()
+                blockTimeOf(ctx),
+                blockTimeOf(ctx)
             ]
         );
 
@@ -126,7 +127,7 @@ export function createPayrollContract(options: PayrollContractOptions = {}) {
                 payrollId: payload.payrollId,
                 owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const addRecipient = async (payload: z.infer<typeof addRecipientSchema>, ctx: any) => {
@@ -146,7 +147,7 @@ export function createPayrollContract(options: PayrollContractOptions = {}) {
              VALUES (?, ?, ?, ?, ?)
              ON CONFLICT(payroll_id, account)
              DO UPDATE SET amount = excluded.amount, active = excluded.active`,
-            [payload.payrollId, payload.account, payload.amount, 1, new Date()]
+            [payload.payrollId, payload.account, payload.amount, 1, blockTimeOf(ctx)]
         );
 
         await emitContractEvent(state.adapter, name, 'addRecipient', payload, {
@@ -156,7 +157,7 @@ export function createPayrollContract(options: PayrollContractOptions = {}) {
                 account: payload.account,
                 amount: payload.amount
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const fundPayroll = async (payload: z.infer<typeof idSchema>, ctx: any) => {
@@ -176,7 +177,7 @@ export function createPayrollContract(options: PayrollContractOptions = {}) {
         const budget = toBigNumber(run.budget_balance).plus(payment.amount);
         await state.adapter.query(
             'UPDATE payroll_runs SET budget_balance = ?, updated_at = ? WHERE payroll_id = ?',
-            [budget.toFixed(), new Date(), payload.payrollId]
+            [budget.toFixed(), blockTimeOf(ctx), payload.payrollId]
         );
 
         await emitContractEvent(state.adapter, name, 'fundPayroll', payload, {
@@ -185,7 +186,7 @@ export function createPayrollContract(options: PayrollContractOptions = {}) {
                 payrollId: payload.payrollId,
                 budgetBalance: budget.toFixed()
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const runPayroll = async (payload: z.infer<typeof idSchema>, ctx: any) => {
@@ -223,18 +224,18 @@ export function createPayrollContract(options: PayrollContractOptions = {}) {
                  VALUES (?, ?, ?, ?, ?)
                  ON CONFLICT(payroll_id, account, asset)
                  DO UPDATE SET balance = excluded.balance, updated_at = excluded.updated_at`,
-                [payload.payrollId, recipient.account, run.asset, nextBalance.toFixed(), new Date()]
+                [payload.payrollId, recipient.account, run.asset, nextBalance.toFixed(), blockTimeOf(ctx)]
             );
         }
 
-        const nextRunAt = new Date(Date.now() + Number(run.interval_days) * 24 * 60 * 60 * 1000);
+        const nextRunAt = new Date(blockTimeOf(ctx).getTime() + Number(run.interval_days) * 24 * 60 * 60 * 1000);
         await state.adapter.query(
             'UPDATE payroll_runs SET budget_balance = ?, next_run_at = ?, updated_at = ? WHERE payroll_id = ?',
-            [toBigNumber(run.budget_balance).minus(totalAmount).toFixed(), nextRunAt, new Date(), payload.payrollId]
+            [toBigNumber(run.budget_balance).minus(totalAmount).toFixed(), nextRunAt, blockTimeOf(ctx), payload.payrollId]
         );
         await state.adapter.query(
             'INSERT INTO payroll_executions (payroll_id, run_amount, recipient_count, created_at) VALUES (?, ?, ?, ?)',
-            [payload.payrollId, totalAmount.toFixed(), recipients.length, new Date()]
+            [payload.payrollId, totalAmount.toFixed(), recipients.length, blockTimeOf(ctx)]
         );
 
         await emitContractEvent(state.adapter, name, 'runPayroll', payload, {
@@ -244,7 +245,7 @@ export function createPayrollContract(options: PayrollContractOptions = {}) {
                 totalAmount: totalAmount.toFixed(),
                 recipientCount: recipients.length
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const withdrawPayroll = async (payload: { payrollId?: string } = {}, ctx: any) => {
@@ -263,7 +264,7 @@ export function createPayrollContract(options: PayrollContractOptions = {}) {
 
             await state.adapter.query(
                 'UPDATE payroll_balances SET balance = ?, updated_at = ? WHERE payroll_id = ? AND account = ? AND asset = ?',
-                ['0', new Date(), balance.payroll_id, account, balance.asset]
+                ['0', blockTimeOf(ctx), balance.payroll_id, account, balance.asset]
             );
 
             await emitContractEvent(state.adapter, name, 'withdrawPayroll', payload, {
@@ -274,7 +275,7 @@ export function createPayrollContract(options: PayrollContractOptions = {}) {
                     amount: balance.balance,
                     asset: balance.asset
                 }
-            });
+            }, blockTimeOf(ctx));
         }
     };
 

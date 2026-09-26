@@ -4,6 +4,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -100,7 +101,7 @@ export function createBookingContract(options: BookingContractOptions = {}) {
                 payload.cancellationHours || 0,
                 1,
                 JSON.stringify(payload.metadata || {}),
-                new Date()
+                blockTimeOf(ctx)
             ]
         );
 
@@ -110,7 +111,7 @@ export function createBookingContract(options: BookingContractOptions = {}) {
                 listingId: payload.listingId,
                 owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const reserve = async (payload: z.infer<typeof reserveSchema>, ctx: any) => {
@@ -127,7 +128,7 @@ export function createBookingContract(options: BookingContractOptions = {}) {
         }
 
         const startAt = parseDateValue(payload.startAt);
-        if (!startAt || startAt <= new Date()) {
+        if (!startAt || startAt <= blockTimeOf(ctx)) {
             throw new Error('Reservation start time must be in the future');
         }
 
@@ -155,7 +156,7 @@ export function createBookingContract(options: BookingContractOptions = {}) {
             `INSERT INTO booking_reservations (
                 reservation_id, listing_id, booker, start_at, end_at, amount, asset, note, status, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [payload.reservationId, payload.listingId, booker, startAt, endAt, payment.amount, payment.asset, payload.note || '', 'pending', new Date(), new Date()]
+            [payload.reservationId, payload.listingId, booker, startAt, endAt, payment.amount, payment.asset, payload.note || '', 'pending', blockTimeOf(ctx), blockTimeOf(ctx)]
         );
 
         await emitContractEvent(state.adapter, name, 'reserve', payload, {
@@ -167,7 +168,7 @@ export function createBookingContract(options: BookingContractOptions = {}) {
                 startAt,
                 endAt
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const confirmReservation = async (payload: z.infer<typeof reservationSchema>, ctx: any) => {
@@ -185,7 +186,7 @@ export function createBookingContract(options: BookingContractOptions = {}) {
 
         await state.adapter.query(
             'UPDATE booking_reservations SET status = ?, updated_at = ? WHERE reservation_id = ?',
-            ['confirmed', new Date(), payload.reservationId]
+            ['confirmed', blockTimeOf(ctx), payload.reservationId]
         );
 
         await emitContractEvent(state.adapter, name, 'confirmReservation', payload, {
@@ -195,7 +196,7 @@ export function createBookingContract(options: BookingContractOptions = {}) {
                 listingId: reservation.listing_id,
                 owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const cancelReservation = async (payload: z.infer<typeof reservationSchema>, ctx: any) => {
@@ -215,15 +216,15 @@ export function createBookingContract(options: BookingContractOptions = {}) {
         }
 
         if (isBooker) {
-            const cancellationWindowStart = new Date((parseDateValue(reservation.start_at) || new Date()).getTime() - Number(listing.cancellation_hours) * 60 * 60 * 1000);
-            if (cancellationWindowStart < new Date()) {
+            const cancellationWindowStart = new Date((parseDateValue(reservation.start_at) || blockTimeOf(ctx)).getTime() - Number(listing.cancellation_hours) * 60 * 60 * 1000);
+            if (cancellationWindowStart < blockTimeOf(ctx)) {
                 throw new Error('Cancellation window has passed');
             }
         }
 
         await state.adapter.query(
             'UPDATE booking_reservations SET status = ?, updated_at = ? WHERE reservation_id = ?',
-            ['cancelled', new Date(), payload.reservationId]
+            ['cancelled', blockTimeOf(ctx), payload.reservationId]
         );
 
         await emitContractEvent(state.adapter, name, 'cancelReservation', payload, {
@@ -234,7 +235,7 @@ export function createBookingContract(options: BookingContractOptions = {}) {
                 cancelledBy: sender,
                 reason: payload.reason || ''
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const completeReservation = async (payload: z.infer<typeof reservationSchema>, ctx: any) => {
@@ -254,7 +255,7 @@ export function createBookingContract(options: BookingContractOptions = {}) {
 
         await state.adapter.query(
             'UPDATE booking_reservations SET status = ?, updated_at = ? WHERE reservation_id = ?',
-            ['completed', new Date(), payload.reservationId]
+            ['completed', blockTimeOf(ctx), payload.reservationId]
         );
 
         await emitContractEvent(state.adapter, name, 'completeReservation', payload, {
@@ -263,7 +264,7 @@ export function createBookingContract(options: BookingContractOptions = {}) {
                 reservationId: payload.reservationId,
                 listingId: reservation.listing_id
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     return defineContract({

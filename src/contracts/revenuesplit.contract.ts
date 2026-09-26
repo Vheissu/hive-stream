@@ -3,6 +3,7 @@ import { action, defineContract } from './contract';
 import {
     amountSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -126,8 +127,8 @@ export function createRevenueSplitContract(options: RevenueSplitContractOptions 
                 JSON.stringify(payload.recipients),
                 1,
                 JSON.stringify(payload.metadata || {}),
-                new Date(),
-                new Date()
+                blockTimeOf(ctx),
+                blockTimeOf(ctx)
             ]
         );
 
@@ -137,7 +138,7 @@ export function createRevenueSplitContract(options: RevenueSplitContractOptions 
                 splitId: payload.splitId,
                 owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const updateSplit = async (payload: z.infer<typeof updateSplitSchema>, ctx: any) => {
@@ -156,7 +157,7 @@ export function createRevenueSplitContract(options: RevenueSplitContractOptions 
 
         await state.adapter.query(
             'UPDATE revenue_splits SET recipients_json = ?, metadata = ?, updated_at = ? WHERE split_id = ?',
-            [JSON.stringify(payload.recipients), JSON.stringify(payload.metadata || parseJson(split.metadata, {})), new Date(), payload.splitId]
+            [JSON.stringify(payload.recipients), JSON.stringify(payload.metadata || parseJson(split.metadata, {})), blockTimeOf(ctx), payload.splitId]
         );
 
         await emitContractEvent(state.adapter, name, 'updateSplit', payload, {
@@ -165,7 +166,7 @@ export function createRevenueSplitContract(options: RevenueSplitContractOptions 
                 splitId: payload.splitId,
                 owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const distribute = async (payload: { splitId: string }, ctx: any) => {
@@ -203,13 +204,13 @@ export function createRevenueSplitContract(options: RevenueSplitContractOptions 
                  VALUES (?, ?, ?, ?, ?)
                  ON CONFLICT(split_id, account, asset)
                  DO UPDATE SET balance = excluded.balance, updated_at = excluded.updated_at`,
-                [payload.splitId, recipient.account, payment.asset, nextBalance.toFixed(), new Date()]
+                [payload.splitId, recipient.account, payment.asset, nextBalance.toFixed(), blockTimeOf(ctx)]
             );
         }
 
         await state.adapter.query(
             'INSERT INTO revenue_split_distributions (split_id, amount, asset, payer, reference, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-            [payload.splitId, payment.amount, payment.asset, payer, payment.memo || '', new Date()]
+            [payload.splitId, payment.amount, payment.asset, payer, payment.memo || '', blockTimeOf(ctx)]
         );
 
         await emitContractEvent(state.adapter, name, 'distribute', payload, {
@@ -221,7 +222,7 @@ export function createRevenueSplitContract(options: RevenueSplitContractOptions 
                 asset: payment.asset,
                 recipients
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const withdraw = async (payload: { splitId?: string; asset?: string } = {}, ctx: any) => {
@@ -248,7 +249,7 @@ export function createRevenueSplitContract(options: RevenueSplitContractOptions 
 
             await state.adapter.query(
                 'UPDATE revenue_split_balances SET balance = ?, updated_at = ? WHERE split_id = ? AND account = ? AND asset = ?',
-                ['0', new Date(), balance.split_id, account, balance.asset]
+                ['0', blockTimeOf(ctx), balance.split_id, account, balance.asset]
             );
 
             await emitContractEvent(state.adapter, name, 'withdraw', payload, {
@@ -259,7 +260,7 @@ export function createRevenueSplitContract(options: RevenueSplitContractOptions 
                     amount: balance.balance,
                     asset: balance.asset
                 }
-            });
+            }, blockTimeOf(ctx));
         }
     };
 

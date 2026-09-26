@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
 import {
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     initializeTables,
@@ -139,7 +140,7 @@ export function createCheckpointContract(options: CheckpointContractOptions) {
                 state_hash = excluded.state_hash,
                 local_hash = excluded.local_hash,
                 created_at = excluded.created_at`,
-            [checkpointId, account, blockNumber, stateHash, stateHash, JSON.stringify(tables), 1, 'local', new Date()]
+            [checkpointId, account, blockNumber, stateHash, stateHash, JSON.stringify(tables), 1, 'local', blockTimeOf(ctx)]
         );
 
         await emitContractEvent(state.adapter, name, 'publishCheckpoint', { checkpointId }, {
@@ -151,7 +152,7 @@ export function createCheckpointContract(options: CheckpointContractOptions) {
                 stateHash,
                 tables
             }
-        });
+        }, blockTimeOf(ctx));
 
         const config = ctx?.config || state.config;
         const payloadIdentifier = config?.PAYLOAD_IDENTIFIER || 'hive_stream';
@@ -210,7 +211,7 @@ export function createCheckpointContract(options: CheckpointContractOptions) {
                 local_hash = excluded.local_hash,
                 matched = excluded.matched,
                 created_at = excluded.created_at`,
-            [recordId, publisher, payload.blockNumber, payload.stateHash, localHash, JSON.stringify(remoteTables), matched ? 1 : 0, 'remote', new Date()]
+            [recordId, publisher, payload.blockNumber, payload.stateHash, localHash, JSON.stringify(remoteTables), matched ? 1 : 0, 'remote', blockTimeOf(ctx)]
         );
 
         await emitContractEvent(state.adapter, name, 'recordCheckpoint', payload, {
@@ -223,7 +224,7 @@ export function createCheckpointContract(options: CheckpointContractOptions) {
                 localHash,
                 matched
             }
-        });
+        }, blockTimeOf(ctx));
 
         if (!matched) {
             getLogger().warn(`[CheckpointContract] State divergence detected against ${publisher} at block ${payload.blockNumber}`);

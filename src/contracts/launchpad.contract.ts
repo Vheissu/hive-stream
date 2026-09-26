@@ -4,6 +4,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -87,7 +88,7 @@ export function createLaunchpadContract(options: LaunchpadContractOptions = {}) 
         }
 
         const closesAt = parseDateValue(payload.closesAt);
-        if (!closesAt || closesAt <= new Date()) {
+        if (!closesAt || closesAt <= blockTimeOf(ctx)) {
             throw new Error('Sale close time must be in the future');
         }
 
@@ -114,7 +115,7 @@ export function createLaunchpadContract(options: LaunchpadContractOptions = {}) 
                 payload.maxUnitsPerBuyer || null,
                 'open',
                 JSON.stringify(payload.metadata || {}),
-                new Date(),
+                blockTimeOf(ctx),
                 null
             ]
         );
@@ -125,7 +126,7 @@ export function createLaunchpadContract(options: LaunchpadContractOptions = {}) 
                 saleId: payload.saleId,
                 creator
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const contribute = async (payload: z.infer<typeof saleIdSchema>, ctx: any) => {
@@ -141,7 +142,7 @@ export function createLaunchpadContract(options: LaunchpadContractOptions = {}) 
             throw new Error('Sale is not open');
         }
 
-        if ((parseDateValue(sale.closes_at) || new Date()) <= new Date()) {
+        if ((parseDateValue(sale.closes_at) || blockTimeOf(ctx)) <= blockTimeOf(ctx)) {
             throw new Error('Sale has already closed');
         }
 
@@ -178,7 +179,7 @@ export function createLaunchpadContract(options: LaunchpadContractOptions = {}) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(sale_id, buyer)
              DO UPDATE SET units = excluded.units, amount_paid = excluded.amount_paid, asset = excluded.asset, updated_at = excluded.updated_at`,
-            [payload.saleId, buyer, totalBuyerUnits, totalPaid.toFixed(), payment.asset, 0, new Date(), new Date()]
+            [payload.saleId, buyer, totalBuyerUnits, totalPaid.toFixed(), payment.asset, 0, blockTimeOf(ctx), blockTimeOf(ctx)]
         );
         await state.adapter.query(
             'UPDATE launchpad_sales SET units_sold = ? WHERE sale_id = ?',
@@ -193,7 +194,7 @@ export function createLaunchpadContract(options: LaunchpadContractOptions = {}) 
                 units: unitCount,
                 totalBuyerUnits
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const finalizeSale = async (payload: z.infer<typeof saleIdSchema>, ctx: any) => {
@@ -214,14 +215,14 @@ export function createLaunchpadContract(options: LaunchpadContractOptions = {}) 
             }
         }
 
-        if ((parseDateValue(sale.closes_at) || new Date()) > new Date() && Number(sale.units_sold) < Number(sale.total_units)) {
+        if ((parseDateValue(sale.closes_at) || blockTimeOf(ctx)) > blockTimeOf(ctx) && Number(sale.units_sold) < Number(sale.total_units)) {
             throw new Error('Sale cannot be finalized before it closes unless it sells out');
         }
 
         const status = Number(sale.units_sold) > 0 ? 'successful' : 'closed';
         await state.adapter.query(
             'UPDATE launchpad_sales SET status = ?, finalized_at = ? WHERE sale_id = ?',
-            [status, new Date(), payload.saleId]
+            [status, blockTimeOf(ctx), payload.saleId]
         );
 
         await emitContractEvent(state.adapter, name, 'finalizeSale', payload, {
@@ -231,7 +232,7 @@ export function createLaunchpadContract(options: LaunchpadContractOptions = {}) 
                 status,
                 unitsSold: sale.units_sold
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const claimAllocation = async (payload: z.infer<typeof saleIdSchema>, ctx: any) => {
@@ -254,7 +255,7 @@ export function createLaunchpadContract(options: LaunchpadContractOptions = {}) 
 
         await state.adapter.query(
             'UPDATE launchpad_allocations SET claimed = ?, updated_at = ? WHERE sale_id = ? AND buyer = ?',
-            [1, new Date(), payload.saleId, buyer]
+            [1, blockTimeOf(ctx), payload.saleId, buyer]
         );
 
         await emitContractEvent(state.adapter, name, 'claimAllocation', payload, {
@@ -265,7 +266,7 @@ export function createLaunchpadContract(options: LaunchpadContractOptions = {}) 
                 tokenSymbol: sale.token_symbol,
                 units: allocation.units
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     return defineContract({

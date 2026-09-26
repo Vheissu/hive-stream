@@ -4,6 +4,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -106,7 +107,7 @@ export function createCrowdfundContract(options: CrowdfundContractOptions = {}) 
         }
 
         const deadline = parseDateValue(payload.deadline);
-        if (!deadline || deadline <= new Date()) {
+        if (!deadline || deadline <= blockTimeOf(ctx)) {
             throw new Error('Campaign deadline must be in the future');
         }
 
@@ -126,7 +127,7 @@ export function createCrowdfundContract(options: CrowdfundContractOptions = {}) 
                 deadline,
                 'open',
                 JSON.stringify(payload.metadata || {}),
-                new Date(),
+                blockTimeOf(ctx),
                 null
             ]
         );
@@ -144,7 +145,7 @@ export function createCrowdfundContract(options: CrowdfundContractOptions = {}) 
                 `INSERT INTO crowdfund_milestones (
                     campaign_id, milestone_index, title, target_percent, status, released_amount, released_at, created_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                [payload.campaignId, index, milestone.title, milestone.targetPercent, 'pending', null, null, new Date()]
+                [payload.campaignId, index, milestone.title, milestone.targetPercent, 'pending', null, null, blockTimeOf(ctx)]
             );
         }
 
@@ -154,7 +155,7 @@ export function createCrowdfundContract(options: CrowdfundContractOptions = {}) 
                 campaignId: payload.campaignId,
                 creator
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const contribute = async (payload: z.infer<typeof campaignIdSchema>, ctx: any) => {
@@ -166,12 +167,12 @@ export function createCrowdfundContract(options: CrowdfundContractOptions = {}) 
         }
 
         const campaign = rows[0];
-        const deadline = parseDateValue(campaign.deadline) || new Date();
+        const deadline = parseDateValue(campaign.deadline) || blockTimeOf(ctx);
         if (campaign.status !== 'open' && campaign.status !== 'target_met') {
             throw new Error('Campaign is not accepting contributions');
         }
 
-        if (deadline <= new Date()) {
+        if (deadline <= blockTimeOf(ctx)) {
             throw new Error('Campaign deadline has passed');
         }
 
@@ -184,7 +185,7 @@ export function createCrowdfundContract(options: CrowdfundContractOptions = {}) 
 
         await state.adapter.query(
             'INSERT INTO crowdfund_contributions (campaign_id, contributor, amount, asset, transaction_id, refunded, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [payload.campaignId, contributor, payment.amount, payment.asset, ctx.transaction.id, 0, new Date()]
+            [payload.campaignId, contributor, payment.amount, payment.asset, ctx.transaction.id, 0, blockTimeOf(ctx)]
         );
 
         await state.adapter.query(
@@ -201,7 +202,7 @@ export function createCrowdfundContract(options: CrowdfundContractOptions = {}) 
                 asset: payment.asset,
                 currentAmount: currentAmount.toFixed()
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const finalizeCampaign = async (payload: z.infer<typeof campaignIdSchema>, ctx: any) => {
@@ -222,16 +223,16 @@ export function createCrowdfundContract(options: CrowdfundContractOptions = {}) 
             }
         }
 
-        const deadline = parseDateValue(campaign.deadline) || new Date();
+        const deadline = parseDateValue(campaign.deadline) || blockTimeOf(ctx);
         const goalReached = toBigNumber(campaign.current_amount).gte(campaign.target_amount);
-        if (!goalReached && deadline > new Date()) {
+        if (!goalReached && deadline > blockTimeOf(ctx)) {
             throw new Error('Campaign cannot be finalized before the deadline unless the target is met');
         }
 
         const status = goalReached ? 'funded' : 'failed';
         await state.adapter.query(
             'UPDATE crowdfund_campaigns SET status = ?, finalized_at = ? WHERE campaign_id = ?',
-            [status, new Date(), payload.campaignId]
+            [status, blockTimeOf(ctx), payload.campaignId]
         );
 
         await emitContractEvent(state.adapter, name, 'finalizeCampaign', payload, {
@@ -243,7 +244,7 @@ export function createCrowdfundContract(options: CrowdfundContractOptions = {}) 
                 amount: campaign.current_amount,
                 asset: campaign.asset
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const releaseMilestone = async (payload: z.infer<typeof releaseMilestoneSchema>, ctx: any) => {
@@ -294,7 +295,7 @@ export function createCrowdfundContract(options: CrowdfundContractOptions = {}) 
 
         await state.adapter.query(
             'UPDATE crowdfund_milestones SET status = ?, released_amount = ?, released_at = ? WHERE campaign_id = ? AND milestone_index = ?',
-            ['released', releasedAmount, new Date(), payload.campaignId, payload.milestoneIndex]
+            ['released', releasedAmount, blockTimeOf(ctx), payload.campaignId, payload.milestoneIndex]
         );
 
         // Transfer funds to the beneficiary
@@ -316,7 +317,7 @@ export function createCrowdfundContract(options: CrowdfundContractOptions = {}) 
                 releasedAmount,
                 beneficiary: campaign.beneficiary
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const refundContribution = async (payload: z.infer<typeof campaignIdSchema>, ctx: any) => {
@@ -364,7 +365,7 @@ export function createCrowdfundContract(options: CrowdfundContractOptions = {}) 
                 refundAmount: totalRefund,
                 asset: campaign.asset
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     return defineContract({

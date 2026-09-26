@@ -3,7 +3,7 @@ import BigNumber from '../bignumber';
 import seedrandom from 'seedrandom';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
-import { createFairnessSupport, formatBlockchainAmount, formatFairnessMemo, parseBlockchainAmount, resolveContractAccount } from './helpers';
+import { createFairnessSupport, formatBlockchainAmount, formatFairnessMemo, parseBlockchainAmount, resolveContractAccount, blockTimeOf } from './helpers';
 import { resolveFairnessOption, type FairDrawProof, type FairnessManager, type FairnessOptions } from '../fairness/manager';
 
 const DEFAULT_NAME = 'hivedice';
@@ -198,7 +198,7 @@ export function createDiceContract(options: DiceContractOptions = {}) {
                 const losingMemo = `You lost ${formatBlockchainAmount(amountParsed)} ${tokenSymbol}. Roll: ${random}, Your guess: ${roll}${fairMemo}`;
 
                 if (proof && state.adapter?.addEvent) {
-                    await state.adapter.addEvent(new Date(), name, 'roll', payload, {
+                    await state.adapter.addEvent(blockTimeOf(ctx), name, 'roll', payload, {
                         action: 'dice_result',
                         data: {
                             player: sender,

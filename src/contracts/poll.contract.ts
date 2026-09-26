@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { action, defineContract } from './contract';
-import { ensureSqlAdapter } from './helpers';
+import { ensureSqlAdapter, blockTimeOf } from './helpers';
 
 const DEFAULT_NAME = 'polls';
 
@@ -53,7 +53,7 @@ export function createPollContract(options: PollContractOptions = {}) {
 
     const createPoll = async (payload: { pollId: string; question: string; options: string[]; durationHours?: number }, ctx: any) => {
         const closesAt = payload.durationHours
-            ? new Date(Date.now() + payload.durationHours * 60 * 60 * 1000)
+            ? new Date(blockTimeOf(ctx).getTime() + payload.durationHours * 60 * 60 * 1000)
             : null;
 
         const existing = await state.adapter.query('SELECT poll_id FROM polls WHERE poll_id = ?', [payload.pollId]);
@@ -63,10 +63,10 @@ export function createPollContract(options: PollContractOptions = {}) {
 
         await state.adapter.query(
             'INSERT INTO polls (poll_id, question, options, creator, created_at, closes_at) VALUES (?, ?, ?, ?, ?, ?)',
-            [payload.pollId, payload.question, JSON.stringify(payload.options), ctx.sender, new Date(), closesAt]
+            [payload.pollId, payload.question, JSON.stringify(payload.options), ctx.sender, blockTimeOf(ctx), closesAt]
         );
 
-        await state.adapter.addEvent(new Date(), name, 'createPoll', payload, {
+        await state.adapter.addEvent(blockTimeOf(ctx), name, 'createPoll', payload, {
             action: 'poll_created',
             data: {
                 pollId: payload.pollId,
@@ -89,16 +89,16 @@ export function createPollContract(options: PollContractOptions = {}) {
             throw new Error('Invalid poll option');
         }
 
-        if (pollData.closes_at && new Date(pollData.closes_at) < new Date()) {
+        if (pollData.closes_at && new Date(pollData.closes_at) < blockTimeOf(ctx)) {
             throw new Error('Poll is closed');
         }
 
         await state.adapter.query(
             'INSERT INTO poll_votes (poll_id, voter, option_index, created_at) VALUES (?, ?, ?, ?)',
-            [payload.pollId, ctx.sender, payload.option, new Date()]
+            [payload.pollId, ctx.sender, payload.option, blockTimeOf(ctx)]
         );
 
-        await state.adapter.addEvent(new Date(), name, 'vote', payload, {
+        await state.adapter.addEvent(blockTimeOf(ctx), name, 'vote', payload, {
             action: 'poll_voted',
             data: {
                 pollId: payload.pollId,

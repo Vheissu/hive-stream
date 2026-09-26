@@ -4,6 +4,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -91,7 +92,7 @@ export function createAuctionHouseContract(options: AuctionHouseContractOptions 
             throw new Error(`Auction ${payload.auctionId} already exists`);
         }
 
-        const startsAt = parseDateValue(payload.startsAt) || new Date();
+        const startsAt = parseDateValue(payload.startsAt) || blockTimeOf(ctx);
         const endsAt = parseDateValue(payload.endsAt);
         if (!endsAt || endsAt <= startsAt) {
             throw new Error('Auction end date must be after the start date');
@@ -121,7 +122,7 @@ export function createAuctionHouseContract(options: AuctionHouseContractOptions 
                 'open',
                 null,
                 null,
-                new Date(),
+                blockTimeOf(ctx),
                 null,
                 JSON.stringify(payload.metadata || {})
             ]
@@ -135,7 +136,7 @@ export function createAuctionHouseContract(options: AuctionHouseContractOptions 
                 paymentAsset: payload.paymentAsset,
                 reservePrice: payload.reservePrice
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const placeBid = async (payload: z.infer<typeof placeBidSchema>, ctx: any) => {
@@ -147,7 +148,7 @@ export function createAuctionHouseContract(options: AuctionHouseContractOptions 
         }
 
         const auction = auctionRows[0];
-        const now = new Date();
+        const now = blockTimeOf(ctx);
         const startsAt = parseDateValue(auction.starts_at) || now;
         const endsAt = parseDateValue(auction.ends_at) || now;
 
@@ -203,7 +204,7 @@ export function createAuctionHouseContract(options: AuctionHouseContractOptions 
                 winner: shouldSettle ? bidder : null,
                 settled: shouldSettle
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const settleAuction = async (payload: z.infer<typeof settleSchema>, ctx: any) => {
@@ -222,8 +223,8 @@ export function createAuctionHouseContract(options: AuctionHouseContractOptions 
             throw new Error('Only the seller can settle this auction');
         }
 
-        const endsAt = parseDateValue(auction.ends_at) || new Date();
-        if (ctx.trigger !== 'time' && endsAt > new Date()) {
+        const endsAt = parseDateValue(auction.ends_at) || blockTimeOf(ctx);
+        if (ctx.trigger !== 'time' && endsAt > blockTimeOf(ctx)) {
             throw new Error('Auction cannot be settled before it ends');
         }
 
@@ -235,7 +236,7 @@ export function createAuctionHouseContract(options: AuctionHouseContractOptions 
 
         await state.adapter.query(
             'UPDATE auction_house_auctions SET status = ?, settled_at = ? WHERE auction_id = ?',
-            [status, new Date(), payload.auctionId]
+            [status, blockTimeOf(ctx), payload.auctionId]
         );
 
         await emitContractEvent(state.adapter, name, 'settleAuction', payload, {
@@ -246,7 +247,7 @@ export function createAuctionHouseContract(options: AuctionHouseContractOptions 
                 winner: status === 'settled' ? auction.highest_bidder : null,
                 winningBid: status === 'settled' ? auction.highest_bid : null
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const cancelAuction = async (payload: z.infer<typeof settleSchema>, ctx: any) => {
@@ -267,7 +268,7 @@ export function createAuctionHouseContract(options: AuctionHouseContractOptions 
 
         await state.adapter.query(
             'UPDATE auction_house_auctions SET status = ?, settled_at = ? WHERE auction_id = ?',
-            ['cancelled', new Date(), payload.auctionId]
+            ['cancelled', blockTimeOf(ctx), payload.auctionId]
         );
 
         await emitContractEvent(state.adapter, name, 'cancelAuction', payload, {
@@ -276,7 +277,7 @@ export function createAuctionHouseContract(options: AuctionHouseContractOptions 
                 auctionId: payload.auctionId,
                 seller: sender
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     return defineContract({

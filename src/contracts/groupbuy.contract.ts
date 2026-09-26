@@ -4,6 +4,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -80,7 +81,7 @@ export function createGroupBuyContract(options: GroupBuyContractOptions = {}) {
         }
 
         const deadline = parseDateValue(payload.deadline);
-        if (!deadline || deadline <= new Date()) {
+        if (!deadline || deadline <= blockTimeOf(ctx)) {
             throw new Error('Group buy deadline must be in the future');
         }
 
@@ -100,7 +101,7 @@ export function createGroupBuyContract(options: GroupBuyContractOptions = {}) {
                 0,
                 'open',
                 JSON.stringify(payload.metadata || {}),
-                new Date(),
+                blockTimeOf(ctx),
                 null
             ]
         );
@@ -111,7 +112,7 @@ export function createGroupBuyContract(options: GroupBuyContractOptions = {}) {
                 groupBuyId: payload.groupBuyId,
                 organizer
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const commit = async (payload: z.infer<typeof idSchema>, ctx: any) => {
@@ -138,7 +139,7 @@ export function createGroupBuyContract(options: GroupBuyContractOptions = {}) {
 
         await state.adapter.query(
             'INSERT INTO group_buy_commitments (group_buy_id, contributor, amount, asset, withdrawn, transaction_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [payload.groupBuyId, contributor, payment.amount, payment.asset, 0, ctx.transaction.id, new Date()]
+            [payload.groupBuyId, contributor, payment.amount, payment.asset, 0, ctx.transaction.id, blockTimeOf(ctx)]
         );
 
         await state.adapter.query(
@@ -156,7 +157,7 @@ export function createGroupBuyContract(options: GroupBuyContractOptions = {}) {
                 currentAmount: currentAmount.toFixed(),
                 participantCount
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const finalizeGroupBuy = async (payload: z.infer<typeof idSchema>, ctx: any) => {
@@ -177,10 +178,10 @@ export function createGroupBuyContract(options: GroupBuyContractOptions = {}) {
             }
         }
 
-        const deadline = parseDateValue(campaign.deadline) || new Date();
+        const deadline = parseDateValue(campaign.deadline) || blockTimeOf(ctx);
         const amountReached = toBigNumber(campaign.current_amount).gte(campaign.target_amount);
         const participantReached = Number(campaign.participant_count) >= Number(campaign.min_participants);
-        if (!amountReached && deadline > new Date()) {
+        if (!amountReached && deadline > blockTimeOf(ctx)) {
             throw new Error('Group buy cannot be finalized before the deadline unless the target amount is met');
         }
 
@@ -190,7 +191,7 @@ export function createGroupBuyContract(options: GroupBuyContractOptions = {}) {
 
         await state.adapter.query(
             'UPDATE group_buy_campaigns SET status = ?, finalized_at = ? WHERE group_buy_id = ?',
-            [status, new Date(), payload.groupBuyId]
+            [status, blockTimeOf(ctx), payload.groupBuyId]
         );
 
         await emitContractEvent(state.adapter, name, 'finalizeGroupBuy', payload, {
@@ -201,7 +202,7 @@ export function createGroupBuyContract(options: GroupBuyContractOptions = {}) {
                 currentAmount: campaign.current_amount,
                 participantCount: campaign.participant_count
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const withdrawCommitment = async (payload: z.infer<typeof idSchema>, ctx: any) => {
@@ -213,7 +214,7 @@ export function createGroupBuyContract(options: GroupBuyContractOptions = {}) {
 
         const campaign = campaigns[0];
         const deadline = parseDateValue(campaign.deadline);
-        if (campaign.status !== 'failed' && (!deadline || deadline <= new Date())) {
+        if (campaign.status !== 'failed' && (!deadline || deadline <= blockTimeOf(ctx))) {
             throw new Error('Commitments can only be withdrawn after a failed group buy');
         }
 
@@ -239,7 +240,7 @@ export function createGroupBuyContract(options: GroupBuyContractOptions = {}) {
                 amount: totalAmount,
                 asset: campaign.asset
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     return defineContract({

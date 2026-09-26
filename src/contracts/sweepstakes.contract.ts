@@ -5,6 +5,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -89,7 +90,7 @@ export function createSweepstakesContract(options: SweepstakesContractOptions = 
         }
 
         const closesAt = parseDateValue(payload.closesAt);
-        if (!closesAt || closesAt <= new Date()) {
+        if (!closesAt || closesAt <= blockTimeOf(ctx)) {
             throw new Error('Sweepstakes close time must be in the future');
         }
 
@@ -111,7 +112,7 @@ export function createSweepstakesContract(options: SweepstakesContractOptions = 
                 null,
                 null,
                 JSON.stringify(payload.metadata || {}),
-                new Date(),
+                blockTimeOf(ctx),
                 null
             ]
         );
@@ -122,7 +123,7 @@ export function createSweepstakesContract(options: SweepstakesContractOptions = 
                 drawId: payload.drawId,
                 creator
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const enterSweepstakes = async (payload: z.infer<typeof enterSchema>, ctx: any) => {
@@ -138,7 +139,7 @@ export function createSweepstakesContract(options: SweepstakesContractOptions = 
             throw new Error('Sweepstakes is not open');
         }
 
-        if ((parseDateValue(draw.closes_at) || new Date()) <= new Date()) {
+        if ((parseDateValue(draw.closes_at) || blockTimeOf(ctx)) <= blockTimeOf(ctx)) {
             throw new Error('Sweepstakes has already closed');
         }
 
@@ -170,7 +171,7 @@ export function createSweepstakesContract(options: SweepstakesContractOptions = 
 
         await state.adapter.query(
             'INSERT INTO sweepstakes_entries (draw_id, entrant, amount, asset, entries_count, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-            [payload.drawId, entrant, payment.amount, payment.asset, entries, new Date()]
+            [payload.drawId, entrant, payment.amount, payment.asset, entries, blockTimeOf(ctx)]
         );
         await state.adapter.query(
             'UPDATE sweepstakes_draws SET total_entries = ? WHERE draw_id = ?',
@@ -185,7 +186,7 @@ export function createSweepstakesContract(options: SweepstakesContractOptions = 
                 entries,
                 totalEntries
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const drawWinner = async (payload: z.infer<typeof drawSchema>, ctx: any) => {
@@ -206,8 +207,8 @@ export function createSweepstakesContract(options: SweepstakesContractOptions = 
             }
         }
 
-        const closesAt = parseDateValue(draw.closes_at) || new Date();
-        if (closesAt > new Date()) {
+        const closesAt = parseDateValue(draw.closes_at) || blockTimeOf(ctx);
+        if (closesAt > blockTimeOf(ctx)) {
             throw new Error('Sweepstakes cannot be drawn before it closes');
         }
 
@@ -236,7 +237,7 @@ export function createSweepstakesContract(options: SweepstakesContractOptions = 
 
         await state.adapter.query(
             'UPDATE sweepstakes_draws SET status = ?, winner = ?, winner_ticket = ?, settled_at = ? WHERE draw_id = ?',
-            ['drawn', winner, winningTicket, new Date(), payload.drawId]
+            ['drawn', winner, winningTicket, blockTimeOf(ctx), payload.drawId]
         );
 
         await emitContractEvent(state.adapter, name, 'drawWinner', payload, {
@@ -247,7 +248,7 @@ export function createSweepstakesContract(options: SweepstakesContractOptions = 
                 winningTicket,
                 totalEntries: Number(draw.total_entries)
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     return defineContract({

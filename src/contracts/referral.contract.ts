@@ -4,6 +4,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -126,7 +127,7 @@ export function createReferralContract(options: ReferralContractOptions = {}) {
                 payload.maxPayoutPerConversion || null,
                 '0',
                 JSON.stringify(payload.metadata || {}),
-                new Date()
+                blockTimeOf(ctx)
             ]
         );
 
@@ -136,7 +137,7 @@ export function createReferralContract(options: ReferralContractOptions = {}) {
                 programId: payload.programId,
                 owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const fundProgram = async (payload: z.infer<typeof fundProgramSchema>, ctx: any) => {
@@ -166,7 +167,7 @@ export function createReferralContract(options: ReferralContractOptions = {}) {
                 owner,
                 budgetBalance: nextBudget.toFixed()
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const registerCode = async (payload: z.infer<typeof registerCodeSchema>, ctx: any) => {
@@ -183,7 +184,7 @@ export function createReferralContract(options: ReferralContractOptions = {}) {
 
         await state.adapter.query(
             'INSERT INTO referral_codes (code, program_id, account, created_at) VALUES (?, ?, ?, ?)',
-            [payload.code, payload.programId, account, new Date()]
+            [payload.code, payload.programId, account, blockTimeOf(ctx)]
         );
 
         await emitContractEvent(state.adapter, name, 'registerCode', payload, {
@@ -193,7 +194,7 @@ export function createReferralContract(options: ReferralContractOptions = {}) {
                 code: payload.code,
                 account
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const recordConversion = async (payload: z.infer<typeof recordConversionSchema>, ctx: any) => {
@@ -236,11 +237,11 @@ export function createReferralContract(options: ReferralContractOptions = {}) {
              VALUES (?, ?, ?, ?, ?)
              ON CONFLICT(program_id, account, asset)
              DO UPDATE SET balance = excluded.balance, updated_at = excluded.updated_at`,
-            [payload.programId, affiliate, program.payout_asset, nextBalance.toFixed(), new Date()]
+            [payload.programId, affiliate, program.payout_asset, nextBalance.toFixed(), blockTimeOf(ctx)]
         );
         await state.adapter.query(
             'INSERT INTO referral_conversions (program_id, code, account, buyer, gross_amount, payout_amount, asset, external_ref, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [payload.programId, payload.code, affiliate, payload.buyer, payload.grossAmount, payout.toFixed(), payload.asset, payload.externalRef || null, new Date()]
+            [payload.programId, payload.code, affiliate, payload.buyer, payload.grossAmount, payout.toFixed(), payload.asset, payload.externalRef || null, blockTimeOf(ctx)]
         );
 
         await emitContractEvent(state.adapter, name, 'recordConversion', payload, {
@@ -253,7 +254,7 @@ export function createReferralContract(options: ReferralContractOptions = {}) {
                 payout: payout.toFixed(),
                 asset: payload.asset
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const withdrawAffiliate = async (payload: { programId?: string } = {}, ctx: any) => {
@@ -272,7 +273,7 @@ export function createReferralContract(options: ReferralContractOptions = {}) {
 
             await state.adapter.query(
                 'UPDATE referral_balances SET balance = ?, updated_at = ? WHERE program_id = ? AND account = ? AND asset = ?',
-                ['0', new Date(), balance.program_id, account, balance.asset]
+                ['0', blockTimeOf(ctx), balance.program_id, account, balance.asset]
             );
 
             await emitContractEvent(state.adapter, name, 'withdrawAffiliate', payload, {
@@ -283,7 +284,7 @@ export function createReferralContract(options: ReferralContractOptions = {}) {
                     amount: balance.balance,
                     asset: balance.asset
                 }
-            });
+            }, blockTimeOf(ctx));
         }
     };
 

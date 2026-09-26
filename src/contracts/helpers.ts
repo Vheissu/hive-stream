@@ -30,9 +30,34 @@ export async function initializeTables(adapter: any, statements: string[]): Prom
     }
 }
 
-export async function emitContractEvent(adapter: any, contract: string, action: string, payload: any, data: any): Promise<void> {
+/**
+ * The time a contract should use for anything it records or decides: the
+ * block's timestamp, so catch-up and replays behave exactly like live
+ * processing (a contribution sent before a deadline is accepted even if it's
+ * processed after it). Falls back to the wall clock only when a context has
+ * no block time, e.g. a handler called directly from a test.
+ */
+export function blockTimeOf(ctx: { block?: { time?: Date | string } } | null | undefined): Date {
+    const time = ctx?.block?.time;
+
+    if (time instanceof Date && !Number.isNaN(time.getTime())) {
+        return time;
+    }
+
+    if (typeof time === 'string') {
+        const parsed = new Date(time);
+
+        if (!Number.isNaN(parsed.getTime())) {
+            return parsed;
+        }
+    }
+
+    return new Date();
+}
+
+export async function emitContractEvent(adapter: any, contract: string, action: string, payload: any, data: any, time?: Date): Promise<void> {
     if (adapter?.addEvent) {
-        await adapter.addEvent(new Date(), contract, action, payload, data);
+        await adapter.addEvent(time ?? new Date(), contract, action, payload, data);
     }
 }
 

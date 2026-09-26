@@ -3,6 +3,7 @@ import { action, defineContract } from './contract';
 import {
     amountSchema,
     assetSchema,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     identifierSchema,
@@ -176,7 +177,7 @@ export function createBadgesContract(options: BadgesContractOptions = {}) {
         await emitContractEvent(state.adapter, name, 'award', { badgeId: badge.badge_id, recipient }, {
             action: 'badge_awarded',
             data: { badgeId: badge.badge_id, recipient, issuer, reason: reason ?? null }
-        });
+        }, blockTimeOf(ctx));
 
         return true;
     };
@@ -213,7 +214,7 @@ export function createBadgesContract(options: BadgesContractOptions = {}) {
         await emitContractEvent(state.adapter, name, 'defineBadge', payload, {
             action: 'badge_defined',
             data: { badgeId: payload.badgeId, creator, issuers, rule: payload.rule ?? null }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const issueBadge = async (payload: z.infer<typeof issueSchema>, ctx: ContractContext) => {
@@ -257,7 +258,7 @@ export function createBadgesContract(options: BadgesContractOptions = {}) {
         await emitContractEvent(state.adapter, name, 'revokeBadge', payload, {
             action: 'badge_revoked',
             data: { badgeId: payload.badgeId, recipient: payload.recipient, issuer, reason: payload.reason }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const updateIssuers = async (payload: z.infer<typeof updateIssuersSchema>, ctx: ContractContext) => {
@@ -277,7 +278,7 @@ export function createBadgesContract(options: BadgesContractOptions = {}) {
         await emitContractEvent(state.adapter, name, 'updateIssuers', payload, {
             action: 'badge_issuers_updated',
             data: { badgeId: payload.badgeId, issuers }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const loadProgress = async (badgeId: string, holder: string) => {
@@ -359,7 +360,7 @@ export function createBadgesContract(options: BadgesContractOptions = {}) {
         await emitContractEvent(state.adapter, name, 'checkIn', payload, {
             action: 'badge_checkin',
             data: { badgeId: payload.badgeId, account: sender, checkins }
-        });
+        }, blockTimeOf(ctx));
 
         if (checkins >= rule.minCount) {
             await award(badge, sender, 'rule:checkin_count', ctx, `${checkins} check-ins`);

@@ -4,6 +4,7 @@ import {
     amountSchema,
     assetSchema,
     assertAssetMatches,
+    blockTimeOf,
     createContractState,
     emitContractEvent,
     getIncomingPayment,
@@ -118,7 +119,7 @@ export function createQuestPassContract(options: QuestPassContractOptions = {}) 
                 JSON.stringify(payload.tiers),
                 1,
                 JSON.stringify(payload.metadata || {}),
-                new Date()
+                blockTimeOf(ctx)
             ]
         );
 
@@ -128,7 +129,7 @@ export function createQuestPassContract(options: QuestPassContractOptions = {}) 
                 seasonId: payload.seasonId,
                 owner
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const buyPass = async (payload: z.infer<typeof seasonIdSchema>, ctx: any) => {
@@ -158,7 +159,7 @@ export function createQuestPassContract(options: QuestPassContractOptions = {}) 
              VALUES (?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(season_id, account)
              DO UPDATE SET status = excluded.status, purchases = excluded.purchases, updated_at = excluded.updated_at`,
-            [payload.seasonId, account, 'active', points, purchases, new Date(), new Date()]
+            [payload.seasonId, account, 'active', points, purchases, blockTimeOf(ctx), blockTimeOf(ctx)]
         );
 
         await emitContractEvent(state.adapter, name, 'buyPass', payload, {
@@ -168,7 +169,7 @@ export function createQuestPassContract(options: QuestPassContractOptions = {}) 
                 account,
                 purchases
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const recordProgress = async (payload: z.infer<typeof recordProgressSchema>, ctx: any) => {
@@ -192,7 +193,7 @@ export function createQuestPassContract(options: QuestPassContractOptions = {}) 
         const nextPoints = Number(holder.points) + payload.points;
         await state.adapter.query(
             'UPDATE quest_pass_holders SET points = ?, updated_at = ? WHERE season_id = ? AND account = ?',
-            [nextPoints, new Date(), payload.seasonId, payload.account]
+            [nextPoints, blockTimeOf(ctx), payload.seasonId, payload.account]
         );
 
         await emitContractEvent(state.adapter, name, 'recordProgress', payload, {
@@ -204,7 +205,7 @@ export function createQuestPassContract(options: QuestPassContractOptions = {}) 
                 totalPoints: nextPoints,
                 sourceId: payload.sourceId || null
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     const claimReward = async (payload: z.infer<typeof claimRewardSchema>, ctx: any) => {
@@ -237,7 +238,7 @@ export function createQuestPassContract(options: QuestPassContractOptions = {}) 
 
         await state.adapter.query(
             'INSERT INTO quest_pass_claims (season_id, account, tier_id, created_at) VALUES (?, ?, ?, ?)',
-            [payload.seasonId, account, payload.tierId, new Date()]
+            [payload.seasonId, account, payload.tierId, blockTimeOf(ctx)]
         );
 
         await emitContractEvent(state.adapter, name, 'claimReward', payload, {
@@ -249,7 +250,7 @@ export function createQuestPassContract(options: QuestPassContractOptions = {}) 
                 rewardType: tier.rewardType,
                 rewardValue: tier.rewardValue
             }
-        });
+        }, blockTimeOf(ctx));
     };
 
     return defineContract({
