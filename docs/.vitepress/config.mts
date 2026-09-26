@@ -49,6 +49,12 @@ export default defineConfig({
                         { text: 'Testing Your App', link: '/guide/testing' },
                         { text: 'Running in Production', link: '/guide/production' }
                     ]
+                },
+                {
+                    text: 'Tooling',
+                    items: [
+                        { text: 'Building UIs and Tools', link: '/guide/ui-integration' }
+                    ]
                 }
             ],
             '/contracts/': [

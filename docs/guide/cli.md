@@ -59,3 +59,22 @@ npm run verify   # all three commands
 ```
 
 The generated entry point reads the username from the resolved Hive Stream config, refuses to start when it is missing, and installs clean SIGINT/SIGTERM shutdown handlers. Its README documents the selected contracts and their payloads.
+
+## Generating projects from code
+
+The CLI is a thin wrapper around a pure generator published as `hive-stream/scaffold`. It returns the same files the CLI writes, as a map of paths to contents, and touches no filesystem, so it runs in a browser as well as in Node:
+
+```ts
+import { generateProjectFiles, TEMPLATES } from 'hive-stream/scaffold';
+
+const { files, nextSteps } = generateProjectFiles({
+    name: 'my-dice-app',
+    template: 'game',
+    adapter: 'sqlite',
+    username: 'mydiceapp'
+});
+
+// files['src/index.ts'], files['package.json'], ...
+```
+
+See [Building UIs and tools](./ui-integration) for the full API and the companion contract catalog.

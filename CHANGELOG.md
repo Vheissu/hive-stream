@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] - Unreleased
+
+### Tooling
+- **Browser-safe scaffolder (`hive-stream/scaffold`)** - Generate exactly what `npx hive-stream new` writes, in memory
+  - `generateProjectFiles(options)` returns `{ files, template, adapter, nextSteps }`; `username`, `api` and `hiveStreamVersion` are now optional (the version defaults to the installed hive-stream)
+  - Exposes `TEMPLATES`, `ADAPTERS`, compatibility helpers, `validateProjectName()`, `validateHiveAccountName()`, `getNextSteps()` and `HIVE_STREAM_VERSION`
+  - The module graph imports no packages or Node built-ins; `tests/browser-safe-entries.spec.ts` enforces it. The CLI is now a thin filesystem wrapper around it
+  - Files: `src/scaffold/`, `src/cli/scaffold.ts`, `scripts/generate-version.js`
+- **Contract catalog (`hive-stream/catalog`)** - Machine-readable metadata for every built-in contract factory
+  - Category, description, factory options (read from the TypeScript source), and each action's triggers, active-key requirement and payload fields (type, required, enum values, defaults) from the zod schemas
+  - `contractCatalog`, `getCatalogContract()`, `getCatalogContractsByCategory()`, `CONTRACT_CATEGORIES`
+  - Generated to `src/catalog/contracts.json` by `npm run catalog:gen` (also run by `npm run build` and `npm run docs:gen`); new factories are discovered automatically and need one line in `scripts/lib/contract-metadata.ts`
+  - Files: `src/catalog/`, `scripts/lib/`, `scripts/generate-contract-catalog.ts`, `tests/contract-catalog.spec.ts`
+- **Contract reference pages** now come from the same introspection as the catalog, list factory options and categories, and escape `|` in table cells (enum and union types no longer break tables)
+
 ## [Unreleased - DX & Production]
 
 ### ✨ Added
