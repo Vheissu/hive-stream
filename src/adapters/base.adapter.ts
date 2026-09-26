@@ -1,8 +1,15 @@
 import { TimeAction } from './../actions';
-import { ContractPayload, TransferMetadata, CustomJsonMetadata, EscrowOperationType, OperationMetadata } from './../types/hive-stream';
+import { ContractPayload, TransferMetadata, CustomJsonMetadata, EscrowOperationType, OperationMetadata, ProcessedOperationRecord } from './../types/hive-stream';
 import { SignedBlock } from '@hiveio/dhive';
+
 export class AdapterBase {
     protected client: any = null;
+    /**
+     * In-memory idempotency ledger used by adapters that don't persist one.
+     * Durable adapters (SQLite, PostgreSQL, MongoDB) override the ledger
+     * methods so the record survives restarts.
+     */
+    private memoryLedger = new Map<string, ProcessedOperationRecord>();
     protected db: any = null;
     public readonly capabilities = {
         sql: false
@@ -75,6 +82,41 @@ export class AdapterBase {
 
     public async query(sql: string, params?: any[]): Promise<any[]> {
         throw new Error('Query method not implemented in adapter');
+    }
+
+    /**
+     * Idempotency ledger: returns true when the operation identified by
+     * `key` already dispatched a contract action.
+     */
+    public async hasProcessedOperation(key: string): Promise<boolean> {
+        return this.memoryLedger.has(key);
+    }
+
+    /**
+     * Records that an operation dispatched a contract action. Recording the
+     * same key twice must be a no-op.
+     */
+    public async markOperationProcessed(record: ProcessedOperationRecord): Promise<void> {
+        if (!this.memoryLedger.has(record.key)) {
+            this.memoryLedger.set(record.key, { ...record, processedAt: record.processedAt ?? new Date() });
+        }
+    }
+
+    /**
+     * Deletes ledger records for blocks older than `beforeBlockNumber`.
+     * Returns the number of records removed.
+     */
+    public async pruneProcessedOperations(beforeBlockNumber: number): Promise<number> {
+        let removed = 0;
+
+        for (const [key, record] of this.memoryLedger) {
+            if (record.blockNumber < beforeBlockNumber) {
+                this.memoryLedger.delete(key);
+                removed++;
+            }
+        }
+
+        return removed;
     }
 
     public async addEvent(date: string | Date, contract: string, action: string, payload: any, data: any): Promise<boolean> {

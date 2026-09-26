@@ -13,6 +13,9 @@ const mockCollection = {
     findOne: jest.fn().mockResolvedValue(null),
     insertOne: jest.fn().mockResolvedValue({ insertedId: 'id-1' }),
     replaceOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    updateOne: jest.fn().mockResolvedValue({ upsertedCount: 1 }),
+    deleteMany: jest.fn().mockResolvedValue({ deletedCount: 0 }),
+    createIndex: jest.fn().mockResolvedValue('index'),
 };
 
 const mockDb = {
