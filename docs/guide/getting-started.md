@@ -1,6 +1,18 @@
 # Getting Started
 
-Hive Stream is a Node.js library for building applications on the [Hive blockchain](https://hive.io). It watches the chain for operations you care about, runs your contract logic when payments or custom JSON arrive, and gives you the write operations to respond — transfers, tokens, posts, votes, escrow, and more.
+Hive Stream is a Node.js library for building applications on the [Hive blockchain](https://hive.io). It watches the chain for the operations you care about, runs your contract logic when payments or custom JSON arrive, and gives you the write operations to respond: transfers, tokens, posts, votes, escrow and more.
+
+## Pick a starting point
+
+| You're building | Start with |
+| --- | --- |
+| A gambling app | [Dice recipe](./recipes#dice-with-provably-fair-rolls), then [Provably Fair Randomness](./fairness) |
+| A game | [Tournament recipe](./recipes#a-paid-tournament-for-a-game), plus the [badges](/contracts/badges) and [questpass](/contracts/questpass) contracts |
+| A social app | [Tipping recipe](./recipes#tips-with-public-thank-you-replies) and [Streaming & Subscriptions](./streaming) |
+| A bridge or custody service | [Bridge recipe](./recipes#a-custody-bridge-with-operator-attestations) and [Running in Production](./production) |
+| Something else | Read on, or scaffold a project with `npx hive-stream new` |
+
+Upgrading an existing app from 3.x? Read [Migrating to 4.0](./migrating-to-4) first.
 
 ## Installation
 
@@ -16,7 +28,7 @@ const { Streamer } = require('hive-stream');   // CommonJS
 ```
 
 ::: tip Starting fresh?
-`npx hive-stream new my-app` scaffolds a complete project — contracts, storage, environment config, and payload examples included. See [Scaffolding with the CLI](./cli).
+`npx hive-stream new my-app` scaffolds a complete project with contracts, storage, environment config and payload examples. See [Scaffolding with the CLI](./cli).
 :::
 
 ## Your first streamer
@@ -24,7 +36,8 @@ const { Streamer } = require('hive-stream');   // CommonJS
 ```ts
 import { Streamer } from 'hive-stream';
 
-const streamer = new Streamer({ username: 'myaccount' });
+// env: true reads USERNAME, ACTIVE_KEY and POSTING_KEY from the environment (and .env)
+const streamer = new Streamer({ env: true });
 
 // React to incoming transfers
 streamer.onTransfer('myaccount', (op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
@@ -34,7 +47,9 @@ streamer.onTransfer('myaccount', (op, blockNumber, blockId, prevBlockId, trxId, 
 await streamer.start();
 ```
 
-`new Streamer()` is side-effect free: the default SQLite adapter is created lazily on first use, and the built-in Express API is opt-in.
+`new Streamer()` has no side effects: the default SQLite adapter is created on first use, and the built-in Express API is opt-in.
+
+By default the streamer only processes a block once it's irreversible, which is usually a few seconds behind the head of the chain. A fork can't undo anything your app has already acted on. The cursor is saved after every block, so a restart picks up exactly where it stopped. See [Streaming](./streaming#irreversible-vs-head-streaming) if you need head-block latency instead.
 
 ## Your first contract
 
@@ -56,7 +71,7 @@ const guestbook = defineContract({
     }
 });
 
-const streamer = new Streamer({ username: 'myaccount' });
+const streamer = new Streamer({ env: true });
 await streamer.registerContract(guestbook);
 await streamer.start();
 ```
@@ -88,13 +103,15 @@ await ts.contractJson('alice', {
 await ts.stop();
 ```
 
-Everything runs offline — simulated blocks, captured broadcasts, in-memory storage. See [Testing Your App](./testing).
+Everything runs offline: simulated blocks, captured broadcasts, in-memory storage. See [Testing Your App](./testing).
 
 ## Where to next
 
-- [Configuration](./configuration) — keys, API nodes, catch-up behavior
-- [Calling Contracts Safely](./contract-calls) — shared schemas and operation builders
-- [Streaming & Subscriptions](./streaming) — every event you can react to
-- [Built-in Contracts](/contracts/) — 40 ready-to-register contracts
-- [Transfer Flows](./flows) — split, forward, burn, and refund payments
-- [Running in Production](./production) — persistence, resumption, PM2
+- [Recipes](./recipes): dice, tournaments, tipping, bridges and browser frontends
+- [Configuration](./configuration): keys, API nodes, stream mode, error policy
+- [Hooks & Guards](./hooks): metrics, allow-lists, bet limits and kill switches
+- [Calling Contracts Safely](./contract-calls): shared schemas and operation builders
+- [Streaming & Subscriptions](./streaming): every event you can react to
+- [Built-in Contracts](/contracts/): 45 ready-to-register contracts
+- [Transfer Flows](./flows): split, forward, burn and refund payments
+- [Running in Production](./production): persistence, error policy, health checks, PM2

@@ -4,31 +4,44 @@ layout: home
 hero:
   name: Hive Stream
   text: Build apps on the Hive blockchain
-  tagline: Stream operations, run contracts, move money, and test it all offline — one library, batteries included.
+  tagline: Stream operations, run contracts that move real money, and test all of it offline. Node.js, TypeScript, MIT.
   actions:
     - theme: brand
       text: Get Started
       link: /guide/getting-started
     - theme: alt
+      text: Recipes
+      link: /guide/recipes
+    - theme: alt
       text: Built-in Contracts
       link: /contracts/
     - theme: alt
-      text: GitHub
-      link: https://github.com/Vheissu/hive-stream
+      text: Upgrading from 3.x
+      link: /guide/migrating-to-4
 
 features:
-  - title: Stream the chain
-    details: React to transfers, custom JSON, posts, votes, escrow, and 20+ other operation types with typed subscriptions and automatic node failover.
-  - title: 40 built-in contracts
-    details: Games, exchanges, ticketing, subscriptions, crowdfunding, payroll, NFTs — register a contract and it runs against real chain activity.
+  - title: Gambling apps
+    details: Dice, coinflip, roulette, lotto and limbo with commit-reveal seeds players can verify, bankroll caps, and refunds for bets the house can't cover.
+    link: /guide/recipes#dice-with-provably-fair-rolls
+    linkText: Dice recipe
+  - title: Games
+    details: Paid tournaments with oracle-submitted scores, non-transferable badges, quest passes and NFTs. Prizes split in basis points and always sum to the pool.
+    link: /guide/recipes#a-paid-tournament-for-a-game
+    linkText: Tournament recipe
+  - title: Social apps
+    details: React to posts, votes, follows and tips, reply in public threads, and run polls, fan clubs and paywalls. Hooks give you metrics and moderation in one place.
+    link: /guide/recipes#tips-with-public-thank-you-replies
+    linkText: Tipping recipe
+  - title: Bridges and custody
+    details: Deposits held until M-of-N operators attest, per-transaction and daily limits, a pause switch, and an audit row for every state change.
+    link: /guide/recipes#a-custody-bridge-with-operator-attestations
+    linkText: Bridge recipe
+  - title: Safe with real money
+    details: Blocks are processed once irreversible, the cursor is saved after every block, and an idempotency ledger stops a replay from paying twice.
+    link: /guide/production
+    linkText: Production guide
   - title: Test everything offline
-    details: The hive-stream/testing kit simulates blocks, captures broadcasts, and time-travels TimeActions. No network, no keys, no waiting.
-  - title: Scaffold in seconds
-    details: npx hive-stream new gives you contracts, compatible storage, environment config, and an offline starter test.
-  - title: Calls checked before signing
-    details: Shared contract specs validate action names, payloads, triggers, JSON, and authority before a wallet sees the operation.
-  - title: Payments that add up
-    details: Transfer flows split, forward, burn, and refund incoming payments with integer-safe math and a previewable plan.
-  - title: Your storage, your call
-    details: SQLite by default, PostgreSQL and MongoDB adapters included, or write your own adapter with two methods.
+    details: hive-stream/testing runs the real streamer against simulated blocks and captures every broadcast. Time actions fire on demand.
+    link: /guide/testing
+    linkText: Testing guide
 ---

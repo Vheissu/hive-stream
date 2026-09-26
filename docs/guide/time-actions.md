@@ -5,7 +5,7 @@ Time-based actions are cron for your contracts: they invoke a contract action on
 ```ts
 import { TimeAction } from 'hive-stream';
 
-const draw = new TimeAction('1h', 'hourly-draw', 'hivelotto', 'draw');
+const draw = new TimeAction('1h', 'hourly-draw', 'hivelotto', 'drawHourlyLottery');
 await streamer.registerAction(draw);
 ```
 

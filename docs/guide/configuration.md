@@ -127,5 +127,5 @@ Useful when multiple keys are used for issuing, or when credentials rotate.
 
 The constructor accepts two infrastructure overrides alongside regular config:
 
-- `blockProvider` — where blocks come from. Defaults to the Hive API; the testing kit supplies an in-memory provider, and a HAF provider ships in `hive-stream/providers`.
+- `blockProvider` — where blocks come from. Defaults to the Hive API; the testing kit supplies an in-memory provider, and `HafProvider` (exported from `hive-stream`, needs `pg`) reads from a HAF database.
 - `client` — the dhive client used for reads and broadcasts. Inject a preconfigured client or a fake (captured broadcasts). An injected client is never replaced by `setConfig`. The default client uses `apiTimeoutMs` and fails over across `apiNodes`.

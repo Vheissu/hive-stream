@@ -47,8 +47,11 @@ Bad action names, triggers, authority, and schema values fail before a simulated
 | `adapter` | Storage adapter. Defaults to in-memory SQLite, so built-in SQL contracts work out of the box. |
 | `startTime` | Timestamp of the simulated chain's first block (defaults to now). |
 | `blockIntervalMs` | Simulated block spacing (defaults to 3000, like mainnet). |
+| `irreversibleLag` | How many blocks the simulated last irreversible block trails head (defaults to 0). |
 
-If your handlers broadcast, set any valid-format `activeKey` — nothing is ever sent.
+Handlers that broadcast work without keys: the test streamer uses throwaway active and posting keys unless you pass your own (or `env: true`), and nothing is ever sent.
+
+Built-in games that re-read their transaction from the chain (dice, coinflip, roulette, rps, lotto) get it from the simulated blocks. Give the house account a bankroll with `ts.client.setAccount('myhouse', { balance: '1000.000 HIVE' })`, or bets are refunded because the house can't cover them.
 
 ## Driving the chain
 

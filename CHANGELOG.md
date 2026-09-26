@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 This release makes the streamer safe to run money-handling apps on: nothing is processed until it is irreversible, the cursor is saved after every block, and contract actions are recorded so a replay never runs them twice.
 
+Upgrading? Read the [migration guide](docs/guide/migrating-to-4.md) ([online](https://vheissu.github.io/hive-stream/guide/migrating-to-4)). It covers every breaking change below with before/after code, plus the Node 22, zod 4 and optional driver requirements.
+
 ### ⚠️ Breaking changes
 - **Irreversible streaming is the default.** `streamMode: 'irreversible'` only processes blocks up to `last_irreversible_block_num`, adding a few seconds of latency. Set `streamMode: 'head'` for the old behaviour (now with fork detection).
 - **The cursor is saved after every block** instead of every 5 seconds. Use `checkpointMode: 'interval'` to get the old write pattern.
@@ -41,6 +43,8 @@ This release makes the streamer safe to run money-handling apps on: nothing is p
 - `stop()` could tear down the adapter while a block was mid-processing; it now waits for the block and writes a final checkpoint.
 - A missing block slept inside the processing loop instead of yielding back to the poller.
 - Invalid payload logging read Zod's removed `.errors` field; it now uses `.issues`.
+- `broadcastOperations()` signed `custom_json` operations with `required_auths` using the posting key, so the chain rejected them. They are now signed with the active key.
+- The testing kit's fake client couldn't return simulated blocks, so dice, coinflip, roulette, rps and lotto failed offline when they re-read their transaction. `createTestStreamer()` now serves those reads from the simulated chain and uses throwaway keys when none are configured.
 
 ### Contracts
 - **Provably-fair randomness** (`createFairness`, `FairnessManager`; verifier in `hive-stream/client`)

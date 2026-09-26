@@ -10,6 +10,7 @@ export default defineConfig({
     themeConfig: {
         nav: [
             { text: 'Guide', link: '/guide/getting-started' },
+            { text: 'Recipes', link: '/guide/recipes' },
             { text: 'Contracts', link: '/contracts/' },
             { text: 'CLI', link: '/guide/cli' },
             { text: 'npm', link: 'https://www.npmjs.com/package/hive-stream' }
@@ -21,8 +22,10 @@ export default defineConfig({
                     text: 'Introduction',
                     items: [
                         { text: 'Getting Started', link: '/guide/getting-started' },
+                        { text: 'Recipes', link: '/guide/recipes' },
                         { text: 'Scaffolding with the CLI', link: '/guide/cli' },
-                        { text: 'Configuration', link: '/guide/configuration' }
+                        { text: 'Configuration', link: '/guide/configuration' },
+                        { text: 'Migrating to 4.0', link: '/guide/migrating-to-4' }
                     ]
                 },
                 {
