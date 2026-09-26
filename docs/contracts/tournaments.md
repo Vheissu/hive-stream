@@ -7,7 +7,7 @@ Game tournaments with entry fees, registration windows, oracle-submitted scores,
 ```ts
 import { createTournamentContract } from 'hive-stream';
 
-await streamer.registerContract(createTournamentContract({ account: '...' }));
+await streamer.registerContract(createTournamentContract());
 ```
 
 ::: tip SQL adapter
@@ -19,7 +19,7 @@ This contract keeps its state in SQL tables and needs a SQL-capable adapter (SQL
 | Option | Type | Required | Description |
 | --- | --- | --- | --- |
 | `name` | `string` | No |  |
-| `account` | `string` | Yes | Account that receives entry fees and pays prizes. Entries sent elsewhere are rejected. |
+| `account` | `string` | No | Account that receives entry fees and pays prizes. Entries sent elsewhere are rejected. Defaults to the streamer username. |
 | `feeBps` | `number` | No | House fee taken from the prize pool, in basis points (max 3000). |
 | `feeAccount` | `string` | No | Where the house fee is sent. Defaults to keeping it in `account`. |
 | `oracles` | `string[]` | No | Accounts allowed to submit scores for any tournament, in addition to each tournament's oracle. |

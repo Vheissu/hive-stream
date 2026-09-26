@@ -7,7 +7,7 @@ Staking pools with reward-per-share accrual (per second or per block), funded re
 ```ts
 import { createStakingPoolContract } from 'hive-stream';
 
-await streamer.registerContract(createStakingPoolContract({ account: '...' }));
+await streamer.registerContract(createStakingPoolContract());
 ```
 
 ::: tip SQL adapter
@@ -19,7 +19,7 @@ This contract keeps its state in SQL tables and needs a SQL-capable adapter (SQL
 | Option | Type | Required | Description |
 | --- | --- | --- | --- |
 | `name` | `string` | No |  |
-| `account` | `string` | Yes | Custody account that receives stakes and reward funding and pays them out. |
+| `account` | `string` | No | Custody account that receives stakes and reward funding and pays them out. Defaults to the streamer username. |
 | `admins` | `string[]` | No | Accounts allowed to create pools and change reward rates. Defaults to the custody account. |
 | `accrual` | `'time' \| 'block'` | No | 'time' accrues `rewardRate` per second of block time; 'block' accrues per block. |
 

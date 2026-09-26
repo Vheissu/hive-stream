@@ -12,7 +12,8 @@ import {
     parseDateValue,
     requireSender,
     requireTransferContext,
-    toBigNumber
+    toBigNumber,
+    resolveContractAccount
 } from './helpers';
 import { operationRecordId, type ContractContext } from '../types/hive-stream';
 
@@ -25,22 +26,21 @@ const rateSchema = z.string().regex(/^\d+(?:\.\d{1,8})?$/, 'Invalid reward rate'
 
 export interface StakingPoolContractOptions {
     name?: string;
-    /** Custody account that receives stakes and reward funding and pays them out. */
-    account: string;
+    /** Custody account that receives stakes and reward funding and pays them out. Defaults to the streamer username. */
+    account?: string;
     /** Accounts allowed to create pools and change reward rates. Defaults to the custody account. */
     admins?: string[];
     /** 'time' accrues `rewardRate` per second of block time; 'block' accrues per block. */
     accrual?: 'time' | 'block';
 }
 
-export function createStakingPoolContract(options: StakingPoolContractOptions) {
-    if (!options?.account) {
-        throw new Error('Staking pool contract requires an account');
-    }
-
+export function createStakingPoolContract(options: StakingPoolContractOptions = {}) {
     const name = options.name || DEFAULT_NAME;
-    const account = options.account;
-    const admins = options.admins && options.admins.length > 0 ? options.admins : [account];
+    // Resolved in the create hook: options.account, else the streamer username.
+    let account = options.account || '';
+    // Shared with the action guards below, so the default (the custody
+    // account) is filled in once the account is resolved.
+    const admins: string[] = [...(options.admins ?? [])];
     const accrual = options.accrual ?? 'time';
     const state = createContractState({ streamer: null as any });
 
@@ -564,7 +564,14 @@ export function createStakingPoolContract(options: StakingPoolContractOptions) {
     return defineContract({
         name,
         hooks: {
-            create: async ({ adapter, streamer }) => {
+            create: async (lifecycle) => {
+                const { adapter, streamer } = lifecycle;
+                account = resolveContractAccount('createStakingPoolContract', options.account, lifecycle);
+
+                if (admins.length === 0) {
+                    admins.push(account);
+                }
+
                 state.adapter = adapter;
                 state.streamer = streamer;
                 await initialize();

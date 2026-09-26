@@ -12,7 +12,8 @@ import {
     parseDateValue,
     requireSender,
     requireTransferContext,
-    toBigNumber
+    toBigNumber,
+    resolveContractAccount
 } from './helpers';
 import { operationRecordId, type ContractContext } from '../types/hive-stream';
 
@@ -28,8 +29,8 @@ const scoreSchema = z.union([
 
 export interface TournamentContractOptions {
     name?: string;
-    /** Account that receives entry fees and pays prizes. Entries sent elsewhere are rejected. */
-    account: string;
+    /** Account that receives entry fees and pays prizes. Entries sent elsewhere are rejected. Defaults to the streamer username. */
+    account?: string;
     /** House fee taken from the prize pool, in basis points (max 3000). */
     feeBps?: number;
     /** Where the house fee is sent. Defaults to keeping it in `account`. */
@@ -120,13 +121,10 @@ export function calculateTournamentPayouts(
     return payouts;
 }
 
-export function createTournamentContract(options: TournamentContractOptions) {
-    if (!options?.account) {
-        throw new Error('Tournament contract requires an account');
-    }
-
+export function createTournamentContract(options: TournamentContractOptions = {}) {
     const name = options.name || DEFAULT_NAME;
-    const account = options.account;
+    // Resolved in the create hook: options.account, else the streamer username.
+    let account = options.account || '';
     const feeBps = options.feeBps ?? 0;
     const feeAccount = options.feeAccount;
     const globalOracles = options.oracles || [];
@@ -648,7 +646,9 @@ export function createTournamentContract(options: TournamentContractOptions) {
     return defineContract({
         name,
         hooks: {
-            create: async ({ adapter, streamer }) => {
+            create: async (lifecycle) => {
+                const { adapter, streamer } = lifecycle;
+                account = resolveContractAccount('createTournamentContract', options.account, lifecycle);
                 state.adapter = adapter;
                 state.streamer = streamer;
                 await initialize();

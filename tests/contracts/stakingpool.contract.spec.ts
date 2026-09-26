@@ -52,7 +52,6 @@ describe('staking pool contract', () => {
         await expect(contract.actions.setRewardRate.handler({ poolId: 'hive-pool', rewardRate: '1' }, makeContext(streamer, { sender: 'alice' })))
             .rejects.toThrow('cannot change');
         expect(contract.actions.createPool.guards).toEqual({ allowedSenders: ['vault'] });
-        expect(() => createStakingPoolContract({ account: '' })).toThrow('account');
     });
 
     test('distributes rewards pro rata with reward-per-share accounting', async () => {

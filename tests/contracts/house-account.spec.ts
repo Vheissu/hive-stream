@@ -2,9 +2,12 @@ import {
     createCoinflipContract,
     createDiceContract,
     createExchangeContract,
+    createLimboContract,
     createLottoContract,
     createRouletteContract,
     createRpsContract,
+    createStakingPoolContract,
+    createTournamentContract,
     SqliteAdapter,
     Streamer
 } from '../../src';
@@ -19,7 +22,10 @@ const factories: Array<[string, (options: any) => any]> = [
     ['createRpsContract', createRpsContract],
     ['createRouletteContract', createRouletteContract],
     ['createLottoContract', createLottoContract],
-    ['createExchangeContract', createExchangeContract]
+    ['createExchangeContract', createExchangeContract],
+    ['createLimboContract', createLimboContract],
+    ['createStakingPoolContract', createStakingPoolContract],
+    ['createTournamentContract', createTournamentContract]
 ];
 
 async function createStreamer(username?: string): Promise<Streamer> {

@@ -3562,8 +3562,8 @@
         {
           "name": "account",
           "type": "string",
-          "required": true,
-          "description": "House account that receives bets and pays winners."
+          "required": false,
+          "description": "House account that receives bets and pays winners. Defaults to the streamer username."
         },
         {
           "name": "assets",
@@ -5468,8 +5468,8 @@
         {
           "name": "account",
           "type": "string",
-          "required": true,
-          "description": "Custody account that receives stakes and reward funding and pays them out."
+          "required": false,
+          "description": "Custody account that receives stakes and reward funding and pays them out. Defaults to the streamer username."
         },
         {
           "name": "admins",
@@ -6228,8 +6228,8 @@
         {
           "name": "account",
           "type": "string",
-          "required": true,
-          "description": "Account that receives entry fees and pays prizes. Entries sent elsewhere are rejected."
+          "required": false,
+          "description": "Account that receives entry fees and pays prizes. Entries sent elsewhere are rejected. Defaults to the streamer username."
         },
         {
           "name": "feeBps",

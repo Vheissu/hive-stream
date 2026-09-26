@@ -7,7 +7,7 @@ A provably-fair limbo/crash game: pick a target multiplier and win when the comm
 ```ts
 import { createLimboContract } from 'hive-stream';
 
-await streamer.registerContract(createLimboContract({ account: '...' }));
+await streamer.registerContract(createLimboContract());
 ```
 
 ::: tip Any adapter
@@ -19,7 +19,7 @@ This contract works with every built-in adapter, including MongoDB.
 | Option | Type | Required | Description |
 | --- | --- | --- | --- |
 | `name` | `string` | No |  |
-| `account` | `string` | Yes | House account that receives bets and pays winners. |
+| `account` | `string` | No | House account that receives bets and pays winners. Defaults to the streamer username. |
 | `assets` | `string[]` | No | Accepted assets. Defaults to HIVE. |
 | `houseEdgeBps` | `number` | No | House edge in basis points (default 100 = 1%). |
 | `minBet` | `string` | No |  |

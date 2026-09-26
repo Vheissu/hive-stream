@@ -9,7 +9,8 @@ import {
     formatFairnessMemo,
     requireSender,
     requireTransferContext,
-    toBigNumber
+    toBigNumber,
+    resolveContractAccount
 } from './helpers';
 import { parseMultiplierCents, formatMultiplierCents } from '../fairness/core';
 import { FairnessManager, resolveFairnessOption, type FairnessOptions } from '../fairness/manager';
@@ -20,8 +21,8 @@ const PRECISION = 3;
 
 export interface LimboContractOptions {
     name?: string;
-    /** House account that receives bets and pays winners. */
-    account: string;
+    /** House account that receives bets and pays winners. Defaults to the streamer username. */
+    account?: string;
     /** Accepted assets. Defaults to HIVE. */
     assets?: string[];
     /** House edge in basis points (default 100 = 1%). */
@@ -41,13 +42,10 @@ export interface LimboContractOptions {
     fairness?: FairnessManager | FairnessOptions;
 }
 
-export function createLimboContract(options: LimboContractOptions) {
-    if (!options?.account) {
-        throw new Error('Limbo contract requires an account');
-    }
-
+export function createLimboContract(options: LimboContractOptions = {}) {
     const name = options.name || DEFAULT_NAME;
-    const account = options.account;
+    // Resolved in the create hook: options.account, else the streamer username.
+    let account = options.account || '';
     const assets = options.assets || ['HIVE'];
     const houseEdgeBps = options.houseEdgeBps ?? 100;
     const minBet = toBigNumber(options.minBet ?? '0.1');
@@ -70,7 +68,7 @@ export function createLimboContract(options: LimboContractOptions) {
         throw new Error('maxPayoutBankrollBps must be an integer between 1 and 10000');
     }
 
-    const fairSupport = createFairnessSupport(name, account, resolveFairnessOption(options.fairness ?? true));
+    const fairSupport = createFairnessSupport(name, () => account, resolveFairnessOption(options.fairness ?? true));
     const fairness = fairSupport.fairness!;
 
     const state = {
@@ -210,7 +208,9 @@ export function createLimboContract(options: LimboContractOptions) {
     return defineContract({
         name,
         hooks: {
-            create: async ({ streamer, adapter }) => {
+            create: async (lifecycle) => {
+                const { streamer, adapter } = lifecycle;
+                account = resolveContractAccount('createLimboContract', options.account, lifecycle);
                 state.streamer = streamer;
                 state.adapter = adapter;
                 await fairSupport.initialize(adapter);

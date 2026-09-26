@@ -111,7 +111,6 @@ describe('tournament contract', () => {
         await expect(create({ endsAt: '2026-05-01T06:00:00Z' })).rejects.toThrow('end before');
         await create();
         await expect(create()).rejects.toThrow('already exists');
-        expect(() => createTournamentContract({ account: '' })).toThrow('account');
     });
 
     test('runs a full tournament: entries, oracle scores, fee and prizes', async () => {
