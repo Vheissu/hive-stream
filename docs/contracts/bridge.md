@@ -31,6 +31,7 @@ This contract keeps its state in SQL tables and needs a SQL-capable adapter (SQL
 | `dailyLimit` | `string` | No | Rolling 24h cap per asset and direction across all users. |
 | `accountDailyLimit` | `string` | No | Rolling 24h cap on deposits per Hive account and asset. |
 | `admins` | `string[]` | No | Accounts allowed to pause/unpause and retry releases. Defaults to the custody account. |
+| `receipts` | `boolean \| { id?: string }` | No | Publish the contract's decision on each deposit on-chain. When enabled, the custody account broadcasts a custom_json (posting authority) as soon as a deposit is accepted or refunded, so operators can act on the contract's verdict instead of re-implementing its checks. Accepted receipts include the rolling 24h totals used for the daily limits. `true` uses the custom_json id `<contract name>-receipts`. Off by default. |
 
 ## Actions
 

@@ -71,6 +71,7 @@ Upgrading? Read the [migration guide](docs/guide/migrating-to-4.md) ([online](ht
   - Queued releases are processed by a scheduled action
   - Two-phase release (`releasing` → `released`, with failed broadcasts marked `release_failed` for admin reconciliation) so a crash never pays twice
   - Full `bridge_audit` trail
+  - Optional deposit receipts (`receipts: true | { id }`): the custody account broadcasts a posting-auth custom_json per deposit with the contract's verdict (`accepted`/`refunded` and reason), the net amount and the rolling daily totals, so operators mint only accepted deposits instead of mirroring the custody rules (`BridgeDepositReceipt` type)
 - **`createTournamentContract`**
   - Exact entry fees are enforced: wrong assets, amounts, duplicates, late and full entries are refunded
   - Registration windows, and scores submitted only by the tournament's oracle or a global oracle (single or batch)

@@ -86,7 +86,7 @@ export type {
 } from './types/rates';
 export * from './fairness/manager';
 export { createBridgeContract } from './contracts/bridge.contract';
-export type { BridgeContractOptions } from './contracts/bridge.contract';
+export type { BridgeContractOptions, BridgeDepositReceipt } from './contracts/bridge.contract';
 export { createTournamentContract, calculateTournamentPayouts } from './contracts/tournament.contract';
 export type { TournamentContractOptions, TournamentPayout } from './contracts/tournament.contract';
 export { createStakingPoolContract } from './contracts/stakingpool.contract';

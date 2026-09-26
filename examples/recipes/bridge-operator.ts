@@ -1,8 +1,9 @@
 // One bridge operator. Each operator runs this with its own Hive account and
-// active key, watches deposits to the custody account, mints on the other
-// chain, and attests. The custody service acts once two operators agree.
-import { Streamer, createContractCustomJsonOperation, operationRecordId } from 'hive-stream';
-import { CUSTODY, netAmount, passesStaticRules } from './bridge-config';
+// active key, watches the custody account's deposit receipts, mints accepted
+// deposits on the other chain, and attests. The custody service acts once
+// two operators agree.
+import { Streamer, createContractCustomJsonOperation, type BridgeDepositReceipt } from 'hive-stream';
+import { CUSTODY, RECEIPTS_ID } from './bridge-config';
 
 const OPERATOR = 'bridge-op1';
 
@@ -22,32 +23,24 @@ async function attest(depositId: string, externalTxId: string) {
 }
 
 async function main() {
-    // beforeOperation sees the transaction id and operation index, which
-    // together form the bridge's deposit id.
-    operator.hook('beforeOperation', async ({ type, data, transactionId, operationIndex }) => {
-        if (type !== 'transfer' || data.to !== CUSTODY) {
+    operator.onCustomJsonId(RECEIPTS_ID, async (data, { sender }) => {
+        // Anyone can broadcast under this id; only the custody account's
+        // receipts count.
+        if (sender !== CUSTODY) {
             return;
         }
 
-        let deposit: { chain?: string; address?: string } | undefined;
+        const receipt = JSON.parse(data.json) as BridgeDepositReceipt;
 
-        try {
-            deposit = JSON.parse(data.memo)?.hive_stream?.payload;
-        } catch {
+        // Refunded deposits are already back with the user. Never mint them.
+        if (receipt.type !== 'deposit' || receipt.status !== 'accepted') {
             return;
         }
 
-        const [amount, asset] = String(data.amount).split(' ');
-
-        // The custody refunds deposits that break its rules; never mint those.
-        // Rolling daily limits aren't checked here, so keep them generous or
-        // confirm the deposit is pending with the custody service first.
-        if (!passesStaticRules(deposit?.chain, deposit?.address, amount, asset)) {
-            return;
-        }
-
-        const externalTxId = await mintOnEthereum(deposit!.address!, netAmount(amount), asset);
-        await attest(operationRecordId(transactionId, operationIndex), externalTxId);
+        // The receipt carries the amount after the bridge fee, rounded the
+        // same way the contract rounds it.
+        const externalTxId = await mintOnEthereum(receipt.address, receipt.netAmount, receipt.asset);
+        await attest(receipt.depositId, externalTxId);
     });
 
     operator.enableGracefulShutdown();

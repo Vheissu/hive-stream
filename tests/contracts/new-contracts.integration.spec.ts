@@ -66,6 +66,55 @@ describe('new contracts through the streamer', () => {
         ]);
     });
 
+    test('bridge publishes deposit receipts on-chain when enabled', async () => {
+        ts = await createTestStreamer({ username: 'custody', activeKey: ACTIVE_KEY });
+        await ts.streamer.registerContract(createBridgeContract({
+            custodyAccount: 'custody',
+            operators: ['op1'],
+            chains: ['eth'],
+            feeBps: 100,
+            dailyLimit: '1000.000',
+            receipts: true
+        }));
+
+        const accepted = await ts.contractTransfer({ from: 'alice', amount: '50.000 HIVE', contract: 'bridge', action: 'deposit', payload: { chain: 'eth', address: '0xabc123' } });
+        await ts.contractTransfer({ from: 'alice', amount: '20.000 HIVE', contract: 'bridge', action: 'deposit', payload: { chain: 'eth', address: '0xabc123' } });
+        await ts.contractTransfer({ from: 'bob', amount: '5.000 HIVE', contract: 'bridge', action: 'deposit', payload: { chain: 'sol', address: 'abc' } });
+
+        const receipts = ts.client.operations
+            .flat()
+            .filter(([type, op]: [string, any]) => type === 'custom_json' && op.id === 'bridge-receipts')
+            .map(([, op]: [string, any]) => ({ auths: op.required_posting_auths, body: JSON.parse(op.json) }));
+
+        expect(receipts).toHaveLength(3);
+        expect(receipts.every((receipt: any) => receipt.auths[0] === 'custody')).toBe(true);
+        expect(receipts[0].body).toEqual(expect.objectContaining({
+            type: 'deposit',
+            depositId: accepted.transactionId,
+            depositor: 'alice',
+            amount: '50.000',
+            fee: '0.500',
+            netAmount: '49.500',
+            chain: 'eth',
+            address: '0xabc123',
+            status: 'accepted',
+            dailyTotal: '50.000',
+            accountDailyTotal: '50.000'
+        }));
+        expect(receipts[1].body).toEqual(expect.objectContaining({ status: 'accepted', dailyTotal: '70.000', accountDailyTotal: '70.000' }));
+        expect(receipts[2].body).toEqual(expect.objectContaining({ depositor: 'bob', status: 'refunded', reason: 'Unsupported chain sol' }));
+        expect(receipts[2].body.dailyTotal).toBeUndefined();
+    });
+
+    test('bridge receipts are off by default', async () => {
+        ts = await createTestStreamer({ username: 'custody', activeKey: ACTIVE_KEY });
+        await ts.streamer.registerContract(createBridgeContract({ custodyAccount: 'custody', operators: ['op1'] }));
+
+        await ts.contractTransfer({ from: 'alice', amount: '5.000 HIVE', contract: 'bridge', action: 'deposit', payload: { chain: 'eth', address: '0xabc123' } });
+
+        expect(ts.client.operations.flat().filter(([type]: [string, any]) => type === 'custom_json')).toEqual([]);
+    });
+
     test('limbo bets settle on-chain and verify after the seed is rotated', async () => {
         ts = await createTestStreamer({ username: 'house', activeKey: ACTIVE_KEY });
         ts.client.setAccount('house', { balance: '100000.000 HIVE' });

@@ -32,7 +32,7 @@ The tip jar contract records tips. A streamer hook replies publicly to each one 
 
 ## A custody bridge with operator attestations
 
-Three files, because a bridge is three roles. The rules are shared so operators and custody agree on what's valid:
+Three files, because a bridge is three roles. The custody rules turn on deposit receipts, so the custody account publishes its decision on every deposit:
 
 <<< @/../examples/recipes/bridge-config.ts
 
@@ -44,7 +44,9 @@ Each operator runs its own process with its own account and key:
 
 <<< @/../examples/recipes/bridge-operator.ts
 
-The part to get right is the operator's check before minting. The custody contract refunds deposits that break its rules. An operator that mints one anyway has created unbacked tokens on the other chain. Mirror the custody rules exactly, and if you set tight daily limits, confirm with the custody service that a deposit is pending before minting.
+The part to get right is the operator's check before minting. The custody contract refunds deposits that break its rules, and an operator that mints one anyway has created unbacked tokens on the other chain. With `receipts` on, operators don't have to re-implement those rules: the custody account broadcasts a custom_json receipt (posting authority) with `status: 'accepted'` or `status: 'refunded'` and a reason. Operators mint only accepted deposits, using the receipt's `netAmount`. Accepted receipts also carry `dailyTotal` and `accountDailyTotal`, the rolling 24-hour totals the daily limits were checked against. Always check that a receipt was signed by the custody account: anyone can broadcast a custom_json under the same id.
+
+If a receipt broadcast fails, the deposit decision still stands. The failure is recorded in `bridge_audit` as `deposit_receipt_failed`, and the deposit stays `pending` in `bridge_deposits` for an operator to pick up.
 
 Withdrawals run the other way. A user burns or locks on the other chain and calls `requestWithdrawal`. Operators then attest with `attestWithdrawal`, and custody releases the funds at the threshold. If a release broadcast fails, it's marked `release_failed` and waits for an admin: it's never retried blindly.
 

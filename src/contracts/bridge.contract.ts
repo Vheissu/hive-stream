@@ -51,6 +51,36 @@ export interface BridgeContractOptions {
     accountDailyLimit?: string;
     /** Accounts allowed to pause/unpause and retry releases. Defaults to the custody account. */
     admins?: string[];
+    /**
+     * Publish the contract's decision on each deposit on-chain. When enabled,
+     * the custody account broadcasts a custom_json (posting authority) as soon
+     * as a deposit is accepted or refunded, so operators can act on the
+     * contract's verdict instead of re-implementing its checks. Accepted
+     * receipts include the rolling 24h totals used for the daily limits.
+     * `true` uses the custom_json id `<contract name>-receipts`. Off by default.
+     */
+    receipts?: boolean | { id?: string };
+}
+
+/** Body of a deposit receipt broadcast when `receipts` is enabled. */
+export interface BridgeDepositReceipt {
+    type: 'deposit';
+    contract: string;
+    depositId: string;
+    depositor: string;
+    asset: string;
+    amount: string;
+    fee: string;
+    netAmount: string;
+    chain: string;
+    address: string;
+    status: 'accepted' | 'refunded';
+    reason?: string;
+    blockNumber: number;
+    /** Accepted receipts: deposits of this asset in the 24h window ending at this block, including this one. */
+    dailyTotal?: string;
+    /** Accepted receipts: the depositor's share of dailyTotal. */
+    accountDailyTotal?: string;
 }
 
 type DepositDecision = 'minted' | 'refund';
@@ -73,6 +103,9 @@ export function createBridgeContract(options: BridgeContractOptions) {
     const dailyLimit = options.dailyLimit !== undefined ? toBigNumber(options.dailyLimit) : null;
     const accountDailyLimit = options.accountDailyLimit !== undefined ? toBigNumber(options.accountDailyLimit) : null;
     const admins = options.admins && options.admins.length > 0 ? options.admins : [custodyAccount];
+    const receiptId = options.receipts
+        ? (typeof options.receipts === 'object' && options.receipts.id) || `${name}-receipts`
+        : null;
 
     if (!custodyAccount) {
         throw new Error('Bridge contract requires a custodyAccount');
@@ -319,6 +352,68 @@ export function createBridgeContract(options: BridgeContractOptions) {
         return matching.filter((row: any) => operators.includes(row.operator)).length;
     };
 
+    /**
+     * Broadcasts a deposit receipt when receipts are enabled. A failed
+     * broadcast is audited and logged but never undoes the deposit decision,
+     * which is already recorded.
+     */
+    const publishReceipt = async (ctx: ContractContext, depositId: string, status: BridgeDepositReceipt['status'], reason?: string) => {
+        if (!receiptId) {
+            return;
+        }
+
+        const rows = await state.adapter.query('SELECT * FROM bridge_deposits WHERE deposit_id = ?', [depositId]);
+        const record = rows[0];
+
+        if (!record) {
+            return;
+        }
+
+        const receipt: BridgeDepositReceipt = {
+            type: 'deposit',
+            contract: name,
+            depositId,
+            depositor: record.sender,
+            asset: record.asset,
+            amount: record.amount,
+            fee: record.fee,
+            netAmount: record.net_amount,
+            chain: record.destination_chain,
+            address: record.destination_address,
+            status,
+            blockNumber: ctx.block.number
+        };
+
+        if (reason) {
+            receipt.reason = reason;
+        }
+
+        if (status === 'accepted') {
+            const since = new Date(nowOf(ctx).getTime() - DAY_MS);
+            receipt.dailyTotal = format(await depositedInWindow(record.asset, since, ''));
+            receipt.accountDailyTotal = format(await depositedInWindow(record.asset, since, '', record.sender));
+        }
+
+        try {
+            await state.streamer.broadcastOperations([[
+                'custom_json',
+                {
+                    required_auths: [],
+                    required_posting_auths: [custodyAccount],
+                    id: receiptId,
+                    json: JSON.stringify(receipt)
+                }
+            ]]);
+            await audit(ctx, 'deposit', depositId, 'deposit_receipt_published', custodyAccount, { status, id: receiptId });
+        } catch (error) {
+            getLogger().warn(`[BridgeContract] Could not publish receipt for deposit ${depositId}`, error);
+            await audit(ctx, 'deposit', depositId, 'deposit_receipt_failed', custodyAccount, {
+                status,
+                error: error instanceof Error ? error.message : String(error)
+            });
+        }
+    };
+
     const refundDeposit = async (ctx: ContractContext, depositId: string, sender: string, amount: string, asset: string, reason: string) => {
         await state.adapter.query(
             'UPDATE bridge_deposits SET status = ?, status_reason = ?, updated_at = ? WHERE deposit_id = ?',
@@ -333,6 +428,7 @@ export function createBridgeContract(options: BridgeContractOptions) {
         );
 
         await audit(ctx, 'deposit', depositId, 'deposit_refunded', custodyAccount, { reason, amount, asset, to: sender });
+        await publishReceipt(ctx, depositId, 'refunded', reason);
     };
 
     const deposit = async (payload: z.infer<typeof depositSchema>, ctx: ContractContext) => {
@@ -410,6 +506,8 @@ export function createBridgeContract(options: BridgeContractOptions) {
         await audit(ctx, 'deposit', depositId, 'deposit_pending', sender, {
             amount: format(amount), fee: format(fee), netAmount: format(net), asset, chain: payload.chain, address: payload.address
         });
+
+        await publishReceipt(ctx, depositId, 'accepted');
     };
 
     const attestDeposit = async (payload: z.infer<typeof attestDepositSchema>, ctx: ContractContext) => {

@@ -749,6 +749,12 @@
           "type": "string[]",
           "required": false,
           "description": "Accounts allowed to pause/unpause and retry releases. Defaults to the custody account."
+        },
+        {
+          "name": "receipts",
+          "type": "boolean | { id?: string }",
+          "required": false,
+          "description": "Publish the contract's decision on each deposit on-chain. When enabled,\nthe custody account broadcasts a custom_json (posting authority) as soon\nas a deposit is accepted or refunded, so operators can act on the\ncontract's verdict instead of re-implementing its checks. Accepted\nreceipts include the rolling 24h totals used for the daily limits.\n`true` uses the custom_json id `<contract name>-receipts`. Off by default."
         }
       ],
       "actions": [
