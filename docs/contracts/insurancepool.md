@@ -41,7 +41,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"insurancepool","action":"createPool","payload":{}}}
+{"hive_stream":{"contract":"insurancepool","action":"createPool","payload":{"poolId":"example-1","title":"Example","asset":"HIVE","premiumAmount":"1.000","coverageCap":"1.000","coverageDays":24}}}
 ```
 
 ### fundPool
@@ -57,7 +57,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"insurancepool","action":"fundPool","payload":{}}}
+{"hive_stream":{"contract":"insurancepool","action":"fundPool","payload":{"poolId":"example-1"}}}
 ```
 
 ### buyPolicy
@@ -73,7 +73,7 @@ Send as a transfer memo:
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"insurancepool","action":"buyPolicy","payload":{}}}
+{"hive_stream":{"contract":"insurancepool","action":"buyPolicy","payload":{"poolId":"example-1"}}}
 ```
 
 ### fileClaim
@@ -92,7 +92,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"insurancepool","action":"fileClaim","payload":{}}}
+{"hive_stream":{"contract":"insurancepool","action":"fileClaim","payload":{"poolId":"example-1","claimId":"example-1","amount":"1.000","reason":"Example text"}}}
 ```
 
 ### approveClaim
@@ -110,7 +110,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"insurancepool","action":"approveClaim","payload":{}}}
+{"hive_stream":{"contract":"insurancepool","action":"approveClaim","payload":{"claimId":"example-1"}}}
 ```
 
 ### expirePolicies

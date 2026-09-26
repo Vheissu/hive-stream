@@ -76,7 +76,15 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "auctionId": "example-1",
+            "title": "Example",
+            "assetRef": "example-1",
+            "paymentAsset": "HIVE",
+            "reservePrice": "1.000",
+            "endsAt": "2030-01-01T00:00:00.000Z"
+          }
         },
         {
           "name": "placeBid",
@@ -96,7 +104,10 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "auctionId": "example-1"
+          }
         },
         {
           "name": "settleAuction",
@@ -111,7 +122,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "auctionId": "example-1"
+          }
         },
         {
           "name": "cancelAuction",
@@ -125,7 +139,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "auctionId": "example-1"
+          }
         }
       ]
     },
@@ -197,7 +214,11 @@
               "required": false
             }
           ],
-          "description": "Define a non-transferable badge with issuers, optional supply cap and an optional earning rule."
+          "description": "Define a non-transferable badge with issuers, optional supply cap and an optional earning rule.",
+          "example": {
+            "badgeId": "example-1",
+            "title": "Example"
+          }
         },
         {
           "name": "issueBadge",
@@ -227,7 +248,11 @@
               "required": false
             }
           ],
-          "description": "Issuer-only: award a badge to an account."
+          "description": "Issuer-only: award a badge to an account.",
+          "example": {
+            "badgeId": "example-1",
+            "recipient": "alice"
+          }
         },
         {
           "name": "revokeBadge",
@@ -252,7 +277,12 @@
               "required": true
             }
           ],
-          "description": "Issuer-only: revoke a badge with a public reason."
+          "description": "Issuer-only: revoke a badge with a public reason.",
+          "example": {
+            "badgeId": "example-1",
+            "recipient": "alice",
+            "reason": "Example text"
+          }
         },
         {
           "name": "updateIssuers",
@@ -277,7 +307,10 @@
               "required": false
             }
           ],
-          "description": "Creator-only: add or remove issuers (the creator always remains an issuer)."
+          "description": "Creator-only: add or remove issuers (the creator always remains an issuer).",
+          "example": {
+            "badgeId": "example-1"
+          }
         },
         {
           "name": "contribute",
@@ -293,7 +326,10 @@
               "required": true
             }
           ],
-          "description": "Count a payment toward a payment_total badge; the badge is awarded when the threshold is reached."
+          "description": "Count a payment toward a payment_total badge; the badge is awarded when the threshold is reached.",
+          "example": {
+            "badgeId": "example-1"
+          }
         },
         {
           "name": "checkIn",
@@ -308,7 +344,10 @@
               "required": true
             }
           ],
-          "description": "Record a periodic check-in toward a checkin_count badge (optionally requiring consecutive periods)."
+          "description": "Record a periodic check-in toward a checkin_count badge (optionally requiring consecutive periods).",
+          "example": {
+            "badgeId": "example-1"
+          }
         }
       ]
     },
@@ -367,7 +406,14 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "listingId": "example-1",
+            "title": "Example",
+            "price": "1.000",
+            "asset": "HIVE",
+            "durationMinutes": 24
+          }
         },
         {
           "name": "reserve",
@@ -397,7 +443,12 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "listingId": "example-1",
+            "reservationId": "example-1",
+            "startAt": "2030-01-01T00:00:00.000Z"
+          }
         },
         {
           "name": "confirmReservation",
@@ -416,7 +467,10 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "reservationId": "example-1"
+          }
         },
         {
           "name": "cancelReservation",
@@ -435,7 +489,10 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "reservationId": "example-1"
+          }
         },
         {
           "name": "completeReservation",
@@ -455,7 +512,10 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "reservationId": "example-1"
+          }
         }
       ]
     },
@@ -510,7 +570,11 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "bountyId": "example-1",
+            "title": "Example"
+          }
         },
         {
           "name": "submitWork",
@@ -539,7 +603,12 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "bountyId": "example-1",
+            "submissionId": "example-1",
+            "url": "https://example.com"
+          }
         },
         {
           "name": "awardBounty",
@@ -568,7 +637,11 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "bountyId": "example-1",
+            "submissionId": "example-1"
+          }
         },
         {
           "name": "closeBounty",
@@ -583,7 +656,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "bountyId": "example-1"
+          }
         }
       ]
     },
@@ -689,7 +765,8 @@
               "required": false
             }
           ],
-          "description": "Deposit HIVE/HBD to the custody account with the destination chain and address; invalid deposits are refunded automatically."
+          "description": "Deposit HIVE/HBD to the custody account with the destination chain and address; invalid deposits are refunded automatically.",
+          "example": {}
         },
         {
           "name": "attestDeposit",
@@ -718,7 +795,11 @@
               "required": false
             }
           ],
-          "description": "Operator attestation that a deposit was minted on the destination chain (or should be refunded). Acts at the M-of-N threshold."
+          "description": "Operator attestation that a deposit was minted on the destination chain (or should be refunded). Acts at the M-of-N threshold.",
+          "example": {
+            "depositId": "example-1",
+            "decision": "minted"
+          }
         },
         {
           "name": "requestWithdrawal",
@@ -753,7 +834,13 @@
               "required": false
             }
           ],
-          "description": "Register a withdrawal back to Hive for funds locked or burned on another chain."
+          "description": "Register a withdrawal back to Hive for funds locked or burned on another chain.",
+          "example": {
+            "sourceChain": "eth",
+            "sourceTxId": "0xabc123",
+            "amount": "1.000",
+            "asset": "HIVE"
+          }
         },
         {
           "name": "attestWithdrawal",
@@ -797,7 +884,14 @@
               ]
             }
           ],
-          "description": "Operator attestation that a withdrawal is valid (release) or invalid (reject). Releases at the M-of-N threshold within limits."
+          "description": "Operator attestation that a withdrawal is valid (release) or invalid (reject). Releases at the M-of-N threshold within limits.",
+          "example": {
+            "sourceChain": "eth",
+            "sourceTxId": "0xabc123",
+            "recipient": "alice",
+            "amount": "1.000",
+            "asset": "HIVE"
+          }
         },
         {
           "name": "executeWithdrawal",
@@ -817,7 +911,11 @@
               "required": true
             }
           ],
-          "description": "Retry a queued withdrawal, or (admins only) a failed release after manual reconciliation."
+          "description": "Retry a queued withdrawal, or (admins only) a failed release after manual reconciliation.",
+          "example": {
+            "sourceChain": "eth",
+            "sourceTxId": "0xabc123"
+          }
         },
         {
           "name": "processQueue",
@@ -826,7 +924,8 @@
           ],
           "requiresActiveKey": false,
           "payload": [],
-          "description": "Scheduled release of withdrawals queued by a pause or the daily limit."
+          "description": "Scheduled release of withdrawals queued by a pause or the daily limit.",
+          "example": {}
         },
         {
           "name": "setPaused",
@@ -846,7 +945,10 @@
               "required": false
             }
           ],
-          "description": "Pause or resume the bridge (admins only). Paused deposits are refunded and releases are queued."
+          "description": "Pause or resume the bridge (admins only). Paused deposits are refunded and releases are queued.",
+          "example": {
+            "paused": true
+          }
         }
       ]
     },
@@ -905,7 +1007,16 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "bundleId": "example-1",
+            "title": "Example",
+            "price": "1.000",
+            "asset": "HIVE",
+            "items": [
+              "example-1"
+            ]
+          }
         },
         {
           "name": "updateBundle",
@@ -944,7 +1055,10 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "bundleId": "example-1"
+          }
         },
         {
           "name": "buyBundle",
@@ -959,7 +1073,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "bundleId": "example-1"
+          }
         },
         {
           "name": "fulfillPurchase",
@@ -978,7 +1095,10 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "purchaseId": 1
+          }
         }
       ]
     },
@@ -1042,7 +1162,16 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "campaignId": "example-1",
+            "title": "Example",
+            "beneficiary": "alice",
+            "asset": "HIVE",
+            "matchCap": "1.000",
+            "matchBps": 100,
+            "closesAt": "2030-01-01T00:00:00.000Z"
+          }
         },
         {
           "name": "donate",
@@ -1057,7 +1186,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "campaignId": "example-1"
+          }
         },
         {
           "name": "closeCampaign",
@@ -1072,7 +1204,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "campaignId": "example-1"
+          }
         }
       ]
     },
@@ -1135,7 +1270,15 @@
               "type": "string[]",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "checkpointId": "example-1",
+            "blockNumber": 1,
+            "stateHash": "0000000000000000000000000000000000000000000000000000000000000000",
+            "tables": [
+              "example"
+            ]
+          }
         }
       ]
     },
@@ -1205,7 +1348,10 @@
               "required": false
             }
           ],
-          "description": "Bet on heads or tails by transferring to the house account; winners receive 2x."
+          "description": "Bet on heads or tails by transferring to the house account; winners receive 2x.",
+          "example": {
+            "guess": "heads"
+          }
         }
       ]
     },
@@ -1274,7 +1420,14 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "campaignId": "example-1",
+            "title": "Example",
+            "targetAmount": "1.000",
+            "asset": "HIVE",
+            "deadline": "2030-01-01T00:00:00.000Z"
+          }
         },
         {
           "name": "contribute",
@@ -1289,7 +1442,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "campaignId": "example-1"
+          }
         },
         {
           "name": "finalizeCampaign",
@@ -1304,7 +1460,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "campaignId": "example-1"
+          }
         },
         {
           "name": "releaseMilestone",
@@ -1323,7 +1482,11 @@
               "type": "number",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "campaignId": "example-1",
+            "milestoneIndex": 0
+          }
         },
         {
           "name": "refundContribution",
@@ -1337,7 +1500,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "campaignId": "example-1"
+          }
         }
       ]
     },
@@ -1406,7 +1572,14 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "botId": "example-1",
+            "baseAsset": "HIVE",
+            "quoteAsset": "HBD",
+            "amountPerInterval": "1.000",
+            "intervalHours": 24
+          }
         },
         {
           "name": "pauseBot",
@@ -1420,7 +1593,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "botId": "example-1"
+          }
         },
         {
           "name": "resumeBot",
@@ -1434,7 +1610,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "botId": "example-1"
+          }
         },
         {
           "name": "executeDueBots",
@@ -1483,7 +1662,12 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "botId": "example-1",
+            "executionId": 1,
+            "status": "placed"
+          }
         }
       ]
     },
@@ -1537,7 +1721,14 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "namespace": "example-1",
+            "title": "Example",
+            "registrationPrice": "1.000",
+            "asset": "HIVE",
+            "renewalDays": 24
+          }
         },
         {
           "name": "registerName",
@@ -1572,7 +1763,12 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "namespace": "example-1",
+            "label": "example-1",
+            "target": "1.000"
+          }
         },
         {
           "name": "renewName",
@@ -1607,7 +1803,12 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "namespace": "example-1",
+            "label": "example-1",
+            "target": "1.000"
+          }
         },
         {
           "name": "transferName",
@@ -1631,7 +1832,12 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "namespace": "example-1",
+            "label": "example-1",
+            "to": "alice"
+          }
         },
         {
           "name": "expireNames",
@@ -1709,7 +1915,11 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "base": "HIVE",
+            "quote": "HBD"
+          }
         },
         {
           "name": "deposit",
@@ -1717,7 +1927,8 @@
             "transfer"
           ],
           "requiresActiveKey": false,
-          "payload": []
+          "payload": [],
+          "example": {}
         },
         {
           "name": "withdraw",
@@ -1741,7 +1952,11 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "asset": "HIVE",
+            "amount": "1.000"
+          }
         },
         {
           "name": "placeOrder",
@@ -1779,7 +1994,14 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "side": "buy",
+            "base": "HIVE",
+            "quote": "HBD",
+            "price": "1.000",
+            "amount": "1.000"
+          }
         },
         {
           "name": "cancelOrder",
@@ -1793,7 +2015,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "orderId": "example-1"
+          }
         },
         {
           "name": "matchOrders",
@@ -1826,7 +2051,11 @@
               "type": "number",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "base": "HIVE",
+            "quote": "HBD"
+          }
         },
         {
           "name": "transfer",
@@ -1850,7 +2079,12 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "to": "alice",
+            "asset": "HIVE",
+            "amount": "1.000"
+          }
         }
       ]
     },
@@ -1904,7 +2138,13 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "clubId": "1",
+            "title": "Example",
+            "joinPrice": "1.000",
+            "asset": "HIVE"
+          }
         },
         {
           "name": "joinClub",
@@ -1919,7 +2159,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "clubId": "1"
+          }
         },
         {
           "name": "recordEngagement",
@@ -1948,7 +2191,12 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "clubId": "1",
+            "account": "alice",
+            "points": 1
+          }
         },
         {
           "name": "redeemPerk",
@@ -1967,7 +2215,11 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "clubId": "1",
+            "perkId": "example-1"
+          }
         }
       ]
     },
@@ -2012,7 +2264,10 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "code": "example-1"
+          }
         },
         {
           "name": "redeemGiftCard",
@@ -2031,7 +2286,10 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "code": "example-1"
+          }
         },
         {
           "name": "cancelGiftCard",
@@ -2045,7 +2303,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "code": "example-1"
+          }
         }
       ]
     },
@@ -2094,7 +2355,13 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "roundId": "example-1",
+            "title": "Example",
+            "asset": "HIVE",
+            "closesAt": "2030-01-01T00:00:00.000Z"
+          }
         },
         {
           "name": "fundRound",
@@ -2109,7 +2376,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "roundId": "example-1"
+          }
         },
         {
           "name": "submitProject",
@@ -2143,7 +2413,13 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "roundId": "example-1",
+            "projectId": "example-1",
+            "title": "Example",
+            "recipient": "alice"
+          }
         },
         {
           "name": "donateToProject",
@@ -2163,7 +2439,11 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "roundId": "example-1",
+            "projectId": "example-1"
+          }
         },
         {
           "name": "finalizeRound",
@@ -2178,7 +2458,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "roundId": "example-1"
+          }
         },
         {
           "name": "withdrawGrant",
@@ -2197,7 +2480,11 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "roundId": "example-1",
+            "projectId": "example-1"
+          }
         }
       ]
     },
@@ -2256,7 +2543,14 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "groupBuyId": "example-1",
+            "title": "Example",
+            "targetAmount": "1.000",
+            "asset": "HIVE",
+            "deadline": "2030-01-01T00:00:00.000Z"
+          }
         },
         {
           "name": "commit",
@@ -2271,7 +2565,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "groupBuyId": "example-1"
+          }
         },
         {
           "name": "finalizeGroupBuy",
@@ -2286,7 +2583,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "groupBuyId": "example-1"
+          }
         },
         {
           "name": "withdrawCommitment",
@@ -2300,7 +2600,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "groupBuyId": "example-1"
+          }
         }
       ]
     },
@@ -2371,7 +2674,10 @@
               "required": false
             }
           ],
-          "description": "Bet by transferring to the house account; wins when the 1-100 roll is below your guess."
+          "description": "Bet by transferring to the house account; wins when the 1-100 roll is below your guess.",
+          "example": {
+            "roll": 10
+          }
         }
       ]
     },
@@ -2471,7 +2777,10 @@
               ]
             }
           ],
-          "description": "Buy a ticket for the hourly or daily draw by transferring the ticket cost."
+          "description": "Buy a ticket for the hourly or daily draw by transferring the ticket cost.",
+          "example": {
+            "type": "hourly"
+          }
         },
         {
           "name": "drawHourlyLottery",
@@ -2661,7 +2970,12 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "symbol": "HIVE",
+            "name": "Example",
+            "maxSupply": "example-1"
+          }
         },
         {
           "name": "issueTokens",
@@ -2690,7 +3004,12 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "symbol": "HIVE",
+            "to": "alice",
+            "amount": "1.000"
+          }
         },
         {
           "name": "transferTokens",
@@ -2719,7 +3038,12 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "symbol": "HIVE",
+            "to": "alice",
+            "amount": "1.000"
+          }
         },
         {
           "name": "getBalance",
@@ -2738,7 +3062,11 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "account": "alice",
+            "symbol": "HIVE"
+          }
         },
         {
           "name": "getTokenInfo",
@@ -2752,7 +3080,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "symbol": "HIVE"
+          }
         }
       ]
     },
@@ -2811,7 +3142,15 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "poolId": "example-1",
+            "title": "Example",
+            "asset": "HIVE",
+            "premiumAmount": "1.000",
+            "coverageCap": "1.000",
+            "coverageDays": 24
+          }
         },
         {
           "name": "fundPool",
@@ -2826,7 +3165,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "poolId": "example-1"
+          }
         },
         {
           "name": "buyPolicy",
@@ -2841,7 +3183,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "poolId": "example-1"
+          }
         },
         {
           "name": "fileClaim",
@@ -2870,7 +3215,13 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "poolId": "example-1",
+            "claimId": "example-1",
+            "amount": "1.000",
+            "reason": "Example text"
+          }
         },
         {
           "name": "approveClaim",
@@ -2894,7 +3245,10 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "claimId": "example-1"
+          }
         },
         {
           "name": "expirePolicies",
@@ -2972,7 +3326,14 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "invoiceId": "example-1",
+            "payer": "alice",
+            "title": "Example",
+            "amount": "1.000",
+            "asset": "HIVE"
+          }
         },
         {
           "name": "payInvoice",
@@ -2987,7 +3348,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "invoiceId": "example-1"
+          }
         },
         {
           "name": "cancelInvoice",
@@ -3001,7 +3365,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "invoiceId": "example-1"
+          }
         },
         {
           "name": "closeOverdueInvoices",
@@ -3084,7 +3451,16 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "saleId": "example-1",
+            "title": "Example",
+            "tokenSymbol": "HIVE",
+            "purchaseAsset": "HIVE",
+            "unitPrice": "1.000",
+            "totalUnits": 1,
+            "closesAt": "2030-01-01T00:00:00.000Z"
+          }
         },
         {
           "name": "contribute",
@@ -3099,7 +3475,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "saleId": "example-1"
+          }
         },
         {
           "name": "finalizeSale",
@@ -3114,7 +3493,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "saleId": "example-1"
+          }
         },
         {
           "name": "claimAllocation",
@@ -3128,7 +3510,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "saleId": "example-1"
+          }
         }
       ]
     },
@@ -3226,7 +3611,8 @@
               "required": false
             }
           ],
-          "description": "Bet with a target multiplier (e.g. \"2.5\"); you win bet x target when the provably-fair result reaches it."
+          "description": "Bet with a target multiplier (e.g. \"2.5\"); you win bet x target when the provably-fair result reaches it.",
+          "example": {}
         },
         {
           "name": "rotateSeed",
@@ -3236,7 +3622,8 @@
           ],
           "requiresActiveKey": true,
           "payload": [],
-          "description": "Reveal the current server seed and commit to a new one (house account only)."
+          "description": "Reveal the current server seed and commit to a new one (house account only).",
+          "example": {}
         }
       ]
     },
@@ -3285,7 +3672,15 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "vaultId": "example-1",
+            "title": "Example",
+            "signers": [
+              "alice"
+            ],
+            "threshold": 1
+          }
         },
         {
           "name": "proposeTransfer",
@@ -3329,7 +3724,15 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "vaultId": "example-1",
+            "proposalId": "example-1",
+            "title": "Example",
+            "to": "alice",
+            "amount": "1.000",
+            "asset": "HIVE"
+          }
         },
         {
           "name": "approveProposal",
@@ -3343,7 +3746,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "proposalId": "example-1"
+          }
         },
         {
           "name": "cancelProposal",
@@ -3357,7 +3763,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "proposalId": "example-1"
+          }
         },
         {
           "name": "markExecuted",
@@ -3376,7 +3785,10 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "proposalId": "example-1"
+          }
         }
       ]
     },
@@ -3430,7 +3842,13 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "feedId": "example-1",
+            "title": "Example",
+            "rewardPerReport": "1.000",
+            "rewardAsset": "HIVE"
+          }
         },
         {
           "name": "fundFeed",
@@ -3445,7 +3863,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "feedId": "example-1"
+          }
         },
         {
           "name": "submitReport",
@@ -3474,7 +3895,12 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "feedId": "example-1",
+            "roundId": "example-1",
+            "value": 1
+          }
         },
         {
           "name": "finalizeRound",
@@ -3494,7 +3920,11 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "feedId": "example-1",
+            "roundId": "example-1"
+          }
         },
         {
           "name": "withdrawRewards",
@@ -3551,7 +3981,13 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "payrollId": "example-1",
+            "title": "Example",
+            "asset": "HIVE",
+            "intervalDays": 24
+          }
         },
         {
           "name": "addRecipient",
@@ -3575,7 +4011,12 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "payrollId": "example-1",
+            "account": "alice",
+            "amount": "1.000"
+          }
         },
         {
           "name": "fundPayroll",
@@ -3590,7 +4031,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "payrollId": "example-1"
+          }
         },
         {
           "name": "runPayroll",
@@ -3605,7 +4049,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "payrollId": "example-1"
+          }
         },
         {
           "name": "withdrawPayroll",
@@ -3672,7 +4119,14 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "resourceId": "example-1",
+            "title": "Example",
+            "price": "1.000",
+            "asset": "HIVE",
+            "accessDays": 24
+          }
         },
         {
           "name": "grantAccess",
@@ -3687,7 +4141,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "resourceId": "example-1"
+          }
         },
         {
           "name": "revokeAccess",
@@ -3706,7 +4163,11 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "resourceId": "example-1",
+            "account": "alice"
+          }
         },
         {
           "name": "expireAccess",
@@ -3759,7 +4220,15 @@
               "type": "number",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "pollId": "example-1",
+            "question": "Example text",
+            "options": [
+              "Yes",
+              "No"
+            ]
+          }
         },
         {
           "name": "vote",
@@ -3778,7 +4247,11 @@
               "type": "number",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "pollId": "example-1",
+            "option": 1
+          }
         }
       ]
     },
@@ -3832,7 +4305,17 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "marketId": "example-1",
+            "title": "Example",
+            "asset": "HIVE",
+            "options": [
+              "Yes",
+              "No"
+            ],
+            "closesAt": "2030-01-01T00:00:00.000Z"
+          }
         },
         {
           "name": "buyPosition",
@@ -3852,7 +4335,11 @@
               "type": "number",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "marketId": "example-1",
+            "option": 1
+          }
         },
         {
           "name": "resolveMarket",
@@ -3872,7 +4359,11 @@
               "type": "number",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "marketId": "example-1",
+            "winningOption": 1
+          }
         },
         {
           "name": "claimWinnings",
@@ -3886,7 +4377,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "marketId": "example-1"
+          }
         }
       ]
     },
@@ -3940,7 +4434,16 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "queueId": "example-1",
+            "title": "Example",
+            "approvers": [
+              "alice"
+            ],
+            "threshold": 1,
+            "minDelayHours": 24
+          }
         },
         {
           "name": "createProposal",
@@ -3979,7 +4482,14 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "queueId": "example-1",
+            "proposalId": "example-1",
+            "title": "Example",
+            "actionType": "example-1",
+            "actionPayload": {}
+          }
         },
         {
           "name": "approveProposal",
@@ -3993,7 +4503,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "proposalId": "example-1"
+          }
         },
         {
           "name": "executeProposal",
@@ -4013,7 +4526,10 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "proposalId": "example-1"
+          }
         },
         {
           "name": "cancelProposal",
@@ -4027,7 +4543,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "proposalId": "example-1"
+          }
         }
       ]
     },
@@ -4081,7 +4600,21 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "seasonId": "example-1",
+            "title": "Example",
+            "passPrice": "1.000",
+            "asset": "HIVE",
+            "tiers": [
+              {
+                "tierId": "example-1",
+                "minPoints": 1,
+                "rewardType": "example-1",
+                "rewardValue": "1.000"
+              }
+            ]
+          }
         },
         {
           "name": "buyPass",
@@ -4096,7 +4629,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "seasonId": "example-1"
+          }
         },
         {
           "name": "recordProgress",
@@ -4130,7 +4666,12 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "seasonId": "example-1",
+            "account": "alice",
+            "points": 1
+          }
         },
         {
           "name": "claimReward",
@@ -4149,7 +4690,11 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "seasonId": "example-1",
+            "tierId": "example-1"
+          }
         }
       ]
     },
@@ -4203,7 +4748,13 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "programId": "example-1",
+            "title": "Example",
+            "payoutAsset": "HIVE",
+            "rewardBps": 100
+          }
         },
         {
           "name": "fundProgram",
@@ -4218,7 +4769,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "programId": "example-1"
+          }
         },
         {
           "name": "registerCode",
@@ -4237,7 +4791,11 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "programId": "example-1",
+            "code": "example-1"
+          }
         },
         {
           "name": "recordConversion",
@@ -4276,7 +4834,14 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "programId": "example-1",
+            "code": "example-1",
+            "buyer": "alice",
+            "grossAmount": "1.000",
+            "asset": "HIVE"
+          }
         },
         {
           "name": "withdrawAffiliate",
@@ -4353,7 +4918,16 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "listingId": "example-1",
+            "assetRef": "example-1",
+            "title": "Example",
+            "collateralAmount": "1.000",
+            "collateralAsset": "HIVE",
+            "dailyRate": "1.000",
+            "rateAsset": "HIVE"
+          }
         },
         {
           "name": "initiateRental",
@@ -4382,7 +4956,12 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "listingId": "example-1",
+            "rentalId": "example-1",
+            "endsAt": "2030-01-01T00:00:00.000Z"
+          }
         },
         {
           "name": "confirmReturn",
@@ -4401,7 +4980,10 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "rentalId": "example-1"
+          }
         },
         {
           "name": "closeRental",
@@ -4421,7 +5003,10 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "rentalId": "example-1"
+          }
         }
       ]
     },
@@ -4465,7 +5050,17 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "splitId": "example-1",
+            "title": "Example",
+            "recipients": [
+              {
+                "account": "alice",
+                "bps": 100
+              }
+            ]
+          }
         },
         {
           "name": "updateSplit",
@@ -4489,7 +5084,16 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "splitId": "example-1",
+            "recipients": [
+              {
+                "account": "alice",
+                "bps": 100
+              }
+            ]
+          }
         },
         {
           "name": "distribute",
@@ -4504,7 +5108,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "splitId": "example-1"
+          }
         },
         {
           "name": "withdraw",
@@ -4591,7 +5198,11 @@
               "required": false
             }
           ],
-          "description": "Place a single-zero roulette bet by transferring to the house account."
+          "description": "Place a single-zero roulette bet by transferring to the house account.",
+          "example": {
+            "betType": "straight",
+            "value": 17
+          }
         }
       ]
     },
@@ -4662,7 +5273,10 @@
               "required": false
             }
           ],
-          "description": "Play rock-paper-scissors against the house by transferring a wager; ties are refunded."
+          "description": "Play rock-paper-scissors against the house by transferring a wager; ties are refunded.",
+          "example": {
+            "move": "rock"
+          }
         }
       ]
     },
@@ -4721,7 +5335,13 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "goalId": "example-1",
+            "title": "Example",
+            "targetAmount": "1.000",
+            "asset": "HIVE"
+          }
         },
         {
           "name": "contribute",
@@ -4736,7 +5356,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "goalId": "example-1"
+          }
         },
         {
           "name": "withdraw",
@@ -4760,7 +5383,10 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "goalId": "example-1"
+          }
         },
         {
           "name": "closeGoal",
@@ -4775,7 +5401,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "goalId": "example-1"
+          }
         }
       ]
     },
@@ -4854,7 +5483,13 @@
               "required": false
             }
           ],
-          "description": "Admin-only: create a pool with stake/reward assets, a reward rate per second (or block), cooldown and optional end time."
+          "description": "Admin-only: create a pool with stake/reward assets, a reward rate per second (or block), cooldown and optional end time.",
+          "example": {
+            "poolId": "example-1",
+            "stakeAsset": "HIVE",
+            "rewardAsset": "HIVE",
+            "rewardRate": "1.000"
+          }
         },
         {
           "name": "fundRewards",
@@ -4869,7 +5504,10 @@
               "required": true
             }
           ],
-          "description": "Top up a pool's reward reserve. Rewards never accrue beyond what has been funded."
+          "description": "Top up a pool's reward reserve. Rewards never accrue beyond what has been funded.",
+          "example": {
+            "poolId": "example-1"
+          }
         },
         {
           "name": "stake",
@@ -4884,7 +5522,10 @@
               "required": true
             }
           ],
-          "description": "Stake by transferring the pool's stake asset; wrong assets, tiny amounts and ended pools are refunded."
+          "description": "Stake by transferring the pool's stake asset; wrong assets, tiny amounts and ended pools are refunded.",
+          "example": {
+            "poolId": "example-1"
+          }
         },
         {
           "name": "unstake",
@@ -4904,7 +5545,11 @@
               "required": true
             }
           ],
-          "description": "Start unbonding part of your stake; funds are released after the pool's cooldown."
+          "description": "Start unbonding part of your stake; funds are released after the pool's cooldown.",
+          "example": {
+            "poolId": "example-1",
+            "amount": "1.000"
+          }
         },
         {
           "name": "withdraw",
@@ -4919,7 +5564,10 @@
               "required": true
             }
           ],
-          "description": "Release your matured unbonding entries."
+          "description": "Release your matured unbonding entries.",
+          "example": {
+            "poolId": "example-1"
+          }
         },
         {
           "name": "claim",
@@ -4934,7 +5582,10 @@
               "required": true
             }
           ],
-          "description": "Pay out accrued rewards (rounded down to the asset precision; the remainder stays pending)."
+          "description": "Pay out accrued rewards (rounded down to the asset precision; the remainder stays pending).",
+          "example": {
+            "poolId": "example-1"
+          }
         },
         {
           "name": "setRewardRate",
@@ -4954,7 +5605,11 @@
               "required": true
             }
           ],
-          "description": "Admin-only: change the reward rate after settling accruals at the old rate."
+          "description": "Admin-only: change the reward rate after settling accruals at the old rate.",
+          "example": {
+            "poolId": "example-1",
+            "rewardRate": "1.000"
+          }
         },
         {
           "name": "releaseMatured",
@@ -4963,7 +5618,8 @@
           ],
           "requiresActiveKey": false,
           "payload": [],
-          "description": "Scheduled release of every matured unbonding entry."
+          "description": "Scheduled release of every matured unbonding entry.",
+          "example": {}
         }
       ]
     },
@@ -5022,7 +5678,14 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "planId": "example-1",
+            "title": "Example",
+            "price": "1.000",
+            "asset": "HIVE",
+            "intervalDays": 24
+          }
         },
         {
           "name": "updatePlan",
@@ -5071,7 +5734,10 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "planId": "example-1"
+          }
         },
         {
           "name": "subscribe",
@@ -5086,7 +5752,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "planId": "example-1"
+          }
         },
         {
           "name": "cancelSubscription",
@@ -5100,7 +5769,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "planId": "example-1"
+          }
         },
         {
           "name": "expireMemberships",
@@ -5173,7 +5845,14 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "drawId": "example-1",
+            "title": "Example",
+            "entryFee": "1.000",
+            "asset": "HIVE",
+            "closesAt": "2030-01-01T00:00:00.000Z"
+          }
         },
         {
           "name": "enterSweepstakes",
@@ -5193,7 +5872,10 @@
               "type": "number",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "drawId": "example-1"
+          }
         },
         {
           "name": "drawWinner",
@@ -5213,7 +5895,10 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "drawId": "example-1"
+          }
         }
       ]
     },
@@ -5277,7 +5962,16 @@
               "type": "record",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "eventId": "example-1",
+            "title": "Example",
+            "venue": "Example text",
+            "startsAt": "2030-01-01T00:00:00.000Z",
+            "ticketPrice": "1.000",
+            "asset": "HIVE",
+            "capacity": 1
+          }
         },
         {
           "name": "purchaseTicket",
@@ -5297,7 +5991,11 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "eventId": "example-1",
+            "ticketId": "example-1"
+          }
         },
         {
           "name": "checkInTicket",
@@ -5316,7 +6014,10 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "ticketId": "example-1"
+          }
         },
         {
           "name": "refundTicket",
@@ -5335,7 +6036,10 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "ticketId": "example-1"
+          }
         },
         {
           "name": "transferTicket",
@@ -5359,7 +6063,11 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "ticketId": "example-1",
+            "to": "alice"
+          }
         },
         {
           "name": "listTicket",
@@ -5383,7 +6091,11 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {
+            "ticketId": "example-1",
+            "price": "1.000"
+          }
         },
         {
           "name": "unlistTicket",
@@ -5397,7 +6109,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "ticketId": "example-1"
+          }
         },
         {
           "name": "buyTicketDirect",
@@ -5411,7 +6126,10 @@
               "type": "string",
               "required": true
             }
-          ]
+          ],
+          "example": {
+            "ticketId": "example-1"
+          }
         }
       ]
     },
@@ -5440,7 +6158,8 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "example": {}
         }
       ]
     },
@@ -5572,7 +6291,17 @@
               "default": "split"
             }
           ],
-          "description": "Create a tournament with an entry fee, registration window, player limits and a basis-point prize split."
+          "description": "Create a tournament with an entry fee, registration window, player limits and a basis-point prize split.",
+          "example": {
+            "tournamentId": "example-1",
+            "title": "Example",
+            "asset": "HIVE",
+            "entryFee": "1.000",
+            "registrationClosesAt": "2030-01-01T00:00:00.000Z",
+            "prizeSplitBps": [
+              1
+            ]
+          }
         },
         {
           "name": "enter",
@@ -5587,7 +6316,10 @@
               "required": true
             }
           ],
-          "description": "Enter by transferring the exact entry fee; wrong assets, amounts, duplicates and closed registrations are refunded."
+          "description": "Enter by transferring the exact entry fee; wrong assets, amounts, duplicates and closed registrations are refunded.",
+          "example": {
+            "tournamentId": "example-1"
+          }
         },
         {
           "name": "submitScore",
@@ -5612,7 +6344,12 @@
               "required": true
             }
           ],
-          "description": "Oracle-only: record a player score after registration closes."
+          "description": "Oracle-only: record a player score after registration closes.",
+          "example": {
+            "tournamentId": "example-1",
+            "player": "alice",
+            "score": 1
+          }
         },
         {
           "name": "submitScores",
@@ -5632,7 +6369,16 @@
               "required": true
             }
           ],
-          "description": "Oracle-only: record up to 100 scores in one operation."
+          "description": "Oracle-only: record up to 100 scores in one operation.",
+          "example": {
+            "tournamentId": "example-1",
+            "scores": [
+              {
+                "player": "alice",
+                "score": 1
+              }
+            ]
+          }
         },
         {
           "name": "finalize",
@@ -5647,7 +6393,10 @@
               "required": true
             }
           ],
-          "description": "Rank players, take the house fee and pay prizes; under-subscribed tournaments are cancelled and refunded."
+          "description": "Rank players, take the house fee and pay prizes; under-subscribed tournaments are cancelled and refunded.",
+          "example": {
+            "tournamentId": "example-1"
+          }
         },
         {
           "name": "finalizeDue",
@@ -5656,7 +6405,8 @@
           ],
           "requiresActiveKey": false,
           "payload": [],
-          "description": "Scheduled sweep that finalizes tournaments past their end time."
+          "description": "Scheduled sweep that finalizes tournaments past their end time.",
+          "example": {}
         },
         {
           "name": "cancelTournament",
@@ -5671,7 +6421,10 @@
               "required": true
             }
           ],
-          "description": "Organizer-only: cancel and refund every entry."
+          "description": "Organizer-only: cancel and refund every entry.",
+          "example": {
+            "tournamentId": "example-1"
+          }
         }
       ]
     }

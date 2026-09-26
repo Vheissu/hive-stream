@@ -43,7 +43,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"rentals","action":"createListing","payload":{}}}
+{"hive_stream":{"contract":"rentals","action":"createListing","payload":{"listingId":"example-1","assetRef":"example-1","title":"Example","collateralAmount":"1.000","collateralAsset":"HIVE","dailyRate":"1.000","rateAsset":"HIVE"}}}
 ```
 
 ### initiateRental
@@ -62,7 +62,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"rentals","action":"initiateRental","payload":{}}}
+{"hive_stream":{"contract":"rentals","action":"initiateRental","payload":{"listingId":"example-1","rentalId":"example-1","endsAt":"2030-01-01T00:00:00.000Z"}}}
 ```
 
 ### confirmReturn
@@ -79,7 +79,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"rentals","action":"confirmReturn","payload":{}}}
+{"hive_stream":{"contract":"rentals","action":"confirmReturn","payload":{"rentalId":"example-1"}}}
 ```
 
 ### closeRental
@@ -96,5 +96,5 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"rentals","action":"closeRental","payload":{}}}
+{"hive_stream":{"contract":"rentals","action":"closeRental","payload":{"rentalId":"example-1"}}}
 ```

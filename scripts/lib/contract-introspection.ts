@@ -23,6 +23,7 @@ import {
     ContractCategory
 } from '../../src/catalog/types';
 import { CONTRACT_METADATA } from './contract-metadata';
+import { examplePayload } from './example-payload';
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const INDEX_PATH = path.join(ROOT, 'src', 'index.ts');
@@ -285,6 +286,19 @@ export function introspectContracts(): IntrospectionResult {
 
             if (typeof actionDef.description === 'string' && actionDef.description) {
                 entry.description = actionDef.description;
+            }
+
+            const override = CONTRACT_METADATA[exportName]?.examples?.[actionName];
+            const example = override
+                ? { example: override, valid: Boolean(actionDef.schema?.safeParse?.(override)?.success) }
+                : examplePayload(actionDef.schema);
+
+            if (example) {
+                if (example.valid) {
+                    entry.example = example.example;
+                } else {
+                    problems.push(`${exportName}.${actionName}: could not build a valid example payload (${JSON.stringify(example.example)}). Improve the hints in scripts/lib/example-payload.ts.`);
+                }
             }
 
             return entry;

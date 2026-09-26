@@ -40,7 +40,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"domains","action":"createNamespace","payload":{}}}
+{"hive_stream":{"contract":"domains","action":"createNamespace","payload":{"namespace":"example-1","title":"Example","registrationPrice":"1.000","asset":"HIVE","renewalDays":24}}}
 ```
 
 ### registerName
@@ -60,7 +60,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"domains","action":"registerName","payload":{}}}
+{"hive_stream":{"contract":"domains","action":"registerName","payload":{"namespace":"example-1","label":"example-1","target":"1.000"}}}
 ```
 
 ### renewName
@@ -80,7 +80,7 @@ Send as a transfer memo:
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"domains","action":"renewName","payload":{}}}
+{"hive_stream":{"contract":"domains","action":"renewName","payload":{"namespace":"example-1","label":"example-1","target":"1.000"}}}
 ```
 
 ### transferName
@@ -98,7 +98,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"domains","action":"transferName","payload":{}}}
+{"hive_stream":{"contract":"domains","action":"transferName","payload":{"namespace":"example-1","label":"example-1","to":"alice"}}}
 ```
 
 ### expireNames

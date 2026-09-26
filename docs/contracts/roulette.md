@@ -45,5 +45,5 @@ Place a single-zero roulette bet by transferring to the house account.
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"roulette","action":"spin","payload":{}}}
+{"hive_stream":{"contract":"roulette","action":"spin","payload":{"betType":"straight","value":17}}}
 ```

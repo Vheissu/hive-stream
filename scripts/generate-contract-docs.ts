@@ -120,7 +120,7 @@ function renderContractPage(entry: ContractCatalogEntry): string {
         const isTimeOnly = action.triggers.length === 1 && action.triggers[0] === 'time';
 
         if (!isTimeOnly) {
-            const wrapper = JSON.stringify({ hive_stream: { contract: entry.name, action: action.name, payload: {} } });
+            const wrapper = JSON.stringify({ hive_stream: { contract: entry.name, action: action.name, payload: action.example ?? {} } });
 
             lines.push(action.triggers.includes('transfer')
                 ? `Send as a transfer memo:`

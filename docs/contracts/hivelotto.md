@@ -50,7 +50,7 @@ Buy a ticket for the hourly or daily draw by transferring the ticket cost.
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"hivelotto","action":"buy","payload":{}}}
+{"hive_stream":{"contract":"hivelotto","action":"buy","payload":{"type":"hourly"}}}
 ```
 
 ### drawHourlyLottery

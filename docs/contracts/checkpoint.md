@@ -54,5 +54,5 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"checkpoint","action":"recordCheckpoint","payload":{}}}
+{"hive_stream":{"contract":"checkpoint","action":"recordCheckpoint","payload":{"checkpointId":"example-1","blockNumber":1,"stateHash":"0000000000000000000000000000000000000000000000000000000000000000","tables":["example"]}}}
 ```

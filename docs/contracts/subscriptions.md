@@ -41,7 +41,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"subscriptions","action":"createPlan","payload":{}}}
+{"hive_stream":{"contract":"subscriptions","action":"createPlan","payload":{"planId":"example-1","title":"Example","price":"1.000","asset":"HIVE","intervalDays":24}}}
 ```
 
 ### updatePlan
@@ -64,7 +64,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"subscriptions","action":"updatePlan","payload":{}}}
+{"hive_stream":{"contract":"subscriptions","action":"updatePlan","payload":{"planId":"example-1"}}}
 ```
 
 ### subscribe
@@ -80,7 +80,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"subscriptions","action":"subscribe","payload":{}}}
+{"hive_stream":{"contract":"subscriptions","action":"subscribe","payload":{"planId":"example-1"}}}
 ```
 
 ### cancelSubscription
@@ -96,7 +96,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"subscriptions","action":"cancelSubscription","payload":{}}}
+{"hive_stream":{"contract":"subscriptions","action":"cancelSubscription","payload":{"planId":"example-1"}}}
 ```
 
 ### expireMemberships

@@ -38,7 +38,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"giftcards","action":"issueGiftCard","payload":{}}}
+{"hive_stream":{"contract":"giftcards","action":"issueGiftCard","payload":{"code":"example-1"}}}
 ```
 
 ### redeemGiftCard
@@ -55,7 +55,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"giftcards","action":"redeemGiftCard","payload":{}}}
+{"hive_stream":{"contract":"giftcards","action":"redeemGiftCard","payload":{"code":"example-1"}}}
 ```
 
 ### cancelGiftCard
@@ -71,5 +71,5 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"giftcards","action":"cancelGiftCard","payload":{}}}
+{"hive_stream":{"contract":"giftcards","action":"cancelGiftCard","payload":{"code":"example-1"}}}
 ```

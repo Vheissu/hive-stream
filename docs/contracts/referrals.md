@@ -40,7 +40,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"referrals","action":"createProgram","payload":{}}}
+{"hive_stream":{"contract":"referrals","action":"createProgram","payload":{"programId":"example-1","title":"Example","payoutAsset":"HIVE","rewardBps":100}}}
 ```
 
 ### fundProgram
@@ -56,7 +56,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"referrals","action":"fundProgram","payload":{}}}
+{"hive_stream":{"contract":"referrals","action":"fundProgram","payload":{"programId":"example-1"}}}
 ```
 
 ### registerCode
@@ -73,7 +73,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"referrals","action":"registerCode","payload":{}}}
+{"hive_stream":{"contract":"referrals","action":"registerCode","payload":{"programId":"example-1","code":"example-1"}}}
 ```
 
 ### recordConversion
@@ -94,7 +94,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"referrals","action":"recordConversion","payload":{}}}
+{"hive_stream":{"contract":"referrals","action":"recordConversion","payload":{"programId":"example-1","code":"example-1","buyer":"alice","grossAmount":"1.000","asset":"HIVE"}}}
 ```
 
 ### withdrawAffiliate

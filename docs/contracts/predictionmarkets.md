@@ -40,7 +40,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"predictionmarkets","action":"createMarket","payload":{}}}
+{"hive_stream":{"contract":"predictionmarkets","action":"createMarket","payload":{"marketId":"example-1","title":"Example","asset":"HIVE","options":["Yes","No"],"closesAt":"2030-01-01T00:00:00.000Z"}}}
 ```
 
 ### buyPosition
@@ -57,7 +57,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"predictionmarkets","action":"buyPosition","payload":{}}}
+{"hive_stream":{"contract":"predictionmarkets","action":"buyPosition","payload":{"marketId":"example-1","option":1}}}
 ```
 
 ### resolveMarket
@@ -74,7 +74,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"predictionmarkets","action":"resolveMarket","payload":{}}}
+{"hive_stream":{"contract":"predictionmarkets","action":"resolveMarket","payload":{"marketId":"example-1","winningOption":1}}}
 ```
 
 ### claimWinnings
@@ -90,5 +90,5 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"predictionmarkets","action":"claimWinnings","payload":{}}}
+{"hive_stream":{"contract":"predictionmarkets","action":"claimWinnings","payload":{"marketId":"example-1"}}}
 ```

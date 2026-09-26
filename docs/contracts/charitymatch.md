@@ -42,7 +42,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"charitymatch","action":"createCampaign","payload":{}}}
+{"hive_stream":{"contract":"charitymatch","action":"createCampaign","payload":{"campaignId":"example-1","title":"Example","beneficiary":"alice","asset":"HIVE","matchCap":"1.000","matchBps":100,"closesAt":"2030-01-01T00:00:00.000Z"}}}
 ```
 
 ### donate
@@ -58,7 +58,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"charitymatch","action":"donate","payload":{}}}
+{"hive_stream":{"contract":"charitymatch","action":"donate","payload":{"campaignId":"example-1"}}}
 ```
 
 ### closeCampaign
@@ -74,5 +74,5 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"charitymatch","action":"closeCampaign","payload":{}}}
+{"hive_stream":{"contract":"charitymatch","action":"closeCampaign","payload":{"campaignId":"example-1"}}}
 ```

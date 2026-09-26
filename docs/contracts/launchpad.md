@@ -44,7 +44,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"launchpad","action":"createSale","payload":{}}}
+{"hive_stream":{"contract":"launchpad","action":"createSale","payload":{"saleId":"example-1","title":"Example","tokenSymbol":"HIVE","purchaseAsset":"HIVE","unitPrice":"1.000","totalUnits":1,"closesAt":"2030-01-01T00:00:00.000Z"}}}
 ```
 
 ### contribute
@@ -60,7 +60,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"launchpad","action":"contribute","payload":{}}}
+{"hive_stream":{"contract":"launchpad","action":"contribute","payload":{"saleId":"example-1"}}}
 ```
 
 ### finalizeSale
@@ -76,7 +76,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"launchpad","action":"finalizeSale","payload":{}}}
+{"hive_stream":{"contract":"launchpad","action":"finalizeSale","payload":{"saleId":"example-1"}}}
 ```
 
 ### claimAllocation
@@ -92,5 +92,5 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"launchpad","action":"claimAllocation","payload":{}}}
+{"hive_stream":{"contract":"launchpad","action":"claimAllocation","payload":{"saleId":"example-1"}}}
 ```

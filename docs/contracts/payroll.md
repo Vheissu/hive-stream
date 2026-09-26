@@ -39,7 +39,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"payroll","action":"createPayroll","payload":{}}}
+{"hive_stream":{"contract":"payroll","action":"createPayroll","payload":{"payrollId":"example-1","title":"Example","asset":"HIVE","intervalDays":24}}}
 ```
 
 ### addRecipient
@@ -57,7 +57,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"payroll","action":"addRecipient","payload":{}}}
+{"hive_stream":{"contract":"payroll","action":"addRecipient","payload":{"payrollId":"example-1","account":"alice","amount":"1.000"}}}
 ```
 
 ### fundPayroll
@@ -73,7 +73,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"payroll","action":"fundPayroll","payload":{}}}
+{"hive_stream":{"contract":"payroll","action":"fundPayroll","payload":{"payrollId":"example-1"}}}
 ```
 
 ### runPayroll
@@ -89,7 +89,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"payroll","action":"runPayroll","payload":{}}}
+{"hive_stream":{"contract":"payroll","action":"runPayroll","payload":{"payrollId":"example-1"}}}
 ```
 
 ### withdrawPayroll

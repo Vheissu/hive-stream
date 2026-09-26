@@ -40,7 +40,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"fanclub","action":"createClub","payload":{}}}
+{"hive_stream":{"contract":"fanclub","action":"createClub","payload":{"clubId":"1","title":"Example","joinPrice":"1.000","asset":"HIVE"}}}
 ```
 
 ### joinClub
@@ -56,7 +56,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"fanclub","action":"joinClub","payload":{}}}
+{"hive_stream":{"contract":"fanclub","action":"joinClub","payload":{"clubId":"1"}}}
 ```
 
 ### recordEngagement
@@ -75,7 +75,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"fanclub","action":"recordEngagement","payload":{}}}
+{"hive_stream":{"contract":"fanclub","action":"recordEngagement","payload":{"clubId":"1","account":"alice","points":1}}}
 ```
 
 ### redeemPerk
@@ -92,5 +92,5 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"fanclub","action":"redeemPerk","payload":{}}}
+{"hive_stream":{"contract":"fanclub","action":"redeemPerk","payload":{"clubId":"1","perkId":"example-1"}}}
 ```

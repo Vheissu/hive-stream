@@ -45,7 +45,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"auctionhouse","action":"createAuction","payload":{}}}
+{"hive_stream":{"contract":"auctionhouse","action":"createAuction","payload":{"auctionId":"example-1","title":"Example","assetRef":"example-1","paymentAsset":"HIVE","reservePrice":"1.000","endsAt":"2030-01-01T00:00:00.000Z"}}}
 ```
 
 ### placeBid
@@ -62,7 +62,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"auctionhouse","action":"placeBid","payload":{}}}
+{"hive_stream":{"contract":"auctionhouse","action":"placeBid","payload":{"auctionId":"example-1"}}}
 ```
 
 ### settleAuction
@@ -78,7 +78,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"auctionhouse","action":"settleAuction","payload":{}}}
+{"hive_stream":{"contract":"auctionhouse","action":"settleAuction","payload":{"auctionId":"example-1"}}}
 ```
 
 ### cancelAuction
@@ -94,5 +94,5 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"auctionhouse","action":"cancelAuction","payload":{}}}
+{"hive_stream":{"contract":"auctionhouse","action":"cancelAuction","payload":{"auctionId":"example-1"}}}
 ```

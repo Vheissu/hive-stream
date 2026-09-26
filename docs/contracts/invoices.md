@@ -43,7 +43,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"invoices","action":"createInvoice","payload":{}}}
+{"hive_stream":{"contract":"invoices","action":"createInvoice","payload":{"invoiceId":"example-1","payer":"alice","title":"Example","amount":"1.000","asset":"HIVE"}}}
 ```
 
 ### payInvoice
@@ -59,7 +59,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"invoices","action":"payInvoice","payload":{}}}
+{"hive_stream":{"contract":"invoices","action":"payInvoice","payload":{"invoiceId":"example-1"}}}
 ```
 
 ### cancelInvoice
@@ -75,7 +75,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"invoices","action":"cancelInvoice","payload":{}}}
+{"hive_stream":{"contract":"invoices","action":"cancelInvoice","payload":{"invoiceId":"example-1"}}}
 ```
 
 ### closeOverdueInvoices

@@ -70,7 +70,8 @@ Each entry looks like this:
           "required": true,
           "values": ["straight", "color", "parity", "dozen", "column", "range"]
         }
-      ]
+      ],
+      "example": { "betType": "straight", "value": 17 }
     }
   ]
 }
@@ -79,6 +80,7 @@ Each entry looks like this:
 - `name` is the contract name used in payloads when the factory's `name` option is left at its default.
 - `options` come from the factory's TypeScript options interface. `type` is the type as written in the source.
 - `payload` is `null` when an action has no schema and `[]` when it takes an empty object. `values` is present for enum and literal fields, `default` for fields with a zod default, and `description` for fields using `.describe()`.
+- `example` is a payload that passes the action's schema, with required fields only and placeholder values (`alice`, `1.000`, `HIVE`, `example-1`). Use it to prefill forms or as a starting point for call builders. It's absent when the action has no schema.
 - `triggers` defaults to `["custom_json"]` for actions that don't declare one, matching the streamer.
 - Categories are `gambling`, `games`, `social`, `commerce`, `finance`, `fundraising`, `governance`, `assets`, `bridge` and `utility` (exported as `CONTRACT_CATEGORIES`).
 

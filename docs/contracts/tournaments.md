@@ -54,7 +54,7 @@ Create a tournament with an entry fee, registration window, player limits and a 
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"tournaments","action":"createTournament","payload":{}}}
+{"hive_stream":{"contract":"tournaments","action":"createTournament","payload":{"tournamentId":"example-1","title":"Example","asset":"HIVE","entryFee":"1.000","registrationClosesAt":"2030-01-01T00:00:00.000Z","prizeSplitBps":[1]}}}
 ```
 
 ### enter
@@ -72,7 +72,7 @@ Enter by transferring the exact entry fee; wrong assets, amounts, duplicates and
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"tournaments","action":"enter","payload":{}}}
+{"hive_stream":{"contract":"tournaments","action":"enter","payload":{"tournamentId":"example-1"}}}
 ```
 
 ### submitScore
@@ -93,7 +93,7 @@ Oracle-only: record a player score after registration closes.
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"tournaments","action":"submitScore","payload":{}}}
+{"hive_stream":{"contract":"tournaments","action":"submitScore","payload":{"tournamentId":"example-1","player":"alice","score":1}}}
 ```
 
 ### submitScores
@@ -113,7 +113,7 @@ Oracle-only: record up to 100 scores in one operation.
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"tournaments","action":"submitScores","payload":{}}}
+{"hive_stream":{"contract":"tournaments","action":"submitScores","payload":{"tournamentId":"example-1","scores":[{"player":"alice","score":1}]}}}
 ```
 
 ### finalize
@@ -132,7 +132,7 @@ Rank players, take the house fee and pay prizes; under-subscribed tournaments ar
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"tournaments","action":"finalize","payload":{}}}
+{"hive_stream":{"contract":"tournaments","action":"finalize","payload":{"tournamentId":"example-1"}}}
 ```
 
 ### finalizeDue
@@ -161,5 +161,5 @@ Organizer-only: cancel and refund every entry.
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"tournaments","action":"cancelTournament","payload":{}}}
+{"hive_stream":{"contract":"tournaments","action":"cancelTournament","payload":{"tournamentId":"example-1"}}}
 ```

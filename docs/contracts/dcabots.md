@@ -43,7 +43,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"dcabots","action":"createBot","payload":{}}}
+{"hive_stream":{"contract":"dcabots","action":"createBot","payload":{"botId":"example-1","baseAsset":"HIVE","quoteAsset":"HBD","amountPerInterval":"1.000","intervalHours":24}}}
 ```
 
 ### pauseBot
@@ -59,7 +59,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"dcabots","action":"pauseBot","payload":{}}}
+{"hive_stream":{"contract":"dcabots","action":"pauseBot","payload":{"botId":"example-1"}}}
 ```
 
 ### resumeBot
@@ -75,7 +75,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"dcabots","action":"resumeBot","payload":{}}}
+{"hive_stream":{"contract":"dcabots","action":"resumeBot","payload":{"botId":"example-1"}}}
 ```
 
 ### executeDueBots
@@ -109,5 +109,5 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"dcabots","action":"acknowledgeExecution","payload":{}}}
+{"hive_stream":{"contract":"dcabots","action":"acknowledgeExecution","payload":{"botId":"example-1","executionId":1,"status":"placed"}}}
 ```

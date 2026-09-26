@@ -40,7 +40,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"questpass","action":"createSeason","payload":{}}}
+{"hive_stream":{"contract":"questpass","action":"createSeason","payload":{"seasonId":"example-1","title":"Example","passPrice":"1.000","asset":"HIVE","tiers":[{"tierId":"example-1","minPoints":1,"rewardType":"example-1","rewardValue":"1.000"}]}}}
 ```
 
 ### buyPass
@@ -56,7 +56,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"questpass","action":"buyPass","payload":{}}}
+{"hive_stream":{"contract":"questpass","action":"buyPass","payload":{"seasonId":"example-1"}}}
 ```
 
 ### recordProgress
@@ -76,7 +76,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"questpass","action":"recordProgress","payload":{}}}
+{"hive_stream":{"contract":"questpass","action":"recordProgress","payload":{"seasonId":"example-1","account":"alice","points":1}}}
 ```
 
 ### claimReward
@@ -93,5 +93,5 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"questpass","action":"claimReward","payload":{}}}
+{"hive_stream":{"contract":"questpass","action":"claimReward","payload":{"seasonId":"example-1","tierId":"example-1"}}}
 ```

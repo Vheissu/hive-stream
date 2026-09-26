@@ -41,7 +41,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"bookings","action":"createListing","payload":{}}}
+{"hive_stream":{"contract":"bookings","action":"createListing","payload":{"listingId":"example-1","title":"Example","price":"1.000","asset":"HIVE","durationMinutes":24}}}
 ```
 
 ### reserve
@@ -60,7 +60,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"bookings","action":"reserve","payload":{}}}
+{"hive_stream":{"contract":"bookings","action":"reserve","payload":{"listingId":"example-1","reservationId":"example-1","startAt":"2030-01-01T00:00:00.000Z"}}}
 ```
 
 ### confirmReservation
@@ -77,7 +77,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"bookings","action":"confirmReservation","payload":{}}}
+{"hive_stream":{"contract":"bookings","action":"confirmReservation","payload":{"reservationId":"example-1"}}}
 ```
 
 ### cancelReservation
@@ -94,7 +94,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"bookings","action":"cancelReservation","payload":{}}}
+{"hive_stream":{"contract":"bookings","action":"cancelReservation","payload":{"reservationId":"example-1"}}}
 ```
 
 ### completeReservation
@@ -111,5 +111,5 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"bookings","action":"completeReservation","payload":{}}}
+{"hive_stream":{"contract":"bookings","action":"completeReservation","payload":{"reservationId":"example-1"}}}
 ```

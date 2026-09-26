@@ -39,7 +39,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"grantrounds","action":"createRound","payload":{}}}
+{"hive_stream":{"contract":"grantrounds","action":"createRound","payload":{"roundId":"example-1","title":"Example","asset":"HIVE","closesAt":"2030-01-01T00:00:00.000Z"}}}
 ```
 
 ### fundRound
@@ -55,7 +55,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"grantrounds","action":"fundRound","payload":{}}}
+{"hive_stream":{"contract":"grantrounds","action":"fundRound","payload":{"roundId":"example-1"}}}
 ```
 
 ### submitProject
@@ -75,7 +75,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"grantrounds","action":"submitProject","payload":{}}}
+{"hive_stream":{"contract":"grantrounds","action":"submitProject","payload":{"roundId":"example-1","projectId":"example-1","title":"Example","recipient":"alice"}}}
 ```
 
 ### donateToProject
@@ -92,7 +92,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"grantrounds","action":"donateToProject","payload":{}}}
+{"hive_stream":{"contract":"grantrounds","action":"donateToProject","payload":{"roundId":"example-1","projectId":"example-1"}}}
 ```
 
 ### finalizeRound
@@ -108,7 +108,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"grantrounds","action":"finalizeRound","payload":{}}}
+{"hive_stream":{"contract":"grantrounds","action":"finalizeRound","payload":{"roundId":"example-1"}}}
 ```
 
 ### withdrawGrant
@@ -125,5 +125,5 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"grantrounds","action":"withdrawGrant","payload":{}}}
+{"hive_stream":{"contract":"grantrounds","action":"withdrawGrant","payload":{"roundId":"example-1","projectId":"example-1"}}}
 ```

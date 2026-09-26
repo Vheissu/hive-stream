@@ -40,7 +40,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"bountyboard","action":"createBounty","payload":{}}}
+{"hive_stream":{"contract":"bountyboard","action":"createBounty","payload":{"bountyId":"example-1","title":"Example"}}}
 ```
 
 ### submitWork
@@ -59,7 +59,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"bountyboard","action":"submitWork","payload":{}}}
+{"hive_stream":{"contract":"bountyboard","action":"submitWork","payload":{"bountyId":"example-1","submissionId":"example-1","url":"https://example.com"}}}
 ```
 
 ### awardBounty
@@ -78,7 +78,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"bountyboard","action":"awardBounty","payload":{}}}
+{"hive_stream":{"contract":"bountyboard","action":"awardBounty","payload":{"bountyId":"example-1","submissionId":"example-1"}}}
 ```
 
 ### closeBounty
@@ -94,5 +94,5 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"bountyboard","action":"closeBounty","payload":{}}}
+{"hive_stream":{"contract":"bountyboard","action":"closeBounty","payload":{"bountyId":"example-1"}}}
 ```

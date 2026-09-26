@@ -38,7 +38,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"polls","action":"createPoll","payload":{}}}
+{"hive_stream":{"contract":"polls","action":"createPoll","payload":{"pollId":"example-1","question":"Example text","options":["Yes","No"]}}}
 ```
 
 ### vote
@@ -55,5 +55,5 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"polls","action":"vote","payload":{}}}
+{"hive_stream":{"contract":"polls","action":"vote","payload":{"pollId":"example-1","option":1}}}
 ```

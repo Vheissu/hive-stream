@@ -45,5 +45,5 @@ Bet by transferring to the house account; wins when the 1-100 roll is below your
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"hivedice","action":"roll","payload":{}}}
+{"hive_stream":{"contract":"hivedice","action":"roll","payload":{"roll":10}}}
 ```

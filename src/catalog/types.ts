@@ -56,6 +56,12 @@ export interface ContractCatalogAction {
     requiresActiveKey: boolean;
     /** null when the action defines no payload schema; [] when the payload is an empty object. */
     payload: ContractCatalogField[] | null;
+    /**
+     * A payload that passes the action's schema, with required fields only.
+     * Placeholder values (accounts, amounts, ids); absent when the action has
+     * no payload schema.
+     */
+    example?: Record<string, unknown>;
 }
 
 export interface ContractCatalogEntry {

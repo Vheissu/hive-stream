@@ -11,11 +11,16 @@ import type { ContractCategory } from '../../src/catalog/types';
  *
  * `args` supplies representative options for factories whose options have
  * no defaults, so the generator can instantiate them.
+ *
+ * `examples` overrides the generated example payload for actions whose
+ * schema has cross-field rules the generator can't satisfy. Overrides must
+ * still pass the action's schema.
  */
 export interface ContractMetadata {
     category: ContractCategory;
     description: string;
     args?: unknown[];
+    examples?: Record<string, Record<string, unknown>>;
 }
 
 export const CONTRACT_METADATA: Record<string, ContractMetadata> = {
@@ -54,7 +59,7 @@ export const CONTRACT_METADATA: Record<string, ContractMetadata> = {
     createReferralContract: { category: 'social', description: 'Affiliate programs with codes, funded budgets, and payout balances.' },
     createRentalContract: { category: 'commerce', description: 'Escrow-backed rental agreements for items, passes, or assets.' },
     createRevenueSplitContract: { category: 'finance', description: 'Revenue share ledgers and withdrawal requests for collaborators.' },
-    createRouletteContract: { category: 'gambling', description: 'Roulette with straight, color, parity, dozen, column, and low/high bets.' },
+    createRouletteContract: { category: 'gambling', description: 'Roulette with straight, color, parity, dozen, column, and low/high bets.', examples: { spin: { betType: 'straight', value: 17 } } },
     createRpsContract: { category: 'games', description: 'Rock-paper-scissors with wagers.' },
     createSavingsContract: { category: 'finance', description: 'Savings goals with recurring contributions and withdrawal requests.' },
     createStakingPoolContract: { category: 'finance', description: 'Staking pools with reward-per-share accrual (per second or per block), funded reward reserves, cooldowns and claims.', args: [{ account: 'staking-vault' }] },

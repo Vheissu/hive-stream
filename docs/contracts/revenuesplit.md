@@ -38,7 +38,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"revenuesplit","action":"createSplit","payload":{}}}
+{"hive_stream":{"contract":"revenuesplit","action":"createSplit","payload":{"splitId":"example-1","title":"Example","recipients":[{"account":"alice","bps":100}]}}}
 ```
 
 ### updateSplit
@@ -56,7 +56,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"revenuesplit","action":"updateSplit","payload":{}}}
+{"hive_stream":{"contract":"revenuesplit","action":"updateSplit","payload":{"splitId":"example-1","recipients":[{"account":"alice","bps":100}]}}}
 ```
 
 ### distribute
@@ -72,7 +72,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"revenuesplit","action":"distribute","payload":{}}}
+{"hive_stream":{"contract":"revenuesplit","action":"distribute","payload":{"splitId":"example-1"}}}
 ```
 
 ### withdraw

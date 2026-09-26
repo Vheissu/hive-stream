@@ -37,6 +37,26 @@ describe('contract catalog', () => {
         expect(contractCatalog.contracts.map((entry) => entry.factory).sort()).toEqual(factories);
     });
 
+    test('every action with a payload schema has an example that passes it', () => {
+        const metadataArgs = (factory: string) => (require('../scripts/lib/contract-metadata').CONTRACT_METADATA[factory]?.args ?? []);
+
+        for (const entry of contractCatalog.contracts) {
+            const definition = (hiveStream as any)[entry.factory](...metadataArgs(entry.factory));
+
+            for (const action of entry.actions) {
+                const schema = definition.actions[action.name].schema;
+
+                if (action.payload === null) {
+                    expect(action.example).toBeUndefined();
+                    continue;
+                }
+
+                expect({ action: `${entry.name}.${action.name}`, hasExample: action.example !== undefined }).toEqual({ action: `${entry.name}.${action.name}`, hasExample: true });
+                expect({ action: `${entry.name}.${action.name}`, valid: schema.safeParse(action.example).success }).toEqual({ action: `${entry.name}.${action.name}`, valid: true });
+            }
+        }
+    });
+
     test('entries are well formed', () => {
         const names = new Set<string>();
 

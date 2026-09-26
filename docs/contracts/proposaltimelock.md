@@ -40,7 +40,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"proposaltimelock","action":"createQueue","payload":{}}}
+{"hive_stream":{"contract":"proposaltimelock","action":"createQueue","payload":{"queueId":"example-1","title":"Example","approvers":["alice"],"threshold":1,"minDelayHours":24}}}
 ```
 
 ### createProposal
@@ -61,7 +61,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"proposaltimelock","action":"createProposal","payload":{}}}
+{"hive_stream":{"contract":"proposaltimelock","action":"createProposal","payload":{"queueId":"example-1","proposalId":"example-1","title":"Example","actionType":"example-1","actionPayload":{}}}}
 ```
 
 ### approveProposal
@@ -77,7 +77,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"proposaltimelock","action":"approveProposal","payload":{}}}
+{"hive_stream":{"contract":"proposaltimelock","action":"approveProposal","payload":{"proposalId":"example-1"}}}
 ```
 
 ### executeProposal
@@ -94,7 +94,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"proposaltimelock","action":"executeProposal","payload":{}}}
+{"hive_stream":{"contract":"proposaltimelock","action":"executeProposal","payload":{"proposalId":"example-1"}}}
 ```
 
 ### cancelProposal
@@ -110,5 +110,5 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"proposaltimelock","action":"cancelProposal","payload":{}}}
+{"hive_stream":{"contract":"proposaltimelock","action":"cancelProposal","payload":{"proposalId":"example-1"}}}
 ```

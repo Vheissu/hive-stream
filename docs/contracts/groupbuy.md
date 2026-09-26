@@ -41,7 +41,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"groupbuy","action":"createGroupBuy","payload":{}}}
+{"hive_stream":{"contract":"groupbuy","action":"createGroupBuy","payload":{"groupBuyId":"example-1","title":"Example","targetAmount":"1.000","asset":"HIVE","deadline":"2030-01-01T00:00:00.000Z"}}}
 ```
 
 ### commit
@@ -57,7 +57,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"groupbuy","action":"commit","payload":{}}}
+{"hive_stream":{"contract":"groupbuy","action":"commit","payload":{"groupBuyId":"example-1"}}}
 ```
 
 ### finalizeGroupBuy
@@ -73,7 +73,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"groupbuy","action":"finalizeGroupBuy","payload":{}}}
+{"hive_stream":{"contract":"groupbuy","action":"finalizeGroupBuy","payload":{"groupBuyId":"example-1"}}}
 ```
 
 ### withdrawCommitment
@@ -89,5 +89,5 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"groupbuy","action":"withdrawCommitment","payload":{}}}
+{"hive_stream":{"contract":"groupbuy","action":"withdrawCommitment","payload":{"groupBuyId":"example-1"}}}
 ```

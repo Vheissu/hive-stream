@@ -40,7 +40,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"oraclebounty","action":"createFeed","payload":{}}}
+{"hive_stream":{"contract":"oraclebounty","action":"createFeed","payload":{"feedId":"example-1","title":"Example","rewardPerReport":"1.000","rewardAsset":"HIVE"}}}
 ```
 
 ### fundFeed
@@ -56,7 +56,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"oraclebounty","action":"fundFeed","payload":{}}}
+{"hive_stream":{"contract":"oraclebounty","action":"fundFeed","payload":{"feedId":"example-1"}}}
 ```
 
 ### submitReport
@@ -75,7 +75,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"oraclebounty","action":"submitReport","payload":{}}}
+{"hive_stream":{"contract":"oraclebounty","action":"submitReport","payload":{"feedId":"example-1","roundId":"example-1","value":1}}}
 ```
 
 ### finalizeRound
@@ -92,7 +92,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"oraclebounty","action":"finalizeRound","payload":{}}}
+{"hive_stream":{"contract":"oraclebounty","action":"finalizeRound","payload":{"feedId":"example-1","roundId":"example-1"}}}
 ```
 
 ### withdrawRewards

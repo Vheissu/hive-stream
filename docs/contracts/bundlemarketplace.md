@@ -41,7 +41,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"bundlemarketplace","action":"createBundle","payload":{}}}
+{"hive_stream":{"contract":"bundlemarketplace","action":"createBundle","payload":{"bundleId":"example-1","title":"Example","price":"1.000","asset":"HIVE","items":["example-1"]}}}
 ```
 
 ### updateBundle
@@ -62,7 +62,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"bundlemarketplace","action":"updateBundle","payload":{}}}
+{"hive_stream":{"contract":"bundlemarketplace","action":"updateBundle","payload":{"bundleId":"example-1"}}}
 ```
 
 ### buyBundle
@@ -78,7 +78,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"bundlemarketplace","action":"buyBundle","payload":{}}}
+{"hive_stream":{"contract":"bundlemarketplace","action":"buyBundle","payload":{"bundleId":"example-1"}}}
 ```
 
 ### fulfillPurchase
@@ -95,5 +95,5 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"bundlemarketplace","action":"fulfillPurchase","payload":{}}}
+{"hive_stream":{"contract":"bundlemarketplace","action":"fulfillPurchase","payload":{"purchaseId":1}}}
 ```

@@ -41,7 +41,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"paywall","action":"createResource","payload":{}}}
+{"hive_stream":{"contract":"paywall","action":"createResource","payload":{"resourceId":"example-1","title":"Example","price":"1.000","asset":"HIVE","accessDays":24}}}
 ```
 
 ### grantAccess
@@ -57,7 +57,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"paywall","action":"grantAccess","payload":{}}}
+{"hive_stream":{"contract":"paywall","action":"grantAccess","payload":{"resourceId":"example-1"}}}
 ```
 
 ### revokeAccess
@@ -74,7 +74,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"paywall","action":"revokeAccess","payload":{}}}
+{"hive_stream":{"contract":"paywall","action":"revokeAccess","payload":{"resourceId":"example-1","account":"alice"}}}
 ```
 
 ### expireAccess

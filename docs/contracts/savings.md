@@ -41,7 +41,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"savings","action":"createGoal","payload":{}}}
+{"hive_stream":{"contract":"savings","action":"createGoal","payload":{"goalId":"example-1","title":"Example","targetAmount":"1.000","asset":"HIVE"}}}
 ```
 
 ### contribute
@@ -57,7 +57,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"savings","action":"contribute","payload":{}}}
+{"hive_stream":{"contract":"savings","action":"contribute","payload":{"goalId":"example-1"}}}
 ```
 
 ### withdraw
@@ -75,7 +75,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"savings","action":"withdraw","payload":{}}}
+{"hive_stream":{"contract":"savings","action":"withdraw","payload":{"goalId":"example-1"}}}
 ```
 
 ### closeGoal
@@ -91,5 +91,5 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"savings","action":"closeGoal","payload":{}}}
+{"hive_stream":{"contract":"savings","action":"closeGoal","payload":{"goalId":"example-1"}}}
 ```

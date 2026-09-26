@@ -43,7 +43,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"exchange","action":"createPair","payload":{}}}
+{"hive_stream":{"contract":"exchange","action":"createPair","payload":{"base":"HIVE","quote":"HBD"}}}
 ```
 
 ### deposit
@@ -76,7 +76,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"exchange","action":"withdraw","payload":{}}}
+{"hive_stream":{"contract":"exchange","action":"withdraw","payload":{"asset":"HIVE","amount":"1.000"}}}
 ```
 
 ### placeOrder
@@ -96,7 +96,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"exchange","action":"placeOrder","payload":{}}}
+{"hive_stream":{"contract":"exchange","action":"placeOrder","payload":{"side":"buy","base":"HIVE","quote":"HBD","price":"1.000","amount":"1.000"}}}
 ```
 
 ### cancelOrder
@@ -112,7 +112,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"exchange","action":"cancelOrder","payload":{}}}
+{"hive_stream":{"contract":"exchange","action":"cancelOrder","payload":{"orderId":"example-1"}}}
 ```
 
 ### matchOrders
@@ -138,7 +138,7 @@ _No payload validation defined for this action._
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"exchange","action":"snapshotOrderBook","payload":{}}}
+{"hive_stream":{"contract":"exchange","action":"snapshotOrderBook","payload":{"base":"HIVE","quote":"HBD"}}}
 ```
 
 ### transfer
@@ -156,5 +156,5 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"exchange","action":"transfer","payload":{}}}
+{"hive_stream":{"contract":"exchange","action":"transfer","payload":{"to":"alice","asset":"HIVE","amount":"1.000"}}}
 ```

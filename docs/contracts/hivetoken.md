@@ -39,7 +39,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"hivetoken","action":"createToken","payload":{}}}
+{"hive_stream":{"contract":"hivetoken","action":"createToken","payload":{"symbol":"HIVE","name":"Example","maxSupply":"example-1"}}}
 ```
 
 ### issueTokens
@@ -58,7 +58,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"hivetoken","action":"issueTokens","payload":{}}}
+{"hive_stream":{"contract":"hivetoken","action":"issueTokens","payload":{"symbol":"HIVE","to":"alice","amount":"1.000"}}}
 ```
 
 ### transferTokens
@@ -77,7 +77,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"hivetoken","action":"transferTokens","payload":{}}}
+{"hive_stream":{"contract":"hivetoken","action":"transferTokens","payload":{"symbol":"HIVE","to":"alice","amount":"1.000"}}}
 ```
 
 ### getBalance
@@ -94,7 +94,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"hivetoken","action":"getBalance","payload":{}}}
+{"hive_stream":{"contract":"hivetoken","action":"getBalance","payload":{"account":"alice","symbol":"HIVE"}}}
 ```
 
 ### getTokenInfo
@@ -110,5 +110,5 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"hivetoken","action":"getTokenInfo","payload":{}}}
+{"hive_stream":{"contract":"hivetoken","action":"getTokenInfo","payload":{"symbol":"HIVE"}}}
 ```

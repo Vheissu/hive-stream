@@ -71,7 +71,7 @@ Operator attestation that a deposit was minted on the destination chain (or shou
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"bridge","action":"attestDeposit","payload":{}}}
+{"hive_stream":{"contract":"bridge","action":"attestDeposit","payload":{"depositId":"example-1","decision":"minted"}}}
 ```
 
 ### requestWithdrawal
@@ -93,7 +93,7 @@ Register a withdrawal back to Hive for funds locked or burned on another chain.
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"bridge","action":"requestWithdrawal","payload":{}}}
+{"hive_stream":{"contract":"bridge","action":"requestWithdrawal","payload":{"sourceChain":"eth","sourceTxId":"0xabc123","amount":"1.000","asset":"HIVE"}}}
 ```
 
 ### attestWithdrawal
@@ -117,7 +117,7 @@ Operator attestation that a withdrawal is valid (release) or invalid (reject). R
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"bridge","action":"attestWithdrawal","payload":{}}}
+{"hive_stream":{"contract":"bridge","action":"attestWithdrawal","payload":{"sourceChain":"eth","sourceTxId":"0xabc123","recipient":"alice","amount":"1.000","asset":"HIVE"}}}
 ```
 
 ### executeWithdrawal
@@ -137,7 +137,7 @@ Retry a queued withdrawal, or (admins only) a failed release after manual reconc
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"bridge","action":"executeWithdrawal","payload":{}}}
+{"hive_stream":{"contract":"bridge","action":"executeWithdrawal","payload":{"sourceChain":"eth","sourceTxId":"0xabc123"}}}
 ```
 
 ### processQueue
@@ -167,5 +167,5 @@ Pause or resume the bridge (admins only). Paused deposits are refunded and relea
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"bridge","action":"setPaused","payload":{}}}
+{"hive_stream":{"contract":"bridge","action":"setPaused","payload":{"paused":true}}}
 ```

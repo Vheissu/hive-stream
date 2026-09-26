@@ -39,7 +39,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"multisigtreasury","action":"createVault","payload":{}}}
+{"hive_stream":{"contract":"multisigtreasury","action":"createVault","payload":{"vaultId":"example-1","title":"Example","signers":["alice"],"threshold":1}}}
 ```
 
 ### proposeTransfer
@@ -61,7 +61,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"multisigtreasury","action":"proposeTransfer","payload":{}}}
+{"hive_stream":{"contract":"multisigtreasury","action":"proposeTransfer","payload":{"vaultId":"example-1","proposalId":"example-1","title":"Example","to":"alice","amount":"1.000","asset":"HIVE"}}}
 ```
 
 ### approveProposal
@@ -77,7 +77,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"multisigtreasury","action":"approveProposal","payload":{}}}
+{"hive_stream":{"contract":"multisigtreasury","action":"approveProposal","payload":{"proposalId":"example-1"}}}
 ```
 
 ### cancelProposal
@@ -93,7 +93,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"multisigtreasury","action":"cancelProposal","payload":{}}}
+{"hive_stream":{"contract":"multisigtreasury","action":"cancelProposal","payload":{"proposalId":"example-1"}}}
 ```
 
 ### markExecuted
@@ -110,5 +110,5 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"multisigtreasury","action":"markExecuted","payload":{}}}
+{"hive_stream":{"contract":"multisigtreasury","action":"markExecuted","payload":{"proposalId":"example-1"}}}
 ```

@@ -43,7 +43,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"crowdfund","action":"createCampaign","payload":{}}}
+{"hive_stream":{"contract":"crowdfund","action":"createCampaign","payload":{"campaignId":"example-1","title":"Example","targetAmount":"1.000","asset":"HIVE","deadline":"2030-01-01T00:00:00.000Z"}}}
 ```
 
 ### contribute
@@ -59,7 +59,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"crowdfund","action":"contribute","payload":{}}}
+{"hive_stream":{"contract":"crowdfund","action":"contribute","payload":{"campaignId":"example-1"}}}
 ```
 
 ### finalizeCampaign
@@ -75,7 +75,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"crowdfund","action":"finalizeCampaign","payload":{}}}
+{"hive_stream":{"contract":"crowdfund","action":"finalizeCampaign","payload":{"campaignId":"example-1"}}}
 ```
 
 ### releaseMilestone
@@ -92,7 +92,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"crowdfund","action":"releaseMilestone","payload":{}}}
+{"hive_stream":{"contract":"crowdfund","action":"releaseMilestone","payload":{"campaignId":"example-1","milestoneIndex":0}}}
 ```
 
 ### refundContribution
@@ -108,5 +108,5 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"crowdfund","action":"refundContribution","payload":{}}}
+{"hive_stream":{"contract":"crowdfund","action":"refundContribution","payload":{"campaignId":"example-1"}}}
 ```

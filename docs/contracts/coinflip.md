@@ -44,5 +44,5 @@ Bet on heads or tails by transferring to the house account; winners receive 2x.
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"coinflip","action":"flip","payload":{}}}
+{"hive_stream":{"contract":"coinflip","action":"flip","payload":{"guess":"heads"}}}
 ```

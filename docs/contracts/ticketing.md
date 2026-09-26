@@ -42,7 +42,7 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"ticketing","action":"createEvent","payload":{}}}
+{"hive_stream":{"contract":"ticketing","action":"createEvent","payload":{"eventId":"example-1","title":"Example","venue":"Example text","startsAt":"2030-01-01T00:00:00.000Z","ticketPrice":"1.000","asset":"HIVE","capacity":1}}}
 ```
 
 ### purchaseTicket
@@ -59,7 +59,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"ticketing","action":"purchaseTicket","payload":{}}}
+{"hive_stream":{"contract":"ticketing","action":"purchaseTicket","payload":{"eventId":"example-1","ticketId":"example-1"}}}
 ```
 
 ### checkInTicket
@@ -76,7 +76,7 @@ Send as a transfer memo:
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"ticketing","action":"checkInTicket","payload":{}}}
+{"hive_stream":{"contract":"ticketing","action":"checkInTicket","payload":{"ticketId":"example-1"}}}
 ```
 
 ### refundTicket
@@ -93,7 +93,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"ticketing","action":"refundTicket","payload":{}}}
+{"hive_stream":{"contract":"ticketing","action":"refundTicket","payload":{"ticketId":"example-1"}}}
 ```
 
 ### transferTicket
@@ -111,7 +111,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"ticketing","action":"transferTicket","payload":{}}}
+{"hive_stream":{"contract":"ticketing","action":"transferTicket","payload":{"ticketId":"example-1","to":"alice"}}}
 ```
 
 ### listTicket
@@ -129,7 +129,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"ticketing","action":"listTicket","payload":{}}}
+{"hive_stream":{"contract":"ticketing","action":"listTicket","payload":{"ticketId":"example-1","price":"1.000"}}}
 ```
 
 ### unlistTicket
@@ -145,7 +145,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"ticketing","action":"unlistTicket","payload":{}}}
+{"hive_stream":{"contract":"ticketing","action":"unlistTicket","payload":{"ticketId":"example-1"}}}
 ```
 
 ### buyTicketDirect
@@ -161,5 +161,5 @@ Send as custom JSON (id: your configured `JSON_ID`):
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"ticketing","action":"buyTicketDirect","payload":{}}}
+{"hive_stream":{"contract":"ticketing","action":"buyTicketDirect","payload":{"ticketId":"example-1"}}}
 ```

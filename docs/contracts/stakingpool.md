@@ -47,7 +47,7 @@ Admin-only: create a pool with stake/reward assets, a reward rate per second (or
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"stakingpool","action":"createPool","payload":{}}}
+{"hive_stream":{"contract":"stakingpool","action":"createPool","payload":{"poolId":"example-1","stakeAsset":"HIVE","rewardAsset":"HIVE","rewardRate":"1.000"}}}
 ```
 
 ### fundRewards
@@ -65,7 +65,7 @@ Top up a pool's reward reserve. Rewards never accrue beyond what has been funded
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"stakingpool","action":"fundRewards","payload":{}}}
+{"hive_stream":{"contract":"stakingpool","action":"fundRewards","payload":{"poolId":"example-1"}}}
 ```
 
 ### stake
@@ -83,7 +83,7 @@ Stake by transferring the pool's stake asset; wrong assets, tiny amounts and end
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"stakingpool","action":"stake","payload":{}}}
+{"hive_stream":{"contract":"stakingpool","action":"stake","payload":{"poolId":"example-1"}}}
 ```
 
 ### unstake
@@ -102,7 +102,7 @@ Start unbonding part of your stake; funds are released after the pool's cooldown
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"stakingpool","action":"unstake","payload":{}}}
+{"hive_stream":{"contract":"stakingpool","action":"unstake","payload":{"poolId":"example-1","amount":"1.000"}}}
 ```
 
 ### withdraw
@@ -120,7 +120,7 @@ Release your matured unbonding entries.
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"stakingpool","action":"withdraw","payload":{}}}
+{"hive_stream":{"contract":"stakingpool","action":"withdraw","payload":{"poolId":"example-1"}}}
 ```
 
 ### claim
@@ -138,7 +138,7 @@ Pay out accrued rewards (rounded down to the asset precision; the remainder stay
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"stakingpool","action":"claim","payload":{}}}
+{"hive_stream":{"contract":"stakingpool","action":"claim","payload":{"poolId":"example-1"}}}
 ```
 
 ### setRewardRate
@@ -158,7 +158,7 @@ Admin-only: change the reward rate after settling accruals at the old rate.
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"stakingpool","action":"setRewardRate","payload":{}}}
+{"hive_stream":{"contract":"stakingpool","action":"setRewardRate","payload":{"poolId":"example-1","rewardRate":"1.000"}}}
 ```
 
 ### releaseMatured

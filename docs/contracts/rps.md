@@ -44,5 +44,5 @@ Play rock-paper-scissors against the house by transferring a wager; ties are ref
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"rps","action":"play","payload":{}}}
+{"hive_stream":{"contract":"rps","action":"play","payload":{"move":"rock"}}}
 ```

@@ -45,7 +45,7 @@ Define a non-transferable badge with issuers, optional supply cap and an optiona
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"badges","action":"defineBadge","payload":{}}}
+{"hive_stream":{"contract":"badges","action":"defineBadge","payload":{"badgeId":"example-1","title":"Example"}}}
 ```
 
 ### issueBadge
@@ -66,7 +66,7 @@ Issuer-only: award a badge to an account.
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"badges","action":"issueBadge","payload":{}}}
+{"hive_stream":{"contract":"badges","action":"issueBadge","payload":{"badgeId":"example-1","recipient":"alice"}}}
 ```
 
 ### revokeBadge
@@ -86,7 +86,7 @@ Issuer-only: revoke a badge with a public reason.
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"badges","action":"revokeBadge","payload":{}}}
+{"hive_stream":{"contract":"badges","action":"revokeBadge","payload":{"badgeId":"example-1","recipient":"alice","reason":"Example text"}}}
 ```
 
 ### updateIssuers
@@ -106,7 +106,7 @@ Creator-only: add or remove issuers (the creator always remains an issuer).
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"badges","action":"updateIssuers","payload":{}}}
+{"hive_stream":{"contract":"badges","action":"updateIssuers","payload":{"badgeId":"example-1"}}}
 ```
 
 ### contribute
@@ -124,7 +124,7 @@ Count a payment toward a payment_total badge; the badge is awarded when the thre
 Send as a transfer memo:
 
 ```json
-{"hive_stream":{"contract":"badges","action":"contribute","payload":{}}}
+{"hive_stream":{"contract":"badges","action":"contribute","payload":{"badgeId":"example-1"}}}
 ```
 
 ### checkIn
@@ -142,5 +142,5 @@ Record a periodic check-in toward a checkin_count badge (optionally requiring co
 Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
-{"hive_stream":{"contract":"badges","action":"checkIn","payload":{}}}
+{"hive_stream":{"contract":"badges","action":"checkIn","payload":{"badgeId":"example-1"}}}
 ```
