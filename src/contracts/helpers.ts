@@ -1,6 +1,6 @@
 import BigNumber from '../bignumber';
 import { z } from 'zod';
-import type { ContractContext } from '../types/hive-stream';
+import type { ContractActionDefinition, ContractContext } from '../types/hive-stream';
 import { Utils } from '../utils';
 import { action } from './contract';
 import type { FairDrawProof, FairnessManager } from '../fairness/manager';
@@ -190,7 +190,10 @@ export function createFairnessSupport(contractName: string, houseAccount: string
 
     const rotateSeedSchema = z.object({});
 
-    const actions = fairness
+    // Typed as a plain record so both branches share one type; a union of
+    // `{ rotateSeed }` and `{}` makes the factories' return types
+    // unassignable to ContractDefinition under `strict`.
+    const actions: Record<string, ContractActionDefinition<any>> = fairness
         ? {
             rotateSeed: action(async (_payload: Record<string, never>, ctx: ContractContext) => {
                 if (ctx.trigger !== 'time' && ctx.sender !== houseAccount) {
