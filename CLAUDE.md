@@ -11,15 +11,15 @@ Hive Stream is a Node.js library for streaming and reacting to blockchain action
 ### Building and Development
 - `npm run build` - Compiles TypeScript to JavaScript using tsconfig.build.json
 - `npm run watch` - Watches TypeScript files and recompiles on changes
-- `npm start` - Runs the test file (src/test.ts) using ts-node
+- `npm start` - Runs the dev harness (src/test.ts) using tsx
 
 ### Testing and Quality
 - `npm test` - Runs Jest tests with verbose output from tests/ directory
 - `npm run clean-tests` - Clears Jest cache
 
 ### Code Quality
-- Uses TSLint with custom rules in tslint.json (single quotes, no console restrictions)
-- TypeScript configuration targets esnext with CommonJS modules
+- No linter is configured; match the existing style (4-space indent, single quotes)
+- TypeScript 6, targeting ES2023 with CommonJS output (ESM wrappers generated at build time); Node >= 22
 - Jest configured with ts-jest for TypeScript testing
 
 ## Code Style Guidelines

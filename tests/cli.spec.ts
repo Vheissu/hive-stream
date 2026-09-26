@@ -128,9 +128,19 @@ describe('generateProjectFiles', () => {
 
         expect(pkg.name).toBe('my-app');
         expect(pkg.dependencies['hive-stream']).toBe('^3.0.5');
-        expect(pkg.scripts.dev).toBe('ts-node src/index.ts');
+        expect(pkg.scripts.dev).toBe('tsx src/index.ts');
         expect(pkg.scripts.verify).toBe('npm run check && npm test && npm run build');
         expect(pkg.private).toBe(true);
+        expect(pkg.dependencies.mongodb).toBeUndefined();
+        expect(pkg.dependencies.pg).toBeUndefined();
+    });
+
+    test('package.json adds the driver for external adapters', () => {
+        const mongoPkg = JSON.parse(generateProjectFiles({ ...baseOptions, adapter: 'mongodb' }).files['package.json']);
+        const pgPkg = JSON.parse(generateProjectFiles({ ...baseOptions, adapter: 'postgresql' }).files['package.json']);
+
+        expect(mongoPkg.dependencies.mongodb).toMatch(/^\^7\./);
+        expect(pgPkg.dependencies.pg).toMatch(/^\^8\./);
     });
 
     test('throws on unknown template or adapter', () => {
@@ -286,7 +296,7 @@ describe('writeProjectFiles and isDirectoryUsable', () => {
 describe('CLI argument guardrails', () => {
     let tmpDir: string;
     const cli = path.resolve(__dirname, '../src/cli/index.ts');
-    const tsNode = path.resolve(__dirname, '../node_modules/.bin/ts-node');
+    const tsx = path.resolve(__dirname, '../node_modules/.bin/tsx');
 
     beforeEach(() => {
         tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hive-stream-cli-process-'));
@@ -297,7 +307,7 @@ describe('CLI argument guardrails', () => {
     });
 
     function run(args: string[]) {
-        return spawnSync(tsNode, [cli, ...args], {
+        return spawnSync(tsx, [cli, ...args], {
             cwd: tmpDir,
             encoding: 'utf8'
         });

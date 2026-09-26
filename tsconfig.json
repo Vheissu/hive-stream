@@ -1,31 +1,25 @@
 {
     "compilerOptions": {
         "module": "commonjs",
+        "moduleResolution": "bundler",
         "esModuleInterop": true,
-        "target": "esnext",
+        "target": "es2023",
         "allowSyntheticDefaultImports": true,
         "emitDecoratorMetadata": true,
         "experimentalDecorators": true,
         "resolveJsonModule": true,
-        "moduleResolution": "node",
         "declaration": true,
         "sourceMap": true,
         "outDir": "dist",
-        "baseUrl": ".",
+        "types": ["node", "jest"],
         "strict": false,
         "noImplicitAny": false,
         "noImplicitReturns": false,
         "noImplicitThis": false,
         "noUnusedLocals": false,
         "noUnusedParameters": false,
-        "exactOptionalPropertyTypes": false,
-        "paths": {
-            "*": [
-                "node_modules/*",
-                "src/types/*"
-            ]
-        }
+        "exactOptionalPropertyTypes": false
     },
-    "include": ["src", "test"],
+    "include": ["src"],
     "exclude": ["node_modules", ".vscode", "dist"]
 }

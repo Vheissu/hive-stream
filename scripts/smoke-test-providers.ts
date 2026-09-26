@@ -3,7 +3,7 @@
  * Tests cross-provider parity, operation shape compatibility, subscription handler
  * compatibility, setConfig propagation, edge cases, and Streamer integration.
  *
- * Run: npx ts-node scripts/smoke-test-providers.ts
+ * Run: npx tsx scripts/smoke-test-providers.ts
  */
 
 import { Streamer } from '../src/streamer';

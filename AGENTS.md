@@ -9,16 +9,16 @@
 ## Build, Test, and Development Commands
 - `npm install` installs dependencies.
 - `npm run build` compiles TypeScript to `dist/`.
-- `npm run start` runs the local dev harness (`src/test.ts`) via ts-node.
+- `npm run start` runs the local dev harness (`src/test.ts`) via tsx.
 - `npm run watch` enables TypeScript watch mode.
 - `npm test` runs the Jest suite.
 - `npm run clean-tests` clears Jest cache if tests act stale.
 
 ## Coding Style & Naming Conventions
 - TypeScript with CommonJS output; keep module boundaries within `src/`.
-- Indent 4 spaces; prefer single quotes (see `tslint.json`).
+- Indent 4 spaces; prefer single quotes.
 - File naming conventions: `*.adapter.ts`, `*.contract.ts`, `*.spec.ts`; shared types live in `src/types/`.
-- TSLint rules in `tslint.json` are the baseline; match existing style before introducing new tooling.
+- No linter is configured; match the surrounding style before introducing new tooling.
 
 ## Testing Guidelines
 - Framework: Jest + `ts-jest` (see `jest.config.js`).

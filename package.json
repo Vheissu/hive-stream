@@ -53,7 +53,7 @@
         "crypto"
     ],
     "engines": {
-        "node": ">=18"
+        "node": ">=22"
     },
     "author": "Dwayne Charrington <dwaynecharrington@gmail.com>",
     "license": "MIT",
@@ -61,46 +61,58 @@
     "scripts": {
         "clean": "node scripts/clean-dist.js",
         "build": "npm run clean && tsc --project tsconfig.build.json && node scripts/generate-esm-wrappers.js",
-        "start": "npx ts-node src/test.ts",
+        "start": "tsx src/test.ts",
         "watch": "tsc -w",
         "test": "jest --verbose",
         "clean-tests": "jest --clearCache",
-        "docs:gen": "ts-node scripts/generate-contract-docs.ts",
+        "docs:gen": "tsx scripts/generate-contract-docs.ts",
         "docs:dev": "npm run docs:gen && vitepress dev docs",
         "docs:build": "npm run docs:gen && vitepress build docs",
         "docs:preview": "vitepress preview docs",
         "prepublishOnly": "npm run build"
     },
     "dependencies": {
-        "@hiveio/dhive": "^1.2.4",
-        "better-sqlite3": "^12.2.0",
-        "bignumber.js": "^9.3.1",
-        "bson": "^6.10.4",
-        "cors": "^2.8.5",
-        "dotenv": "^17.2.1",
-        "express": "^5.1.0",
-        "knex": "^3.1.0",
-        "mongodb": "^6.18.0",
-        "pg": "^8.16.3",
+        "@hiveio/dhive": "^1.3.6",
+        "better-sqlite3": "^13.0.3",
+        "bignumber.js": "^11.1.5",
+        "cors": "^2.8.6",
+        "dotenv": "^18.0.4",
+        "express": "^5.2.1",
+        "knex": "^3.3.0",
         "seedrandom": "^3.0.5",
-        "uuid": "^11.1.1",
-        "zod": "^3.25.76"
+        "zod": "^4.6.5"
+    },
+    "peerDependencies": {
+        "mongodb": "^7.0.0",
+        "pg": "^8.0.0"
+    },
+    "peerDependenciesMeta": {
+        "mongodb": {
+            "optional": true
+        },
+        "pg": {
+            "optional": true
+        }
     },
     "devDependencies": {
-        "@types/better-sqlite3": "^7.6.13",
+        "@types/better-sqlite3": "^9.6.0",
         "@types/bytebuffer": "^5.0.49",
         "@types/jest": "^30.0.0",
-        "@types/node": "^24.1.0",
-        "@types/node-cron": "^3.0.11",
-        "@types/pg": "^8.15.5",
+        "@types/node": "^22.20.4",
+        "@types/pg": "^8.23.1",
         "@types/seedrandom": "^3.0.8",
-        "jest": "^30.0.5",
-        "jest-cli": "^30.0.5",
-        "jest-fetch-mock": "^3.0.3",
-        "mongodb-memory-server": "^10.1.4",
-        "ts-jest": "^29.4.0",
-        "ts-node": "^10.9.2",
-        "typescript": "^5.9.2",
+        "jest": "^30.5.2",
+        "jest-fetch-mock": "^4.2.0",
+        "mongodb": "^7.6.0",
+        "pg": "^8.23.0",
+        "ts-jest": "^29.4.14",
+        "tsx": "^4.23.15",
+        "typescript": "~6.0.3",
         "vitepress": "^1.6.4"
+    },
+    "overrides": {
+        "vitepress": {
+            "vite": "^6.4.3"
+        }
     }
 }

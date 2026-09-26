@@ -53,7 +53,7 @@ function indent(lines: string[], spaces: number): string {
         .join('\n');
 }
 
-function generatePackageJson(options: ScaffoldOptions): string {
+function generatePackageJson(options: ScaffoldOptions, adapter: AdapterDefinition): string {
     const pkg = {
         name: options.name,
         version: '0.1.0',
@@ -61,10 +61,10 @@ function generatePackageJson(options: ScaffoldOptions): string {
         private: true,
         main: 'dist/index.js',
         engines: {
-            node: '>=18'
+            node: '>=22'
         },
         scripts: {
-            dev: 'ts-node src/index.ts',
+            dev: 'tsx src/index.ts',
             check: 'tsc --noEmit',
             build: 'tsc --project tsconfig.build.json',
             start: 'node dist/index.js',
@@ -73,15 +73,16 @@ function generatePackageJson(options: ScaffoldOptions): string {
         },
         dependencies: {
             'hive-stream': `^${options.hiveStreamVersion}`,
-            zod: '^3.25.76'
+            ...adapter.dependencies,
+            zod: '^4.6.5'
         },
         devDependencies: {
             '@types/jest': '^30.0.0',
-            '@types/node': '^24.1.0',
-            jest: '^30.0.5',
-            'ts-jest': '^29.4.0',
-            'ts-node': '^10.9.2',
-            typescript: '^5.9.2'
+            '@types/node': '^22.20.4',
+            jest: '^30.5.2',
+            'ts-jest': '^29.4.14',
+            tsx: '^4.23.15',
+            typescript: '~6.0.3'
         }
     };
 
@@ -91,9 +92,10 @@ function generatePackageJson(options: ScaffoldOptions): string {
 function generateTsconfig(): string {
     const tsconfig = {
         compilerOptions: {
-            target: 'es2022',
+            target: 'es2023',
             module: 'Node16',
             moduleResolution: 'Node16',
+            types: ['node', 'jest'],
             strict: true,
             isolatedModules: true,
             esModuleInterop: true,
@@ -393,7 +395,7 @@ export function generateProjectFiles(options: ScaffoldOptions): ScaffoldResult {
     }
 
     const files: Record<string, string> = {
-        'package.json': generatePackageJson(options),
+        'package.json': generatePackageJson(options, adapter),
         'tsconfig.json': generateTsconfig(),
         'tsconfig.build.json': generateBuildTsconfig(),
         'jest.config.js': generateJestConfig(),
