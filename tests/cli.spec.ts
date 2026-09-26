@@ -3,8 +3,11 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+import * as scaffoldEntry from '../src/scaffold';
+import { HIVE_STREAM_VERSION } from '../src/scaffold';
 import {
     generateProjectFiles,
+    getNextSteps,
     isDirectoryUsable,
     validateHiveAccountName,
     validateProjectName,
@@ -236,6 +239,24 @@ describe('generateProjectFiles', () => {
         expect(files['src/index.ts']).toContain('streamer.enableGracefulShutdown();');
         expect(files['src/index.ts']).not.toContain("process.on('SIGINT'");
         expect(files['README.md']).toContain('npm run verify');
+    });
+
+    test('returns next steps and defaults optional options', () => {
+        const { files, nextSteps } = generateProjectFiles({ name: 'my-app', template: 'minimal', adapter: 'sqlite' });
+        const pkg = JSON.parse(files['package.json']);
+
+        expect(pkg.dependencies['hive-stream']).toBe(`^${HIVE_STREAM_VERSION}`);
+        expect(files['.env.example']).toContain('HIVE_USERNAME=\n');
+        expect(files['.env.example']).toContain('# API_ENABLED=true');
+        expect(nextSteps).toEqual(getNextSteps('my-app'));
+        expect(getNextSteps('my-app')).toContain('npm install');
+        expect(getNextSteps('my-app', { installed: true })).not.toContain('npm install');
+    });
+
+    test('the browser-safe scaffold entry generates the same project as the CLI module', () => {
+        expect(scaffoldEntry.generateProjectFiles(baseOptions).files).toEqual(generateProjectFiles(baseOptions).files);
+        expect(scaffoldEntry.TEMPLATES).toBe(TEMPLATES);
+        expect(scaffoldEntry.ADAPTERS).toBe(ADAPTERS);
     });
 });
 

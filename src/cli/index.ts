@@ -7,6 +7,7 @@ import path from 'path';
 import { color, confirm, isInteractive, select, text } from './prompts';
 import {
     generateProjectFiles,
+    getNextSteps,
     isDirectoryUsable,
     validateHiveAccountName,
     validateProjectName,
@@ -309,14 +310,7 @@ async function runNew(parsed: ParsedArgs): Promise<void> {
         }
     }
 
-    const steps = [`cd ${name}`];
-
-    if (!parsed.flags.install) {
-        steps.push('npm install');
-    }
-
-    steps.push('cp .env.example .env   # add your Hive account and keys');
-    steps.push('npm run dev');
+    const steps = getNextSteps(name, { installed: Boolean(parsed.flags.install) });
 
     console.log('');
     console.log(color.bold('Next steps'));
