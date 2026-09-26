@@ -2,6 +2,8 @@
 
 Multisig vaults, proposal approvals, and execution readiness.
 
+**Category:** governance
+
 ```ts
 import { createMultisigTreasuryContract } from 'hive-stream';
 
@@ -11,6 +13,12 @@ await streamer.registerContract(createMultisigTreasuryContract());
 ::: tip SQL adapter
 Most built-in contracts persist state in SQL tables and require a SQL-capable adapter (SQLite or PostgreSQL).
 :::
+
+## Options
+
+| Option | Type | Required |
+| --- | --- | --- |
+| `name` | `string` | No |
 
 ## Actions
 

@@ -2,6 +2,8 @@
 
 An order-book exchange with deposits, withdrawals, balances, and matching.
 
+**Category:** finance
+
 ```ts
 import { createExchangeContract } from 'hive-stream';
 
@@ -11,6 +13,19 @@ await streamer.registerContract(createExchangeContract());
 ::: tip SQL adapter
 Most built-in contracts persist state in SQL tables and require a SQL-capable adapter (SQLite or PostgreSQL).
 :::
+
+## Options
+
+| Option | Type | Required |
+| --- | --- | --- |
+| `name` | `string` | No |
+| `account` | `string` | No |
+| `feeAccount` | `string` | No |
+| `makerFeeBps` | `number` | No |
+| `takerFeeBps` | `number` | No |
+| `basePrecision` | `number` | No |
+| `quotePrecision` | `number` | No |
+| `defaultAssetPrecision` | `number` | No |
 
 ## Actions
 
@@ -72,7 +87,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 
 | Field | Type | Required |
 | --- | --- | --- |
-| `side` | `"buy" | "sell"` | Yes |
+| `side` | `"buy" \| "sell"` | Yes |
 | `base` | `string` | Yes |
 | `quote` | `string` | Yes |
 | `price` | `string` | Yes |

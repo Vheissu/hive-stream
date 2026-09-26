@@ -1,235 +1,176 @@
 /**
- * Generates the per-contract reference pages for the docs site by
- * instantiating every built-in contract factory and introspecting its
- * actions, triggers, and Zod payload schemas.
+ * Generates the per-contract reference pages for the docs site and the
+ * contract catalog (src/catalog/contracts.json) from one introspection pass
+ * over every built-in contract factory. See scripts/lib/contract-introspection.ts.
  *
  * Run with: npx tsx scripts/generate-contract-docs.ts
  * (wired into `npm run docs:gen`)
  */
 import * as fs from 'fs';
 import * as path from 'path';
-import { z } from 'zod';
 
-import * as hiveStream from '../src';
+import type { ContractCatalogEntry, ContractCatalogField, ContractCatalogOption } from '../src/catalog/types';
+import { writeCatalog } from './generate-contract-catalog';
 
 const OUTPUT_DIR = path.resolve(__dirname, '..', 'docs', 'contracts');
 
-const DESCRIPTIONS: Record<string, string> = {
-    hivedice: 'A dice rolling game with configurable win chance and payout multipliers.',
-    coinflip: 'A heads-or-tails coin flip game.',
-    hivelotto: 'A lottery-style game with scheduled draws.',
-    hivetoken: 'App-level token issuance, transfers, and balances.',
-    hivenft: 'NFT minting, transfers, market listings, and direct peer-to-peer sales.',
-    rps: 'Rock-paper-scissors with wagers.',
-    roulette: 'Roulette with straight, color, parity, dozen, column, and low/high bets.',
-    polls: 'Polls and voting.',
-    tipjar: 'A tip jar with an optional message board.',
-    exchange: 'An order-book exchange with deposits, withdrawals, balances, and matching.',
-    auctionhouse: 'Auctions with reserve prices, buy-now support, and timed settlement.',
-    subscriptions: 'Subscription plans renewed by transfers or recurrent transfers.',
-    crowdfund: 'Crowdfunding campaigns with milestones, finalization, and refunds.',
-    bountyboard: 'Funded bounties, submissions, and award selection.',
-    invoices: 'Invoices with partial payments, recurring payments, and overdue sweeps.',
-    savings: 'Savings goals with recurring contributions and withdrawal requests.',
-    bookings: 'Reservable listings with paid booking windows and confirmations.',
-    giftcards: 'Gift card issuance, redemption, and cancellation.',
-    groupbuy: 'Threshold-based pooled purchases.',
-    sweepstakes: 'Paid-entry sweepstakes with deterministic winner draws.',
-    dcabots: 'Time-based DCA bot scheduling and execution request events.',
-    multisigtreasury: 'Multisig vaults, proposal approvals, and execution readiness.',
-    revenuesplit: 'Revenue share ledgers and withdrawal requests for collaborators.',
-    paywall: 'Paid access control for gated resources and memberships.',
-    domains: 'App-level namespaces with registrations, renewals, and transfers.',
-    rentals: 'Escrow-backed rental agreements for items, passes, or assets.',
-    launchpad: 'Launchpad sales with allocations, finalization, and claim flows.',
-    predictionmarkets: 'Prediction markets with positions, resolution, and winner claims.',
-    questpass: 'Seasonal passes with progress tracking and reward claims.',
-    charitymatch: 'Donation campaigns with matched totals and closing summaries.',
-    referrals: 'Affiliate programs with codes, funded budgets, and payout balances.',
-    insurancepool: 'Insurance pools with premium-backed policies, claims, and reserves.',
-    oraclebounty: 'Oracle bounty feeds with report rounds and median finalization.',
-    grantrounds: 'Matching grant rounds with submissions, donations, and allocations.',
-    payroll: 'Recurring team payrolls with funded budgets and scheduled runs.',
-    proposaltimelock: 'Timelocked governance queues with approvals and delays.',
-    bundlemarketplace: 'Fixed-price bundle storefronts with inventory tracking.',
-    ticketing: 'Event ticketing with purchases, check-ins, refunds, transfers, and resale.',
-    fanclub: 'Paid fan clubs with renewals, engagement points, and perk redemptions.',
-    checkpoint: 'Deterministic state hashes published on-chain for operator verification.'
-};
-
-function zodTypeToString(schema: any): string {
-    const def = schema?._zod?.def;
-
-    if (!def) {
-        return 'unknown';
-    }
-
-    switch (def.type) {
-        case 'string': return 'string';
-        case 'number': return 'number';
-        case 'boolean': return 'boolean';
-        case 'literal': return def.values.map((v: any) => JSON.stringify(v)).join(' | ');
-        case 'enum': return Object.values(def.entries).map((v: any) => JSON.stringify(v)).join(' | ');
-        case 'optional': return zodTypeToString(def.innerType);
-        case 'default': return zodTypeToString(def.innerType);
-        case 'nullable': return `${zodTypeToString(def.innerType)} | null`;
-        case 'array': return `${zodTypeToString(def.element)}[]`;
-        case 'union': return def.options.map((o: any) => zodTypeToString(o)).join(' | ');
-        case 'record': return 'record';
-        case 'object': return 'object';
-        case 'pipe': return zodTypeToString(def.in);
-        case 'any': return 'any';
-        default: return def.type ?? 'unknown';
-    }
+/** Escapes characters that would break a markdown table cell. */
+export function escapeTableCell(value: string): string {
+    return value.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
 }
 
-function isOptional(schema: any): boolean {
-    return schema?.isOptional?.() ?? false;
-}
-
-function renderSchemaTable(schema: any): string {
-    if (!schema || !(schema instanceof z.ZodObject)) {
+function renderPayloadTable(payload: ContractCatalogField[] | null): string {
+    if (payload === null) {
         return '_No payload validation defined for this action._\n';
     }
 
-    const shape = schema.shape;
-    const keys = Object.keys(shape);
-
-    if (keys.length === 0) {
+    if (payload.length === 0) {
         return '_This action takes an empty payload._\n';
     }
 
-    const rows = keys.map((key) => {
-        const field = shape[key];
-        return `| \`${key}\` | \`${zodTypeToString(field)}\` | ${isOptional(field) ? 'No' : 'Yes'} |`;
+    const rows = payload.map((field) => {
+        return `| \`${field.name}\` | \`${escapeTableCell(field.type)}\` | ${field.required ? 'Yes' : 'No'} |`;
     });
 
     return ['| Field | Type | Required |', '| --- | --- | --- |', ...rows].join('\n') + '\n';
 }
 
-function triggerBadge(trigger: string | string[] | undefined): string {
-    if (!trigger) {
-        return '`custom_json`';
+function renderOptionsTable(options: ContractCatalogOption[]): string {
+    if (!options.some((option) => option.description)) {
+        const rows = options.map((option) => `| \`${option.name}\` | \`${escapeTableCell(option.type)}\` | ${option.required ? 'Yes' : 'No'} |`);
+        return ['| Option | Type | Required |', '| --- | --- | --- |', ...rows].join('\n') + '\n';
     }
 
-    const triggers = Array.isArray(trigger) ? trigger : [trigger];
-    return triggers.map((t) => `\`${t}\``).join(', ');
+    const rows = options.map((option) => {
+        const description = option.description ? escapeTableCell(option.description) : '';
+        return `| \`${option.name}\` | \`${escapeTableCell(option.type)}\` | ${option.required ? 'Yes' : 'No'} | ${description} |`;
+    });
+
+    return ['| Option | Type | Required | Description |', '| --- | --- | --- | --- |', ...rows].join('\n') + '\n';
 }
 
-function factoryNameFor(exportName: string): string {
-    return exportName;
+/** A syntactically valid placeholder for a required factory option in examples. */
+function placeholderFor(type: string): string {
+    switch (type) {
+        case 'string': return `'...'`;
+        case 'string[]': return `['...']`;
+        case 'number': return '0';
+        case 'boolean': return 'false';
+        default: return `{} as any /* ${type} */`;
+    }
+}
+
+function renderContractPage(entry: ContractCatalogEntry): string {
+    const lines: string[] = [];
+    const requiredOptions = entry.options.filter((option) => option.required);
+    const factoryArgs = requiredOptions.length > 0
+        ? `{ ${requiredOptions.map((option) => `${option.name}: ${placeholderFor(option.type)}`).join(', ')} }`
+        : '';
+
+    lines.push(`# ${entry.name}`);
+    lines.push('');
+
+    if (entry.description) {
+        lines.push(entry.description);
+        lines.push('');
+    }
+
+    lines.push(`**Category:** ${entry.category}`);
+    lines.push('');
+    lines.push('```ts');
+    lines.push(`import { ${entry.factory} } from 'hive-stream';`);
+    lines.push('');
+    lines.push(`await streamer.registerContract(${entry.factory}(${factoryArgs}));`);
+    lines.push('```');
+    lines.push('');
+    lines.push('::: tip SQL adapter');
+    lines.push('Most built-in contracts persist state in SQL tables and require a SQL-capable adapter (SQLite or PostgreSQL).');
+    lines.push(':::');
+    lines.push('');
+
+    if (entry.options.length > 0) {
+        lines.push('## Options');
+        lines.push('');
+        lines.push(renderOptionsTable(entry.options));
+    }
+
+    lines.push('## Actions');
+    lines.push('');
+
+    for (const action of entry.actions) {
+        lines.push(`### ${action.name}`);
+        lines.push('');
+
+        if (action.description) {
+            lines.push(action.description);
+            lines.push('');
+        }
+
+        lines.push(`- **Trigger:** ${action.triggers.map((trigger) => `\`${trigger}\``).join(', ')}`);
+
+        if (action.requiresActiveKey) {
+            lines.push('- **Requires active key signature**');
+        }
+
+        lines.push('');
+        lines.push('**Payload**');
+        lines.push('');
+        lines.push(renderPayloadTable(action.payload));
+
+        const isTimeOnly = action.triggers.length === 1 && action.triggers[0] === 'time';
+
+        if (!isTimeOnly) {
+            const wrapper = JSON.stringify({ hive_stream: { contract: entry.name, action: action.name, payload: {} } });
+
+            lines.push(action.triggers.includes('transfer')
+                ? `Send as a transfer memo:`
+                : `Send as custom JSON (id: your configured \`JSON_ID\`):`);
+            lines.push('');
+            lines.push('```json');
+            lines.push(wrapper);
+            lines.push('```');
+            lines.push('');
+        }
+    }
+
+    return lines.join('\n');
 }
 
 function run(): void {
+    const { catalog, problems } = writeCatalog();
+
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
-    const factories = Object.entries(hiveStream)
-        .filter(([name, value]) => name.startsWith('create') && name.endsWith('Contract') && typeof value === 'function');
-
-    const generated: Array<{ name: string; file: string; description: string; actionCount: number }> = [];
-
-    // Factories whose options have no defaults get representative values here.
-    const FACTORY_ARGS: Record<string, any[]> = {
-        createCheckpointContract: [{ tables: ['nft_tokens'] }]
-    };
-
-    for (const [exportName, factory] of factories) {
-        let definition: any;
-
-        try {
-            definition = (factory as (...args: any[]) => any)(...(FACTORY_ARGS[exportName] ?? []));
-        } catch (error) {
-            console.warn(`Skipping ${exportName}: factory threw (${(error as Error).message})`);
-            continue;
-        }
-
-        if (!definition?.name || !definition?.actions) {
-            console.warn(`Skipping ${exportName}: does not return a contract definition`);
-            continue;
-        }
-
-        const name = definition.name;
-        const description = DESCRIPTIONS[name] ?? '';
-        const actions = Object.entries(definition.actions) as Array<[string, any]>;
-
-        const lines: string[] = [];
-        lines.push(`# ${name}`);
-        lines.push('');
-
-        if (description) {
-            lines.push(description);
-            lines.push('');
-        }
-
-        lines.push('```ts');
-        lines.push(`import { ${factoryNameFor(exportName)} } from 'hive-stream';`);
-        lines.push('');
-        lines.push(`await streamer.registerContract(${factoryNameFor(exportName)}());`);
-        lines.push('```');
-        lines.push('');
-        lines.push('::: tip SQL adapter');
-        lines.push('Most built-in contracts persist state in SQL tables and require a SQL-capable adapter (SQLite or PostgreSQL).');
-        lines.push(':::');
-        lines.push('');
-        lines.push('## Actions');
-        lines.push('');
-
-        for (const [actionName, actionDef] of actions) {
-            lines.push(`### ${actionName}`);
-            lines.push('');
-            lines.push(`- **Trigger:** ${triggerBadge(actionDef.trigger)}`);
-
-            if (actionDef.requiresActiveKey) {
-                lines.push('- **Requires active key signature**');
-            }
-
-            lines.push('');
-            lines.push('**Payload**');
-            lines.push('');
-            lines.push(renderSchemaTable(actionDef.schema));
-
-            const isTransfer = (Array.isArray(actionDef.trigger) ? actionDef.trigger : [actionDef.trigger]).includes('transfer');
-            const wrapper = JSON.stringify({ hive_stream: { contract: name, action: actionName, payload: {} } });
-
-            if (actionDef.trigger !== 'time') {
-                lines.push(isTransfer
-                    ? `Send as a transfer memo:`
-                    : `Send as custom JSON (id: your configured \`JSON_ID\`):`);
-                lines.push('');
-                lines.push('```json');
-                lines.push(wrapper);
-                lines.push('```');
-                lines.push('');
-            }
-        }
-
-        const file = `${name}.md`;
-        fs.writeFileSync(path.join(OUTPUT_DIR, file), lines.join('\n'));
-        generated.push({ name, file, description, actionCount: actions.length });
+    for (const entry of catalog.contracts) {
+        fs.writeFileSync(path.join(OUTPUT_DIR, `${entry.name}.md`), renderContractPage(entry));
     }
-
-    generated.sort((a, b) => a.name.localeCompare(b.name));
 
     const index: string[] = [];
     index.push('# Built-in Contracts');
     index.push('');
-    index.push(`Hive Stream ships ${generated.length} ready-to-register contracts. Every page here is generated from the contract source, so triggers and payload schemas are always current.`);
+    index.push(`Hive Stream ships ${catalog.contracts.length} ready-to-register contracts. Every page here is generated from the contract source, so triggers, options and payload schemas are always current. The same data is available to tools as JSON through \`hive-stream/catalog\`.`);
     index.push('');
-    index.push('| Contract | Actions | Description |');
-    index.push('| --- | --- | --- |');
+    index.push('| Contract | Category | Actions | Description |');
+    index.push('| --- | --- | --- | --- |');
 
-    for (const item of generated) {
-        index.push(`| [${item.name}](./${item.file.replace('.md', '')}) | ${item.actionCount} | ${item.description} |`);
+    for (const entry of catalog.contracts) {
+        index.push(`| [${entry.name}](./${entry.name}) | ${entry.category} | ${entry.actions.length} | ${escapeTableCell(entry.description)} |`);
     }
 
     index.push('');
     fs.writeFileSync(path.join(OUTPUT_DIR, 'index.md'), index.join('\n'));
 
     // Sidebar items consumed by .vitepress/config.ts
-    const sidebar = generated.map((item) => ({ text: item.name, link: `/contracts/${item.file.replace('.md', '')}` }));
+    const sidebar = catalog.contracts.map((entry) => ({ text: entry.name, link: `/contracts/${entry.name}` }));
     fs.writeFileSync(path.join(OUTPUT_DIR, 'sidebar.json'), JSON.stringify(sidebar, null, 2));
 
-    console.log(`Generated ${generated.length} contract reference pages in docs/contracts/`);
+    console.log(`Generated ${catalog.contracts.length} contract reference pages in docs/contracts/`);
+
+    if (problems.length > 0) {
+        process.exitCode = 1;
+    }
 }
 
-run();
+if (require.main === module) {
+    run();
+}

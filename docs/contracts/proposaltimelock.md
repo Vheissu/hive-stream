@@ -2,6 +2,8 @@
 
 Timelocked governance queues with approvals and delays.
 
+**Category:** governance
+
 ```ts
 import { createProposalTimelockContract } from 'hive-stream';
 
@@ -11,6 +13,12 @@ await streamer.registerContract(createProposalTimelockContract());
 ::: tip SQL adapter
 Most built-in contracts persist state in SQL tables and require a SQL-capable adapter (SQLite or PostgreSQL).
 :::
+
+## Options
+
+| Option | Type | Required |
+| --- | --- | --- |
+| `name` | `string` | No |
 
 ## Actions
 

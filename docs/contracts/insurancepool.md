@@ -2,6 +2,8 @@
 
 Insurance pools with premium-backed policies, claims, and reserves.
 
+**Category:** finance
+
 ```ts
 import { createInsurancePoolContract } from 'hive-stream';
 
@@ -11,6 +13,12 @@ await streamer.registerContract(createInsurancePoolContract());
 ::: tip SQL adapter
 Most built-in contracts persist state in SQL tables and require a SQL-capable adapter (SQLite or PostgreSQL).
 :::
+
+## Options
+
+| Option | Type | Required |
+| --- | --- | --- |
+| `name` | `string` | No |
 
 ## Actions
 

@@ -2,6 +2,8 @@
 
 Paid-entry sweepstakes with deterministic winner draws.
 
+**Category:** gambling
+
 ```ts
 import { createSweepstakesContract } from 'hive-stream';
 
@@ -11,6 +13,12 @@ await streamer.registerContract(createSweepstakesContract());
 ::: tip SQL adapter
 Most built-in contracts persist state in SQL tables and require a SQL-capable adapter (SQLite or PostgreSQL).
 :::
+
+## Options
+
+| Option | Type | Required |
+| --- | --- | --- |
+| `name` | `string` | No |
 
 ## Actions
 

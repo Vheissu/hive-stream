@@ -23,6 +23,18 @@ describe('package contract', () => {
                 require: './dist/client/index.js',
                 default: './dist/client/index.js'
             },
+            './scaffold': {
+                types: './dist/scaffold/index.d.ts',
+                import: './dist/scaffold/index.mjs',
+                require: './dist/scaffold/index.js',
+                default: './dist/scaffold/index.js'
+            },
+            './catalog': {
+                types: './dist/catalog/index.d.ts',
+                import: './dist/catalog/index.mjs',
+                require: './dist/catalog/index.js',
+                default: './dist/catalog/index.js'
+            },
             './package.json': './package.json'
         }));
     });
@@ -30,6 +42,19 @@ describe('package contract', () => {
     test('build generates the ESM wrappers referenced by the exports map', () => {
         expect(packageJson.scripts.build).toContain('npm run clean');
         expect(packageJson.scripts.build).toContain('generate-esm-wrappers');
+
+        const wrapperScript = require('fs').readFileSync(require('path').join(__dirname, '..', 'scripts', 'generate-esm-wrappers.js'), 'utf8');
+
+        for (const [subpath, target] of Object.entries<any>(packageJson.exports)) {
+            if (typeof target === 'object' && target.import) {
+                expect({ subpath, wrapped: wrapperScript.includes(target.import.replace('./', '')) }).toEqual({ subpath, wrapped: true });
+            }
+        }
+    });
+
+    test('build regenerates the version constant and contract catalog', () => {
+        expect(packageJson.scripts.build).toContain('generate-version');
+        expect(packageJson.scripts.build).toContain('catalog:gen');
     });
 
     test('whitelists the publishable package contents', () => {

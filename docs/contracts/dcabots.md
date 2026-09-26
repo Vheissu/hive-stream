@@ -2,6 +2,8 @@
 
 Time-based DCA bot scheduling and execution request events.
 
+**Category:** finance
+
 ```ts
 import { createDcaBotContract } from 'hive-stream';
 
@@ -11,6 +13,12 @@ await streamer.registerContract(createDcaBotContract());
 ::: tip SQL adapter
 Most built-in contracts persist state in SQL tables and require a SQL-capable adapter (SQLite or PostgreSQL).
 :::
+
+## Options
+
+| Option | Type | Required |
+| --- | --- | --- |
+| `name` | `string` | No |
 
 ## Actions
 
@@ -94,7 +102,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 | --- | --- | --- |
 | `botId` | `string` | Yes |
 | `executionId` | `number` | Yes |
-| `status` | `"placed" | "filled" | "failed" | "cancelled"` | Yes |
+| `status` | `"placed" \| "filled" \| "failed" \| "cancelled"` | Yes |
 | `externalRef` | `string` | No |
 | `notes` | `string` | No |
 

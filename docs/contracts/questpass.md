@@ -2,6 +2,8 @@
 
 Seasonal passes with progress tracking and reward claims.
 
+**Category:** games
+
 ```ts
 import { createQuestPassContract } from 'hive-stream';
 
@@ -11,6 +13,12 @@ await streamer.registerContract(createQuestPassContract());
 ::: tip SQL adapter
 Most built-in contracts persist state in SQL tables and require a SQL-capable adapter (SQLite or PostgreSQL).
 :::
+
+## Options
+
+| Option | Type | Required |
+| --- | --- | --- |
+| `name` | `string` | No |
 
 ## Actions
 

@@ -1,0 +1,4668 @@
+{
+  "schemaVersion": 1,
+  "contracts": [
+    {
+      "name": "auctionhouse",
+      "factory": "createAuctionHouseContract",
+      "category": "commerce",
+      "description": "Auctions with reserve prices, buy-now support, and timed settlement.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createAuction",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "auctionId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "description",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "assetType",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "assetRef",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "paymentAsset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "reservePrice",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "buyNowPrice",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "startsAt",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "endsAt",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "placeBid",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "auctionId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "note",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "settleAuction",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "auctionId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "cancelAuction",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "auctionId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bookings",
+      "factory": "createBookingContract",
+      "category": "commerce",
+      "description": "Reservable listings with paid booking windows and confirmations.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createListing",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "listingId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "price",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "durationMinutes",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "cancellationHours",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "reserve",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "listingId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "reservationId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "startAt",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "note",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "confirmReservation",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "reservationId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "reason",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "cancelReservation",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "reservationId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "reason",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "completeReservation",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "reservationId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "reason",
+              "type": "string",
+              "required": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bountyboard",
+      "factory": "createBountyBoardContract",
+      "category": "commerce",
+      "description": "Funded bounties, submissions, and award selection.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createBounty",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "bountyId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "description",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "deadline",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "maxWinners",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "submitWork",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "bountyId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "submissionId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "url",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "description",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "awardBounty",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "bountyId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "submissionId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "amount",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "note",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "closeBounty",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "bountyId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bundlemarketplace",
+      "factory": "createBundleMarketplaceContract",
+      "category": "commerce",
+      "description": "Fixed-price bundle storefronts with inventory tracking.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createBundle",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "bundleId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "price",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "items",
+              "type": "string[]",
+              "required": true
+            },
+            {
+              "name": "inventory",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "updateBundle",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "bundleId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "price",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "inventory",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "active",
+              "type": "boolean",
+              "required": false
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "buyBundle",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "bundleId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "fulfillPurchase",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "purchaseId",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "notes",
+              "type": "string",
+              "required": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "charitymatch",
+      "factory": "createCharityMatchContract",
+      "category": "fundraising",
+      "description": "Donation campaigns with matched totals and closing summaries.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createCampaign",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "campaignId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "beneficiary",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "matchCap",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "matchBps",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "closesAt",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "donate",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "campaignId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "closeCampaign",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "campaignId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "checkpoint",
+      "factory": "createCheckpointContract",
+      "category": "utility",
+      "description": "Deterministic state hashes published on-chain for operator verification.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "tables",
+          "type": "string[]",
+          "required": true
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "publishCheckpoint",
+          "triggers": [
+            "time",
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        },
+        {
+          "name": "recordCheckpoint",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "checkpointId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "blockNumber",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "stateHash",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "tables",
+              "type": "string[]",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "coinflip",
+      "factory": "createCoinflipContract",
+      "category": "gambling",
+      "description": "A heads-or-tails coin flip game.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "tokenSymbol",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "validCurrencies",
+          "type": "string[]",
+          "required": false
+        },
+        {
+          "name": "minAmount",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "maxAmount",
+          "type": "number",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "flip",
+          "triggers": [
+            "transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "guess",
+              "type": "\"heads\" | \"tails\"",
+              "required": true,
+              "values": [
+                "heads",
+                "tails"
+              ]
+            },
+            {
+              "name": "seed",
+              "type": "string",
+              "required": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "crowdfund",
+      "factory": "createCrowdfundContract",
+      "category": "fundraising",
+      "description": "Crowdfunding campaigns with milestones, finalization, and refunds.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createCampaign",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "campaignId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "description",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "targetAmount",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "deadline",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "beneficiary",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "milestones",
+              "type": "object[]",
+              "required": false
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "contribute",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "campaignId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "finalizeCampaign",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "campaignId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "releaseMilestone",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "campaignId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "milestoneIndex",
+              "type": "number",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "refundContribution",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "campaignId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dcabots",
+      "factory": "createDcaBotContract",
+      "category": "finance",
+      "description": "Time-based DCA bot scheduling and execution request events.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createBot",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "botId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "baseAsset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "quoteAsset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "amountPerInterval",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "intervalHours",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "maxExecutions",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "slippageBps",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "startsAt",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "pauseBot",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "botId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "resumeBot",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "botId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "executeDueBots",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        },
+        {
+          "name": "acknowledgeExecution",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "botId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "executionId",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "status",
+              "type": "\"placed\" | \"filled\" | \"failed\" | \"cancelled\"",
+              "required": true,
+              "values": [
+                "placed",
+                "filled",
+                "failed",
+                "cancelled"
+              ]
+            },
+            {
+              "name": "externalRef",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "notes",
+              "type": "string",
+              "required": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "domains",
+      "factory": "createDomainRegistryContract",
+      "category": "assets",
+      "description": "App-level namespaces with registrations, renewals, and transfers.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createNamespace",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "namespace",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "registrationPrice",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "renewalDays",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "registerName",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "namespace",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "label",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "target",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "years",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "renewName",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "namespace",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "label",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "target",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "years",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "transferName",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "namespace",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "label",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "to",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "expireNames",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        }
+      ]
+    },
+    {
+      "name": "exchange",
+      "factory": "createExchangeContract",
+      "category": "finance",
+      "description": "An order-book exchange with deposits, withdrawals, balances, and matching.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "feeAccount",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "makerFeeBps",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "takerFeeBps",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "basePrecision",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "quotePrecision",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "defaultAssetPrecision",
+          "type": "number",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createPair",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "base",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "quote",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "deposit",
+          "triggers": [
+            "transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": []
+        },
+        {
+          "name": "withdraw",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": true,
+          "payload": [
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "amount",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "to",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "placeOrder",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "side",
+              "type": "\"buy\" | \"sell\"",
+              "required": true,
+              "values": [
+                "buy",
+                "sell"
+              ]
+            },
+            {
+              "name": "base",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "quote",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "price",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "amount",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "cancelOrder",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "orderId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "matchOrders",
+          "triggers": [
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        },
+        {
+          "name": "snapshotOrderBook",
+          "triggers": [
+            "time",
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "base",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "quote",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "depth",
+              "type": "number",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "transfer",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "to",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "amount",
+              "type": "string",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "fanclub",
+      "factory": "createFanClubContract",
+      "category": "social",
+      "description": "Paid fan clubs with renewals, engagement points, and perk redemptions.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createClub",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "clubId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "joinPrice",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "perks",
+              "type": "object[]",
+              "required": false
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "joinClub",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "clubId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "recordEngagement",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "clubId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "account",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "points",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "note",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "redeemPerk",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "clubId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "perkId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "giftcards",
+      "factory": "createGiftCardContract",
+      "category": "commerce",
+      "description": "Gift card issuance, redemption, and cancellation.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "issueGiftCard",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "code",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "recipient",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "message",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "expiresAt",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "redeemGiftCard",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "code",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "amount",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "cancelGiftCard",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "code",
+              "type": "string",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "grantrounds",
+      "factory": "createGrantRoundsContract",
+      "category": "fundraising",
+      "description": "Matching grant rounds with submissions, donations, and allocations.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createRound",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "roundId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "closesAt",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "fundRound",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "roundId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "submitProject",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "roundId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "projectId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "recipient",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "summary",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "donateToProject",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "roundId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "projectId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "finalizeRound",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "roundId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "withdrawGrant",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "roundId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "projectId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "groupbuy",
+      "factory": "createGroupBuyContract",
+      "category": "commerce",
+      "description": "Threshold-based pooled purchases.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createGroupBuy",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "groupBuyId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "targetAmount",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "deadline",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "minParticipants",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "commit",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "groupBuyId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "finalizeGroupBuy",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "groupBuyId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "withdrawCommitment",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "groupBuyId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hivedice",
+      "factory": "createDiceContract",
+      "category": "gambling",
+      "description": "A dice rolling game with configurable win chance and payout multipliers.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "tokenSymbol",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "validCurrencies",
+          "type": "string[]",
+          "required": false
+        },
+        {
+          "name": "houseEdge",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "minBet",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "maxBet",
+          "type": "number",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "roll",
+          "triggers": [
+            "transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "roll",
+              "type": "number",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "testauto",
+          "triggers": [
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        }
+      ]
+    },
+    {
+      "name": "hivelotto",
+      "factory": "createLottoContract",
+      "category": "gambling",
+      "description": "A lottery-style game with scheduled draws.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "feeAccount",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "tokenSymbol",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "validCurrencies",
+          "type": "string[]",
+          "required": false
+        },
+        {
+          "name": "validDrawTypes",
+          "type": "string[]",
+          "required": false
+        },
+        {
+          "name": "cost",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "minEntriesHourly",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "minEntriesDaily",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "hourlyWinnersPick",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "dailyWinnersPick",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "maxTicketsPerUser",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "feePercentage",
+          "type": "number",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "buy",
+          "triggers": [
+            "transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "type",
+              "type": "\"hourly\" | \"daily\"",
+              "required": true,
+              "values": [
+                "hourly",
+                "daily"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "drawHourlyLottery",
+          "triggers": [
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        },
+        {
+          "name": "drawDailyLottery",
+          "triggers": [
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        }
+      ]
+    },
+    {
+      "name": "hivenft",
+      "factory": "createNFTContract",
+      "category": "assets",
+      "description": "NFT minting, transfers, market listings, and direct peer-to-peer sales.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createCollection",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        },
+        {
+          "name": "mintNFT",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        },
+        {
+          "name": "mintBatchNFT",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        },
+        {
+          "name": "updateNFT",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        },
+        {
+          "name": "transferNFT",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        },
+        {
+          "name": "burnNFT",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        },
+        {
+          "name": "listNFT",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        },
+        {
+          "name": "unlistNFT",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        },
+        {
+          "name": "buyNFT",
+          "triggers": [
+            "transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        },
+        {
+          "name": "buyNFTDirect",
+          "triggers": [
+            "transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        },
+        {
+          "name": "getTokenInfo",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        },
+        {
+          "name": "getCollectionInfo",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        },
+        {
+          "name": "getUserTokens",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        }
+      ]
+    },
+    {
+      "name": "hivetoken",
+      "factory": "createTokenContract",
+      "category": "assets",
+      "description": "App-level token issuance, transfers, and balances.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createToken",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "symbol",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "name",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "url",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "precision",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "maxSupply",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "issueTokens",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "symbol",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "to",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "amount",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "memo",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "transferTokens",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "symbol",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "to",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "amount",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "memo",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "getBalance",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "account",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "symbol",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "getTokenInfo",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "symbol",
+              "type": "string",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "insurancepool",
+      "factory": "createInsurancePoolContract",
+      "category": "finance",
+      "description": "Insurance pools with premium-backed policies, claims, and reserves.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createPool",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "poolId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "premiumAmount",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "coverageCap",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "coverageDays",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "fundPool",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "poolId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "buyPolicy",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "poolId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "fileClaim",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "poolId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "claimId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "amount",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "reason",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "approveClaim",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "claimId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "amount",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "note",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "expirePolicies",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        }
+      ]
+    },
+    {
+      "name": "invoices",
+      "factory": "createInvoiceContract",
+      "category": "commerce",
+      "description": "Invoices with partial payments, recurring payments, and overdue sweeps.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createInvoice",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "invoiceId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "payer",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "description",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "amount",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "dueAt",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "allowPartial",
+              "type": "boolean",
+              "required": false
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "payInvoice",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "invoiceId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "cancelInvoice",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "invoiceId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "closeOverdueInvoices",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        }
+      ]
+    },
+    {
+      "name": "launchpad",
+      "factory": "createLaunchpadContract",
+      "category": "finance",
+      "description": "Launchpad sales with allocations, finalization, and claim flows.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createSale",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "saleId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "tokenSymbol",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "purchaseAsset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "unitPrice",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "totalUnits",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "closesAt",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "minUnitsPerBuyer",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "maxUnitsPerBuyer",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "contribute",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "saleId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "finalizeSale",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "saleId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "claimAllocation",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "saleId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "multisigtreasury",
+      "factory": "createMultisigTreasuryContract",
+      "category": "governance",
+      "description": "Multisig vaults, proposal approvals, and execution readiness.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createVault",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "vaultId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "signers",
+              "type": "string[]",
+              "required": true
+            },
+            {
+              "name": "threshold",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "proposeTransfer",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "vaultId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "proposalId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "to",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "amount",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "memo",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "approveProposal",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "proposalId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "cancelProposal",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "proposalId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "markExecuted",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "proposalId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "txId",
+              "type": "string",
+              "required": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "oraclebounty",
+      "factory": "createOracleBountyContract",
+      "category": "utility",
+      "description": "Oracle bounty feeds with report rounds and median finalization.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createFeed",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "feedId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "rewardPerReport",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "rewardAsset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "toleranceBps",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "fundFeed",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "feedId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "submitReport",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "feedId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "roundId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "value",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "note",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "finalizeRound",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "feedId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "roundId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "withdrawRewards",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        }
+      ]
+    },
+    {
+      "name": "payroll",
+      "factory": "createPayrollContract",
+      "category": "finance",
+      "description": "Recurring team payrolls with funded budgets and scheduled runs.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createPayroll",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "payrollId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "intervalDays",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "addRecipient",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "payrollId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "account",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "amount",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "fundPayroll",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "payrollId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "runPayroll",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "payrollId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "withdrawPayroll",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        }
+      ]
+    },
+    {
+      "name": "paywall",
+      "factory": "createPaywallContract",
+      "category": "commerce",
+      "description": "Paid access control for gated resources and memberships.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createResource",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "resourceId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "price",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "accessDays",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "maxPurchasesPerAccount",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "grantAccess",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "resourceId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "revokeAccess",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "resourceId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "account",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "expireAccess",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        }
+      ]
+    },
+    {
+      "name": "polls",
+      "factory": "createPollContract",
+      "category": "governance",
+      "description": "Polls and voting.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createPoll",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "pollId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "question",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "options",
+              "type": "string[]",
+              "required": true
+            },
+            {
+              "name": "durationHours",
+              "type": "number",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "vote",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "pollId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "option",
+              "type": "number",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "predictionmarkets",
+      "factory": "createPredictionMarketContract",
+      "category": "gambling",
+      "description": "Prediction markets with positions, resolution, and winner claims.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createMarket",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "marketId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "options",
+              "type": "string[]",
+              "required": true
+            },
+            {
+              "name": "closesAt",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "buyPosition",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "marketId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "option",
+              "type": "number",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "resolveMarket",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "marketId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "winningOption",
+              "type": "number",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "claimWinnings",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "marketId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "proposaltimelock",
+      "factory": "createProposalTimelockContract",
+      "category": "governance",
+      "description": "Timelocked governance queues with approvals and delays.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createQueue",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "queueId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "approvers",
+              "type": "string[]",
+              "required": true
+            },
+            {
+              "name": "threshold",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "minDelayHours",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "createProposal",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "queueId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "proposalId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "actionType",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "actionPayload",
+              "type": "record",
+              "required": true
+            },
+            {
+              "name": "note",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "approveProposal",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "proposalId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "executeProposal",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "proposalId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "executionRef",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "cancelProposal",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "proposalId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "questpass",
+      "factory": "createQuestPassContract",
+      "category": "games",
+      "description": "Seasonal passes with progress tracking and reward claims.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createSeason",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "seasonId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "passPrice",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "tiers",
+              "type": "object[]",
+              "required": true
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "buyPass",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "seasonId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "recordProgress",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "seasonId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "account",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "points",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "sourceId",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "note",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "claimReward",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "seasonId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "tierId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "referrals",
+      "factory": "createReferralContract",
+      "category": "social",
+      "description": "Affiliate programs with codes, funded budgets, and payout balances.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createProgram",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "programId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "payoutAsset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "rewardBps",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "maxPayoutPerConversion",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "fundProgram",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "programId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "registerCode",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "programId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "code",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "recordConversion",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "programId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "code",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "buyer",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "grossAmount",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "externalRef",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "withdrawAffiliate",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        }
+      ]
+    },
+    {
+      "name": "rentals",
+      "factory": "createRentalContract",
+      "category": "commerce",
+      "description": "Escrow-backed rental agreements for items, passes, or assets.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createListing",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "listingId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "assetRef",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "collateralAmount",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "collateralAsset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "dailyRate",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "rateAsset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "maxDurationDays",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "initiateRental",
+          "triggers": [
+            "escrow_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "listingId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "rentalId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "endsAt",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "note",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "confirmReturn",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "rentalId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "note",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "closeRental",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "rentalId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "note",
+              "type": "string",
+              "required": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "revenuesplit",
+      "factory": "createRevenueSplitContract",
+      "category": "finance",
+      "description": "Revenue share ledgers and withdrawal requests for collaborators.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createSplit",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "splitId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "recipients",
+              "type": "object[]",
+              "required": true
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "updateSplit",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "splitId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "recipients",
+              "type": "object[]",
+              "required": true
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "distribute",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "splitId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "withdraw",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        }
+      ]
+    },
+    {
+      "name": "roulette",
+      "factory": "createRouletteContract",
+      "category": "gambling",
+      "description": "Roulette with straight, color, parity, dozen, column, and low/high bets.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "tokenSymbol",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "validCurrencies",
+          "type": "string[]",
+          "required": false
+        },
+        {
+          "name": "minAmount",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "maxAmount",
+          "type": "number",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "spin",
+          "triggers": [
+            "transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "betType",
+              "type": "\"straight\" | \"color\" | \"parity\" | \"dozen\" | \"column\" | \"range\"",
+              "required": true,
+              "values": [
+                "straight",
+                "color",
+                "parity",
+                "dozen",
+                "column",
+                "range"
+              ]
+            },
+            {
+              "name": "value",
+              "type": "string | number",
+              "required": true
+            },
+            {
+              "name": "seed",
+              "type": "string",
+              "required": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "rps",
+      "factory": "createRpsContract",
+      "category": "games",
+      "description": "Rock-paper-scissors with wagers.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "tokenSymbol",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "validCurrencies",
+          "type": "string[]",
+          "required": false
+        },
+        {
+          "name": "minAmount",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "maxAmount",
+          "type": "number",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "play",
+          "triggers": [
+            "transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "move",
+              "type": "\"rock\" | \"paper\" | \"scissors\"",
+              "required": true,
+              "values": [
+                "rock",
+                "paper",
+                "scissors"
+              ]
+            },
+            {
+              "name": "seed",
+              "type": "string",
+              "required": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "savings",
+      "factory": "createSavingsContract",
+      "category": "finance",
+      "description": "Savings goals with recurring contributions and withdrawal requests.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createGoal",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "goalId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "targetAmount",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "deadline",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "allowEarlyWithdraw",
+              "type": "boolean",
+              "required": false
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "contribute",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "goalId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "withdraw",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "goalId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "amount",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "note",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "closeGoal",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "goalId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "subscriptions",
+      "factory": "createSubscriptionContract",
+      "category": "commerce",
+      "description": "Subscription plans renewed by transfers or recurrent transfers.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createPlan",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "planId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "price",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "intervalDays",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "graceDays",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "updatePlan",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "planId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "price",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "intervalDays",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "graceDays",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "active",
+              "type": "boolean",
+              "required": false
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "subscribe",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "planId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "cancelSubscription",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "planId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "expireMemberships",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": null
+        }
+      ]
+    },
+    {
+      "name": "sweepstakes",
+      "factory": "createSweepstakesContract",
+      "category": "gambling",
+      "description": "Paid-entry sweepstakes with deterministic winner draws.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createSweepstakes",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "drawId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "entryFee",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "closesAt",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "maxEntries",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "maxEntriesPerAccount",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "enterSweepstakes",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "drawId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "entries",
+              "type": "number",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "drawWinner",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "drawId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "seed",
+              "type": "string",
+              "required": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ticketing",
+      "factory": "createTicketingContract",
+      "category": "commerce",
+      "description": "Event ticketing with purchases, check-ins, refunds, transfers, and resale.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "createEvent",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "eventId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "venue",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "startsAt",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "ticketPrice",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "capacity",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "metadata",
+              "type": "record",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "purchaseTicket",
+          "triggers": [
+            "transfer",
+            "recurrent_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "eventId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "ticketId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "checkInTicket",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "ticketId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "note",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "refundTicket",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "ticketId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "note",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "transferTicket",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "ticketId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "to",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "note",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "listTicket",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "ticketId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "price",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "unlistTicket",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "ticketId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "buyTicketDirect",
+          "triggers": [
+            "transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "ticketId",
+              "type": "string",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "tipjar",
+      "factory": "createTipJarContract",
+      "category": "social",
+      "description": "A tip jar with an optional message board.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "name": "tip",
+          "triggers": [
+            "transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "message",
+              "type": "string",
+              "required": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

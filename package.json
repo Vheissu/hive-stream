@@ -26,6 +26,18 @@
             "require": "./dist/client/index.js",
             "default": "./dist/client/index.js"
         },
+        "./scaffold": {
+            "types": "./dist/scaffold/index.d.ts",
+            "import": "./dist/scaffold/index.mjs",
+            "require": "./dist/scaffold/index.js",
+            "default": "./dist/scaffold/index.js"
+        },
+        "./catalog": {
+            "types": "./dist/catalog/index.d.ts",
+            "import": "./dist/catalog/index.mjs",
+            "require": "./dist/catalog/index.js",
+            "default": "./dist/catalog/index.js"
+        },
         "./package.json": "./package.json"
     },
     "files": [
@@ -60,11 +72,12 @@
     "private": false,
     "scripts": {
         "clean": "node scripts/clean-dist.js",
-        "build": "npm run clean && tsc --project tsconfig.build.json && node scripts/generate-esm-wrappers.js",
+        "build": "npm run clean && node scripts/generate-version.js && npm run catalog:gen && tsc --project tsconfig.build.json && node scripts/generate-esm-wrappers.js",
         "start": "tsx src/test.ts",
         "watch": "tsc -w",
         "test": "jest --verbose",
         "clean-tests": "jest --clearCache",
+        "catalog:gen": "tsx scripts/generate-contract-catalog.ts",
         "docs:gen": "tsx scripts/generate-contract-docs.ts",
         "docs:dev": "npm run docs:gen && vitepress dev docs",
         "docs:build": "npm run docs:gen && vitepress build docs",

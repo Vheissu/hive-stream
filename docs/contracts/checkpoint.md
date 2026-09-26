@@ -2,15 +2,25 @@
 
 Deterministic state hashes published on-chain for operator verification.
 
+**Category:** utility
+
 ```ts
 import { createCheckpointContract } from 'hive-stream';
 
-await streamer.registerContract(createCheckpointContract());
+await streamer.registerContract(createCheckpointContract({ tables: ['...'] }));
 ```
 
 ::: tip SQL adapter
 Most built-in contracts persist state in SQL tables and require a SQL-capable adapter (SQLite or PostgreSQL).
 :::
+
+## Options
+
+| Option | Type | Required |
+| --- | --- | --- |
+| `name` | `string` | No |
+| `tables` | `string[]` | Yes |
+| `account` | `string` | No |
 
 ## Actions
 

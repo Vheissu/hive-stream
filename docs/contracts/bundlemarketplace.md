@@ -2,6 +2,8 @@
 
 Fixed-price bundle storefronts with inventory tracking.
 
+**Category:** commerce
+
 ```ts
 import { createBundleMarketplaceContract } from 'hive-stream';
 
@@ -11,6 +13,12 @@ await streamer.registerContract(createBundleMarketplaceContract());
 ::: tip SQL adapter
 Most built-in contracts persist state in SQL tables and require a SQL-capable adapter (SQLite or PostgreSQL).
 :::
+
+## Options
+
+| Option | Type | Required |
+| --- | --- | --- |
+| `name` | `string` | No |
 
 ## Actions
 

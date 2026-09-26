@@ -2,6 +2,8 @@
 
 Escrow-backed rental agreements for items, passes, or assets.
 
+**Category:** commerce
+
 ```ts
 import { createRentalContract } from 'hive-stream';
 
@@ -11,6 +13,12 @@ await streamer.registerContract(createRentalContract());
 ::: tip SQL adapter
 Most built-in contracts persist state in SQL tables and require a SQL-capable adapter (SQLite or PostgreSQL).
 :::
+
+## Options
+
+| Option | Type | Required |
+| --- | --- | --- |
+| `name` | `string` | No |
 
 ## Actions
 

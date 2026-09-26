@@ -2,6 +2,8 @@
 
 Auctions with reserve prices, buy-now support, and timed settlement.
 
+**Category:** commerce
+
 ```ts
 import { createAuctionHouseContract } from 'hive-stream';
 
@@ -11,6 +13,12 @@ await streamer.registerContract(createAuctionHouseContract());
 ::: tip SQL adapter
 Most built-in contracts persist state in SQL tables and require a SQL-capable adapter (SQLite or PostgreSQL).
 :::
+
+## Options
+
+| Option | Type | Required |
+| --- | --- | --- |
+| `name` | `string` | No |
 
 ## Actions
 

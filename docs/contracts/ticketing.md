@@ -2,6 +2,8 @@
 
 Event ticketing with purchases, check-ins, refunds, transfers, and resale.
 
+**Category:** commerce
+
 ```ts
 import { createTicketingContract } from 'hive-stream';
 
@@ -11,6 +13,12 @@ await streamer.registerContract(createTicketingContract());
 ::: tip SQL adapter
 Most built-in contracts persist state in SQL tables and require a SQL-capable adapter (SQLite or PostgreSQL).
 :::
+
+## Options
+
+| Option | Type | Required |
+| --- | --- | --- |
+| `name` | `string` | No |
 
 ## Actions
 

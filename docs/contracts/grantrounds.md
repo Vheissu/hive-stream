@@ -2,6 +2,8 @@
 
 Matching grant rounds with submissions, donations, and allocations.
 
+**Category:** fundraising
+
 ```ts
 import { createGrantRoundsContract } from 'hive-stream';
 
@@ -11,6 +13,12 @@ await streamer.registerContract(createGrantRoundsContract());
 ::: tip SQL adapter
 Most built-in contracts persist state in SQL tables and require a SQL-capable adapter (SQLite or PostgreSQL).
 :::
+
+## Options
+
+| Option | Type | Required |
+| --- | --- | --- |
+| `name` | `string` | No |
 
 ## Actions
 

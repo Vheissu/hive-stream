@@ -2,6 +2,8 @@
 
 Subscription plans renewed by transfers or recurrent transfers.
 
+**Category:** commerce
+
 ```ts
 import { createSubscriptionContract } from 'hive-stream';
 
@@ -11,6 +13,12 @@ await streamer.registerContract(createSubscriptionContract());
 ::: tip SQL adapter
 Most built-in contracts persist state in SQL tables and require a SQL-capable adapter (SQLite or PostgreSQL).
 :::
+
+## Options
+
+| Option | Type | Required |
+| --- | --- | --- |
+| `name` | `string` | No |
 
 ## Actions
 

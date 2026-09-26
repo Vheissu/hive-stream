@@ -2,6 +2,8 @@
 
 Reservable listings with paid booking windows and confirmations.
 
+**Category:** commerce
+
 ```ts
 import { createBookingContract } from 'hive-stream';
 
@@ -11,6 +13,12 @@ await streamer.registerContract(createBookingContract());
 ::: tip SQL adapter
 Most built-in contracts persist state in SQL tables and require a SQL-capable adapter (SQLite or PostgreSQL).
 :::
+
+## Options
+
+| Option | Type | Required |
+| --- | --- | --- |
+| `name` | `string` | No |
 
 ## Actions
 
