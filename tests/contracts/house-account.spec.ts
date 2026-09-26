@@ -41,8 +41,7 @@ describe('built-in contract house accounts', () => {
         await streamer.stop();
     });
 
-    // Lotto is covered separately: it never created its SQL tables (fixed next).
-    test.each(factories.filter(([name]) => name !== 'createLottoContract'))('%s falls back to the streamer username', async (_name, factory) => {
+    test.each(factories)('%s falls back to the streamer username', async (_name, factory) => {
         const streamer = await createStreamer('myhouse');
 
         await expect(streamer.registerContract(factory({}))).resolves.toBeUndefined();

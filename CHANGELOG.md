@@ -38,6 +38,7 @@ Upgrading? Read the [migration guide](docs/guide/migrating-to-4.md) ([online](ht
 - `ctx.transaction.operationIndex`, and `ctx.transfer` is now populated for `recurrent_transfer` triggers.
 
 ### 🐛 Fixed
+- `lotto` never created its tables on SQL adapters, so `registerContract()` failed on a fresh SQLite/PostgreSQL database (`no such table: settings`). It now creates `lotto_draws` and `lotto_settings` (entries, winners and fairness proofs stored as JSON) on SQL adapters and keeps the `lottery`/`settings` collections on MongoDB. A test registers every built-in factory on a fresh SQLite database.
 - A crash within 5 seconds of processing a block replayed it and could re-run payouts.
 - PostgreSQL returned `lastBlockNumber` as a string (BIGINT), so resuming did string concatenation on the cursor.
 - Two contract operations in one transaction collided on the adapter's `transfers`/`customJson` primary key, so the second was never dispatched; replays hit the same error.

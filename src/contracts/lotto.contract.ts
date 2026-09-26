@@ -3,7 +3,7 @@ import seedrandom from 'seedrandom';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
 import { Utils } from '../utils';
-import { createFairnessSupport, resolveContractAccount } from './helpers';
+import { createFairnessSupport, initializeTables, resolveContractAccount } from './helpers';
 import { sha256Hex } from '../fairness/sha256';
 import { resolveFairnessOption, type FairDrawProof, type FairnessManager, type FairnessOptions } from '../fairness/manager';
 
@@ -72,6 +72,127 @@ export function createLottoContract(options: LottoContractOptions = {}) {
         adapter: null as any
     };
 
+    /**
+     * Draw storage. Document stores (MongoDB) keep the original `lottery` /
+     * `settings` collections; SQL adapters get namespaced tables with the
+     * entries, winners and fairness proof stored as JSON text.
+     */
+    const isSql = (): boolean => Boolean(state.adapter?.capabilities?.sql);
+
+    const parseJson = (value: any, fallback: any) => {
+        if (value === null || value === undefined || value === '') {
+            return fallback;
+        }
+
+        return typeof value === 'string' ? JSON.parse(value) : value;
+    };
+
+    const toDraw = (row: any) => ({
+        _id: row.draw_id,
+        type: row.type,
+        status: row.status,
+        entries: parseJson(row.entries, []),
+        winners: parseJson(row.winners, undefined),
+        fairness: parseJson(row.fairness, undefined)
+    });
+
+    const store = {
+        async initialize(time: Date): Promise<void> {
+            if (isSql()) {
+                await initializeTables(state.adapter, [
+                    `
+                        CREATE TABLE IF NOT EXISTS lotto_draws (
+                            draw_id TEXT PRIMARY KEY,
+                            contract TEXT NOT NULL,
+                            type TEXT NOT NULL,
+                            status TEXT NOT NULL,
+                            entries TEXT NOT NULL,
+                            winners TEXT,
+                            fairness TEXT,
+                            created_at TEXT NOT NULL,
+                            updated_at TEXT NOT NULL
+                        )
+                    `,
+                    'CREATE INDEX IF NOT EXISTS idx_lotto_draws_active ON lotto_draws (contract, type, status)',
+                    `
+                        CREATE TABLE IF NOT EXISTS lotto_settings (
+                            contract TEXT PRIMARY KEY,
+                            enabled INTEGER NOT NULL,
+                            initiated_at TEXT NOT NULL
+                        )
+                    `
+                ]);
+
+                const existing = await state.adapter.query('SELECT contract FROM lotto_settings WHERE contract = ?', [name]);
+
+                if (!existing?.length) {
+                    await state.adapter.query('INSERT INTO lotto_settings (contract, enabled, initiated_at) VALUES (?, ?, ?)', [name, 1, time.toISOString()]);
+                }
+
+                return;
+            }
+
+            const settings = await state.adapter.findOne(COLLECTION_SETTINGS, {});
+
+            if (!settings) {
+                await state.adapter.insert(COLLECTION_SETTINGS, {
+                    contractInitiated: time,
+                    enabled: true
+                });
+            }
+        },
+
+        async findActive(type: string): Promise<any | null> {
+            if (isSql()) {
+                const rows = await state.adapter.query(
+                    'SELECT * FROM lotto_draws WHERE contract = ? AND type = ? AND status = ? ORDER BY created_at ASC LIMIT 1',
+                    [name, type, 'active']
+                );
+
+                return rows?.[0] ? toDraw(rows[0]) : null;
+            }
+
+            const draws = (await state.adapter.find(COLLECTION_LOTTERY, { status: 'active', type })) || [];
+            return draws[0] ?? null;
+        },
+
+        async insert(draw: { status: string; type: string; entries: any[] }, drawId: string, time: Date): Promise<void> {
+            if (isSql()) {
+                await state.adapter.query(
+                    'INSERT INTO lotto_draws (draw_id, contract, type, status, entries, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    [drawId, name, draw.type, draw.status, JSON.stringify(draw.entries), time.toISOString(), time.toISOString()]
+                );
+                return;
+            }
+
+            await state.adapter.insert(COLLECTION_LOTTERY, draw);
+        },
+
+        async save(draw: any, time: Date): Promise<void> {
+            if (isSql()) {
+                await state.adapter.query(
+                    'UPDATE lotto_draws SET status = ?, entries = ?, winners = ?, fairness = ?, updated_at = ? WHERE draw_id = ?',
+                    [
+                        draw.status,
+                        JSON.stringify(draw.entries ?? []),
+                        draw.winners === undefined ? null : JSON.stringify(draw.winners),
+                        draw.fairness === undefined ? null : JSON.stringify(draw.fairness),
+                        time.toISOString(),
+                        draw._id
+                    ]
+                );
+                return;
+            }
+
+            await state.adapter.replace(COLLECTION_LOTTERY, { _id: draw._id }, draw);
+        }
+    };
+
+    const blockTime = (ctx: any): Date => {
+        const time = ctx?.block?.time;
+        return time ? new Date(time) : new Date();
+    };
+
     const buySchema = z.object({
         type: z.enum(['hourly', 'daily'])
     });
@@ -89,13 +210,13 @@ export function createLottoContract(options: LottoContractOptions = {}) {
     };
 
     const getPreviousUserTicketsForCurrentDrawType = async (type: string, accountName: string): Promise<number> => {
-        const lotto = (await state.adapter.find(COLLECTION_LOTTERY, { status: 'active', type })) || [];
+        const draw = await store.findActive(type);
 
-        if (!lotto[0] || !lotto[0].entries) {
+        if (!draw || !draw.entries) {
             return 0;
         }
 
-        const userEntries = lotto[0].entries.filter((entry: any) => entry.account === accountName);
+        const userEntries = draw.entries.filter((entry: any) => entry.account === accountName);
         return userEntries.length;
     };
 
@@ -145,10 +266,10 @@ export function createLottoContract(options: LottoContractOptions = {}) {
                 // Continue to create the entry — user paid enough for a ticket
             }
 
-            const lotto = (await state.adapter.find(COLLECTION_LOTTERY, { status: 'active', type: payload.type })) || [];
+            const activeDraw = await store.findActive(payload.type);
 
-            if (lotto.length) {
-                const draw = lotto[0];
+            if (activeDraw) {
+                const draw = activeDraw;
 
                 draw.entries.push({
                     account: sender,
@@ -156,7 +277,7 @@ export function createLottoContract(options: LottoContractOptions = {}) {
                     date: new Date()
                 });
 
-                await state.adapter.replace(COLLECTION_LOTTERY, { _id: draw._id }, draw);
+                await store.save(draw, blockTime(ctx));
                 return;
             }
 
@@ -166,7 +287,8 @@ export function createLottoContract(options: LottoContractOptions = {}) {
                 date: new Date()
             }];
 
-            await state.adapter.insert(COLLECTION_LOTTERY, { status: 'active', type: payload.type, entries });
+            const drawId = `${name}:${payload.type}:${ctx.transaction.id}:${ctx.transaction.operationIndex ?? 0}`;
+            await store.insert({ status: 'active', type: payload.type, entries }, drawId, blockTime(ctx));
         }
     };
 
@@ -208,10 +330,9 @@ export function createLottoContract(options: LottoContractOptions = {}) {
     };
 
     const drawHourlyLottery = async (_payload: any, ctx: any): Promise<void> => {
-        const lotto = (await state.adapter.find(COLLECTION_LOTTERY, { status: 'active', type: 'hourly' })) || [];
+        const draw = await store.findActive('hourly');
 
-        if (lotto.length) {
-            const draw = lotto[0];
+        if (draw) {
             const total = draw.entries.length;
 
             if (total < minEntriesHourly) {
@@ -221,7 +342,7 @@ export function createLottoContract(options: LottoContractOptions = {}) {
                 }, []);
 
                 // Mark draw as completed BEFORE refunding to prevent re-draws
-                await state.adapter.replace(COLLECTION_LOTTERY, { _id: draw._id }, { ...draw, status: 'completed' });
+                await store.save({ ...draw, status: 'completed' }, blockTime(ctx));
 
                 await state.streamer.transferHiveTokensMultiple(account, entrants, new BigNumber(cost).toFixed(3), tokenSymbol, '[Refund] The hourly lotto draw did not have enough contestants.');
                 return;
@@ -238,7 +359,7 @@ export function createLottoContract(options: LottoContractOptions = {}) {
             }
 
             // Mark draw as completed BEFORE payouts to prevent re-draws
-            await state.adapter.replace(COLLECTION_LOTTERY, { _id: draw._id }, { ...draw, status: 'completed' });
+            await store.save({ ...draw, status: 'completed' }, blockTime(ctx));
 
             if (account !== feeAccount) {
                 await state.streamer.transferHiveTokens(account, feeAccount, percentageFee.toFixed(3), tokenSymbol, 'percentage fee');
@@ -250,12 +371,12 @@ export function createLottoContract(options: LottoContractOptions = {}) {
             const amountPerWinner = payoutTotal.dividedBy(Math.max(1, winners.length)).toFixed(3, BigNumber.ROUND_DOWN);
 
             if (proof) {
-                await state.adapter.replace(COLLECTION_LOTTERY, { _id: draw._id }, {
+                await store.save({
                     ...draw,
                     status: 'completed',
                     winners: winners.map((winner: any) => winner.account),
                     fairness: proof
-                });
+                }, blockTime(ctx));
             }
 
             if (winners) {
@@ -284,15 +405,14 @@ export function createLottoContract(options: LottoContractOptions = {}) {
     };
 
     const drawDailyLottery = async (_payload: any, ctx: any): Promise<void> => {
-        const lotto = (await state.adapter.find(COLLECTION_LOTTERY, { status: 'active', type: 'daily' })) || [];
+        const draw = await store.findActive('daily');
 
-        if (lotto.length) {
-            const draw = lotto[0];
+        if (draw) {
             const total = draw.entries.length;
 
             if (total < minEntriesDaily) {
                 // Mark draw as completed BEFORE refunding to prevent re-draws
-                await state.adapter.replace(COLLECTION_LOTTERY, { _id: draw._id }, { ...draw, status: 'completed' });
+                await store.save({ ...draw, status: 'completed' }, blockTime(ctx));
 
                 // Use transferHiveTokensMultiple for error isolation (one failure doesn't kill others)
                 const entrants = draw.entries.reduce((arr: string[], entrant: any) => {
@@ -315,7 +435,7 @@ export function createLottoContract(options: LottoContractOptions = {}) {
             }
 
             // Mark draw as completed BEFORE payouts to prevent re-draws
-            await state.adapter.replace(COLLECTION_LOTTERY, { _id: draw._id }, { ...draw, status: 'completed' });
+            await store.save({ ...draw, status: 'completed' }, blockTime(ctx));
 
             if (account !== feeAccount) {
                 await state.streamer.transferHiveTokens(account, feeAccount, percentageFee.toFixed(3), tokenSymbol, 'percentage fee');
@@ -327,12 +447,12 @@ export function createLottoContract(options: LottoContractOptions = {}) {
             const amountPerWinner = payoutTotal.dividedBy(Math.max(1, winners.length)).toFixed(3, BigNumber.ROUND_DOWN);
 
             if (proof) {
-                await state.adapter.replace(COLLECTION_LOTTERY, { _id: draw._id }, {
+                await store.save({
                     ...draw,
                     status: 'completed',
                     winners: winners.map((winner: any) => winner.account),
                     fairness: proof
-                });
+                }, blockTime(ctx));
             }
 
             if (winners) {
@@ -360,14 +480,7 @@ export function createLottoContract(options: LottoContractOptions = {}) {
                 state.streamer = streamer;
                 state.adapter = adapter;
                 await fairSupport.initialize(adapter);
-
-                const settings = await state.adapter.findOne(COLLECTION_SETTINGS, {});
-                if (!settings) {
-                    await state.adapter.insert(COLLECTION_SETTINGS, {
-                        contractInitiated: new Date(),
-                        enabled: true
-                    });
-                }
+                await store.initialize(new Date());
             }
         },
         actions: {

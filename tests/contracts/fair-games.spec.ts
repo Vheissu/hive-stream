@@ -10,7 +10,6 @@ import {
     createRpsContract
 } from '../../src';
 import { verifyOutcome, sha256Hex } from '../../src/client';
-import { createMockAdapter } from '../helpers/mock-adapter';
 import { makeContext } from '../helpers/contract-context';
 
 async function revealProof(manager: FairnessManager, proof: any) {
@@ -136,7 +135,7 @@ describe('provably-fair game modes', () => {
 describe('provably-fair lotto draws', () => {
     test('winners come from a verifiable pick seeded by every entry', async () => {
         const streamer = new Streamer();
-        const adapter = createMockAdapter();
+        const adapter = new SqliteAdapter(':memory:');
         await streamer.registerAdapter(adapter);
 
         const fairness = new FairnessManager({ store: new MemoryFairnessStore() });
@@ -144,17 +143,20 @@ describe('provably-fair lotto draws', () => {
         await streamer.registerContract(contract);
 
         const entries = ['a1', 'b2', 'c3', 'd4', 'e5'].map((account, index) => ({ account, transactionId: `tx-${index}` }));
-        const draw = { _id: 'draw-1', status: 'active', type: 'hourly', entries };
+        await adapter.query(
+            'INSERT INTO lotto_draws (draw_id, contract, type, status, entries, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            ['draw-1', 'fairlotto', 'hourly', 'active', JSON.stringify(entries), '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z']
+        );
 
-        jest.spyOn(adapter, 'find').mockResolvedValue([draw] as any);
-        const replace = jest.spyOn(adapter, 'replace').mockResolvedValue(true as any);
         const multiple = jest.spyOn(streamer, 'transferHiveTokensMultiple').mockResolvedValue(true as any);
         jest.spyOn(streamer, 'transferHiveTokens').mockResolvedValue(true as any);
         jest.spyOn(streamer.getClient().database, 'getAccounts').mockResolvedValue([{ balance: '1000.000 HIVE' }] as any);
 
         await contract.actions.drawHourlyLottery.handler({}, makeContext(streamer, { sender: 'house', trigger: 'time' }));
 
-        const recorded = replace.mock.calls.map((call) => call[2]).find((doc: any) => doc.fairness);
+        const [row] = await adapter.query('SELECT status, winners, fairness FROM lotto_draws WHERE draw_id = ?', ['draw-1']);
+        const recorded = { status: row.status, winners: JSON.parse(row.winners), fairness: JSON.parse(row.fairness) };
+        expect(recorded.status).toBe('completed');
         expect(recorded.winners).toHaveLength(2);
         expect(recorded.fairness.clientSeed).toBe(sha256Hex('tx-0,tx-1,tx-2,tx-3,tx-4'));
 
