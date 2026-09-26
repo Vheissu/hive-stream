@@ -14,12 +14,16 @@ Codex bundle:
 - Source: `codex-skills/hive-stream`
 - Entry file: `codex-skills/hive-stream/SKILL.md`
 
-Both bundles include focused references for:
+Both bundles carry the same references, written for hive-stream 4.x:
 
-- package surface and lifecycle
+- package surface, lifecycle, the testing kit and the browser entry points
+- stream modes, checkpoints, the idempotency ledger, error policy, hooks and guards
 - contracts, triggers, and payload wrappers
+- provably fair randomness for games
 - `flows.*`, `ops.*`, and `money.*`
-- built-in contract factories already exported by `hive-stream`
+- built-in contract factories, including bridge, tournaments, staking pool, limbo and badges
+- shared contract specs and safe call builders
+- upgrading 3.x apps to 4.0
 
 ## What The Skill Covers
 
@@ -31,8 +35,11 @@ Use the skill when building or debugging:
 - scheduled actions with `TimeAction`
 - inbound transfer automation with `flows.*`
 - fluent outbound writes with `ops.*`
+- hooks (`beforeContractAction`, `onError`, `onFork`, ...) and guards (`allowedAssets`, `maxAmount`, `rateLimit`, ...)
+- gambling apps with provably fair outcomes, game tournaments, social tipping, and custody bridges
 - adapter or provider selection
-- apps that should use `HIVE_STREAM_METADATA` as the package source of truth
+- tests written with `hive-stream/testing`
+- apps that should use `HIVE_STREAM_METADATA` or `hive-stream/catalog` as the package source of truth
 
 ## Install For Claude Code
 
@@ -105,9 +112,11 @@ If you installed with symlinks, updating this repo updates the installed skill a
 If you copied the files instead, re-copy after pulling changes:
 
 ```bash
-cp -R ./.claude/skills/hive-stream ~/.claude/skills/hive-stream
-cp -R ./codex-skills/hive-stream "${CODEX_HOME:-$HOME/.codex}/skills/hive-stream"
+cp -R ./.claude/skills/hive-stream/. ~/.claude/skills/hive-stream/
+cp -R ./codex-skills/hive-stream/. "${CODEX_HOME:-$HOME/.codex}/skills/hive-stream/"
 ```
+
+The trailing `/.` copies the contents over the existing install. Without it, `cp -R` nests a second `hive-stream` folder inside the first.
 
 ## Recommended Usage
 
@@ -117,6 +126,9 @@ Prompt with package-level intent rather than raw blockchain primitives. Good exa
 - "Add a `flows.incomingTransfers()` pipeline that burns 5% and forwards the rest."
 - "Register a `TimeAction` that runs a settlement contract every 30 seconds."
 - "Generate a starter app that uses `HIVE_STREAM_METADATA` to scaffold config and routes."
+- "Build a provably fair dice game that refunds bets over 50 HIVE."
+- "Add a weekly tournament for my game where my server submits scores."
+- "Upgrade this 3.x streamer to hive-stream 4."
 
 ## Repo Notes
 

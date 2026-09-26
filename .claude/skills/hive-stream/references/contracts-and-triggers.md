@@ -81,13 +81,15 @@ Action handlers receive `ctx` with:
 - `streamer`
 - `adapter`
 - `config`
-- `block`
-- `transaction`
+- `block` (`number`, `id`, `previousId`, `time`: blockchain time, use it instead of `new Date()` so replays are deterministic)
+- `transaction` (`id`, `operationIndex`; key per-operation records with `operationRecordId(ctx.transaction.id, ctx.transaction.operationIndex)` so multi-op transactions don't collide)
 - `sender`
-- optional `transfer`, `customJson`, or `escrow`
+- optional `transfer` (`from`, `to`, `amount`, `asset`, `rawAmount`, `memo`; also set for `recurrent_transfer`), `customJson`, or `escrow`
 - raw `operation`
 
 Use `ctx.transfer` only when the trigger is transfer-based, and use the raw `operation` only when the higher-level fields are insufficient.
+
+Contract dispatch fires on any transfer carrying a wrapped memo, not only transfers to the app account. Handlers that take payments must check `ctx.transfer.to`.
 
 ## Time Actions
 
@@ -107,13 +109,17 @@ const action = new TimeAction(
 await streamer.registerAction(action);
 ```
 
-The target contract action must use `trigger: 'time'`.
+The target contract action must use `trigger: 'time'`. Due time actions run after each block's operations, measured against the block timestamp. Persisted actions restore in `init()`; registering the same id again is a no-op.
 
 Use `TimeAction.getValidTimeValues()` or `HIVE_STREAM_METADATA.timeAction.validValues` for the current supported schedule strings.
 
 ## Guardrails
 
 - Use `requiresActiveKey: true` for sensitive custom JSON actions.
-- Validate payloads with Zod instead of manual field checks.
+- Validate payloads with zod 4 instead of manual field checks.
+- Use declarative `guards` (`allowedAssets`, `minAmount`, `maxAmount`, `rateLimit`, `allowedSenders`, `paused`) for common checks; they never refund, so keep explicit checks where a refund path matters.
+- Contract hooks: `create`, `destroy`, `beforeAction` (return `false` to veto), `afterAction`, `onError`. See `reliability-and-hooks.md`.
+- Handlers are awaited in order and block the stream while they run.
+- Use money utilities (`streamer.money.*`, BigNumber) for amounts, never floats.
 - Keep contract hooks small and infrastructure-oriented.
 - If a contract needs SQL-only features, document that adapter requirement in the app code.
