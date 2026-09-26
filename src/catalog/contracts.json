@@ -2372,14 +2372,6 @@
             }
           ],
           "description": "Bet by transferring to the house account; wins when the 1-100 roll is below your guess."
-        },
-        {
-          "name": "testauto",
-          "triggers": [
-            "time"
-          ],
-          "requiresActiveKey": false,
-          "payload": null
         }
       ]
     },
@@ -2509,6 +2501,12 @@
           "name": "name",
           "type": "string",
           "required": false
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": false,
+          "description": "Marketplace account that receives `buyNFT` payments and pays sellers and\nroyalties. Defaults to the streamer's configured username."
         }
       ],
       "actions": [

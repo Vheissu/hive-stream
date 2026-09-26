@@ -291,12 +291,7 @@ export function createDiceContract(options: DiceContractOptions = {}) {
                 trigger: 'transfer',
                 description: 'Bet by transferring to the house account; wins when the 1-100 roll is below your guess.'
             }),
-            ...fairSupport.actions,
-            testauto: action(() => {
-                getLogger().debug('[DiceContract] test');
-            }, {
-                trigger: 'time'
-            })
+            ...fairSupport.actions
         }
     });
 }

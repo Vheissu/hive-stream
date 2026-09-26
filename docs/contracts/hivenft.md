@@ -16,9 +16,10 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 
 ## Options
 
-| Option | Type | Required |
-| --- | --- | --- |
-| `name` | `string` | No |
+| Option | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | No |  |
+| `account` | `string` | No | Marketplace account that receives `buyNFT` payments and pays sellers and royalties. Defaults to the streamer's configured username. |
 
 ## Actions
 

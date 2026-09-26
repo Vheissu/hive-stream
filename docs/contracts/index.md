@@ -21,7 +21,7 @@ Hive Stream ships 45 ready-to-register contracts. Every page here is generated f
 | [giftcards](./giftcards) | commerce | 3 | Gift card issuance, redemption, and cancellation. |
 | [grantrounds](./grantrounds) | fundraising | 6 | Matching grant rounds with submissions, donations, and allocations. |
 | [groupbuy](./groupbuy) | commerce | 4 | Threshold-based pooled purchases. |
-| [hivedice](./hivedice) | gambling | 2 | A dice rolling game with configurable win chance and payout multipliers. |
+| [hivedice](./hivedice) | gambling | 1 | A dice rolling game with configurable win chance and payout multipliers. |
 | [hivelotto](./hivelotto) | gambling | 3 | A lottery-style game with scheduled draws. |
 | [hivenft](./hivenft) | assets | 13 | NFT minting, transfers, market listings, and direct peer-to-peer sales. |
 | [hivetoken](./hivetoken) | assets | 5 | App-level token issuance, transfers, and balances. |

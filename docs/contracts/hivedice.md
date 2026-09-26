@@ -47,11 +47,3 @@ Send as a transfer memo:
 ```json
 {"hive_stream":{"contract":"hivedice","action":"roll","payload":{}}}
 ```
-
-### testauto
-
-- **Trigger:** `time`
-
-**Payload**
-
-_No payload validation defined for this action._
