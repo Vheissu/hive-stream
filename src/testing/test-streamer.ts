@@ -1,3 +1,4 @@
+import { PrivateKey } from '@hiveio/dhive';
 import { Streamer } from '../streamer';
 import { ConfigInput, ConfigInterface } from '../config';
 import { AdapterBase } from '../adapters/base.adapter';
@@ -102,6 +103,19 @@ export function hbd(amount: number): string {
     return `${amount.toFixed(3)} HBD`;
 }
 
+// Deterministic throwaway keys so handlers that broadcast work without any
+// setup. The FakeHiveClient records broadcasts and never sends them.
+const DEFAULT_TEST_ACTIVE_KEY = PrivateKey.fromSeed('hive-stream testing kit active').toString();
+const DEFAULT_TEST_POSTING_KEY = PrivateKey.fromSeed('hive-stream testing kit posting').toString();
+
+function hasActiveKey(options: TestStreamerOptions): boolean {
+    return Boolean(options.ACTIVE_KEY || options.activeKey);
+}
+
+function hasPostingKey(options: TestStreamerOptions): boolean {
+    return Boolean(options.POSTING_KEY || options.postingKey);
+}
+
 function hasUsername(options: TestStreamerOptions): boolean {
     return Boolean(options.USERNAME || options.username || options.account || options.hiveAccount);
 }
@@ -135,6 +149,19 @@ export class TestStreamer {
         if (!hasUsername(options)) {
             streamerConfig.username = 'testaccount';
         }
+
+        if (!options.env && !hasActiveKey(options)) {
+            streamerConfig.activeKey = DEFAULT_TEST_ACTIVE_KEY;
+        }
+
+        if (!options.env && !hasPostingKey(options)) {
+            streamerConfig.postingKey = DEFAULT_TEST_POSTING_KEY;
+        }
+
+        // Contracts that re-read their transaction (dice, coinflip, lotto, ...)
+        // call client.database.getBlock; answer from the simulated chain.
+        // A later onCall('get_block', ...) from the test still takes precedence.
+        this.client.onCall('condenser_api.get_block', ([blockNumber]: any[]) => this.provider.getBlock(Number(blockNumber)));
 
         this.streamer = new Streamer({
             ...streamerConfig,

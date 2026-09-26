@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { action, defineContract, TimeAction } from '../src';
 import { createTipJarContract } from '../src/contracts/tipjar.contract';
+import { createDiceContract } from '../src/contracts/dice.contract';
 import {
     createTestStreamer,
     FakeHiveClient,
@@ -302,6 +303,19 @@ describe('TestStreamer', () => {
 
         const state = await ts.adapter.loadState();
         expect(state.lastBlockNumber).toBe(ts.headBlockNumber);
+    });
+
+    test('runs built-in games that re-read their transaction, with no keys configured', async () => {
+        ts = await createTestStreamer({ username: 'myhouse' });
+        ts.client.setAccount('myhouse', { balance: '1000.000 HIVE' });
+        await ts.streamer.registerContract(createDiceContract({ account: 'myhouse', fairness: true }));
+
+        await ts.contractTransfer({ from: 'alice', amount: '5.000 HIVE', contract: 'hivedice', action: 'roll', payload: { roll: 50 } });
+
+        // Win or lose, the house answers the bet with exactly one transfer.
+        expect(ts.outgoingTransfers).toHaveLength(1);
+        expect(ts.outgoingTransfers[0]).toMatchObject({ from: 'myhouse', to: 'alice' });
+        expect(ts.outgoingTransfers[0].memo).toMatch(/Fair: seed #0 nonce 0/);
     });
 
     test('transfer rejects malformed amounts with a helpful error', async () => {
