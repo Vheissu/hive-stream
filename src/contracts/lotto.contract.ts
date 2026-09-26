@@ -3,6 +3,9 @@ import seedrandom from 'seedrandom';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
 import { Utils } from '../utils';
+import { createFairnessSupport } from './helpers';
+import { sha256Hex } from '../fairness/sha256';
+import { resolveFairnessOption, type FairDrawProof, type FairnessManager, type FairnessOptions } from '../fairness/manager';
 
 const DEFAULT_NAME = 'hivelotto';
 const DEFAULT_ACCOUNT = 'beggars';
@@ -40,6 +43,12 @@ export interface LottoContractOptions {
     dailyWinnersPick?: number;
     maxTicketsPerUser?: number;
     feePercentage?: number;
+    /**
+     * Provably-fair winner selection (recommended). The client seed is the
+     * sha256 of every entry's transaction id, so all entrants contribute
+     * entropy. When omitted the legacy block-id RNG is used.
+     */
+    fairness?: FairnessManager | FairnessOptions | boolean;
 }
 
 export function createLottoContract(options: LottoContractOptions = {}) {
@@ -56,6 +65,8 @@ export function createLottoContract(options: LottoContractOptions = {}) {
     const dailyWinnersPick = options.dailyWinnersPick ?? DEFAULT_DAILY_WINNERS_PICK;
     const maxTicketsPerUser = options.maxTicketsPerUser ?? DEFAULT_MAX_TICKETS_PER_USER;
     const feePercentage = options.feePercentage ?? DEFAULT_PERCENTAGE;
+    const fairSupport = createFairnessSupport(name, account, resolveFairnessOption(options.fairness));
+    const fairness = fairSupport.fairness;
 
     const state = {
         streamer: null as any,
@@ -160,7 +171,21 @@ export function createLottoContract(options: LottoContractOptions = {}) {
         }
     };
 
-    const getWinners = async (count: number, entries: any[], ctx: any): Promise<any[]> => {
+    const getWinners = async (count: number, entries: any[], ctx: any): Promise<{ winners: any[]; proof: FairDrawProof | null }> => {
+        if (fairness) {
+            const pickCount = Math.min(count, entries.length);
+            const clientSeed = sha256Hex(entries.map((entry: any) => String(entry.transactionId ?? '')).join(','));
+            const draw = await fairness.draw({ type: 'pick', count: pickCount, total: entries.length }, {
+                clientSeed,
+                blockId: ctx.block.id
+            });
+
+            return {
+                winners: draw.outcome.map((index: number) => entries[index]),
+                proof: draw.proof
+            };
+        }
+
         const winners: any[] = [];
         const selectedIndices = new Set<number>();
         const maxEntries = Math.min(count, entries.length);
@@ -180,7 +205,7 @@ export function createLottoContract(options: LottoContractOptions = {}) {
             }
         }
 
-        return winners;
+        return { winners, proof: null };
     };
 
     const drawHourlyLottery = async (_payload: any, ctx: any): Promise<void> => {
@@ -221,7 +246,16 @@ export function createLottoContract(options: LottoContractOptions = {}) {
                 await state.streamer.transferHiveTokens(account, feeAccount, percentageFee.toFixed(3), tokenSymbol, 'percentage fee');
             }
 
-            const winners = await getWinners(hourlyWinnersPick, draw.entries, ctx);
+            const { winners, proof } = await getWinners(hourlyWinnersPick, draw.entries, ctx);
+
+            if (proof) {
+                await state.adapter.replace(COLLECTION_LOTTERY, { _id: draw._id }, {
+                    ...draw,
+                    status: 'completed',
+                    winners: winners.map((winner: any) => winner.account),
+                    fairness: proof
+                });
+            }
 
             if (winners) {
                 const winnerStrings = winners.reduce((arr: string[], winner: any) => {
@@ -287,7 +321,16 @@ export function createLottoContract(options: LottoContractOptions = {}) {
                 await state.streamer.transferHiveTokens(account, feeAccount, percentageFee.toFixed(3), tokenSymbol, 'percentage fee');
             }
 
-            const winners = await getWinners(dailyWinnersPick, draw.entries, ctx);
+            const { winners, proof } = await getWinners(dailyWinnersPick, draw.entries, ctx);
+
+            if (proof) {
+                await state.adapter.replace(COLLECTION_LOTTERY, { _id: draw._id }, {
+                    ...draw,
+                    status: 'completed',
+                    winners: winners.map((winner: any) => winner.account),
+                    fairness: proof
+                });
+            }
 
             if (winners) {
                 const winnerStrings = winners.reduce((arr: string[], winner: any) => {
@@ -310,6 +353,7 @@ export function createLottoContract(options: LottoContractOptions = {}) {
             create: async ({ streamer, adapter }) => {
                 state.streamer = streamer;
                 state.adapter = adapter;
+                await fairSupport.initialize(adapter);
 
                 const settings = await state.adapter.findOne(COLLECTION_SETTINGS, {});
                 if (!settings) {
@@ -323,14 +367,16 @@ export function createLottoContract(options: LottoContractOptions = {}) {
         actions: {
             buy: action(buy, {
                 schema: buySchema,
-                trigger: 'transfer'
+                trigger: 'transfer',
+                description: 'Buy a ticket for the hourly or daily draw by transferring the ticket cost.'
             }),
             drawHourlyLottery: action(drawHourlyLottery, {
                 trigger: 'time'
             }),
             drawDailyLottery: action(drawDailyLottery, {
                 trigger: 'time'
-            })
+            }),
+            ...fairSupport.actions
         }
     });
 }

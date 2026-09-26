@@ -16,18 +16,21 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 
 ## Options
 
-| Option | Type | Required |
-| --- | --- | --- |
-| `name` | `string` | No |
-| `account` | `string` | No |
-| `tokenSymbol` | `string` | No |
-| `validCurrencies` | `string[]` | No |
-| `minAmount` | `number` | No |
-| `maxAmount` | `number` | No |
+| Option | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | No |  |
+| `account` | `string` | No |  |
+| `tokenSymbol` | `string` | No |  |
+| `validCurrencies` | `string[]` | No |  |
+| `minAmount` | `number` | No |  |
+| `maxAmount` | `number` | No |  |
+| `fairness` | `FairnessManager \| FairnessOptions \| boolean` | No | Provably-fair commit-reveal draws (recommended). When omitted the legacy RNG (block ids plus an uncommitted per-bet server seed) is used. |
 
 ## Actions
 
 ### flip
+
+Bet on heads or tails by transferring to the house account; winners receive 2x.
 
 - **Trigger:** `transfer`
 

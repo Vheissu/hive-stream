@@ -3,7 +3,8 @@ import BigNumber from '../bignumber';
 import seedrandom from 'seedrandom';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
-import { formatBlockchainAmount, parseBlockchainAmount } from './helpers';
+import { createFairnessSupport, formatBlockchainAmount, formatFairnessMemo, parseBlockchainAmount } from './helpers';
+import { resolveFairnessOption, type FairDrawProof, type FairnessManager, type FairnessOptions } from '../fairness/manager';
 
 const DEFAULT_NAME = 'hivedice';
 const DEFAULT_ACCOUNT = 'beggars';
@@ -12,7 +13,8 @@ const DEFAULT_HOUSE_EDGE = 0.05;
 const DEFAULT_MIN_BET = 1;
 const DEFAULT_MAX_BET = 10;
 
-// Provably Fair Random Number Generator
+// Legacy block-derived RNG. Biasable by the block producer; prefer the
+// `fairness` option (commit-reveal) for real-money games.
 const rng = (previousBlockId: string, blockId: string, transactionId: string): number => {
     if (!previousBlockId || !blockId || !transactionId) {
         throw new Error('Invalid RNG parameters');
@@ -36,6 +38,12 @@ export interface DiceContractOptions {
     houseEdge?: number;
     minBet?: number;
     maxBet?: number;
+    /**
+     * Provably-fair commit-reveal draws (recommended). `true` uses defaults;
+     * pass options or a shared FairnessManager to customise. When omitted the
+     * legacy block-id RNG is used for backwards compatibility.
+     */
+    fairness?: FairnessManager | FairnessOptions | boolean;
 }
 
 export function createDiceContract(options: DiceContractOptions = {}) {
@@ -46,6 +54,8 @@ export function createDiceContract(options: DiceContractOptions = {}) {
     const minBet = options.minBet ?? DEFAULT_MIN_BET;
     const maxBet = options.maxBet ?? DEFAULT_MAX_BET;
     const validCurrencies = options.validCurrencies || [tokenSymbol];
+    const fairSupport = createFairnessSupport(name, account, resolveFairnessOption(options.fairness));
+    const fairness = fairSupport.fairness;
 
     const state = {
         streamer: null as any,
@@ -58,7 +68,8 @@ export function createDiceContract(options: DiceContractOptions = {}) {
     };
 
     const rollSchema = z.object({
-        roll: z.number().int().min(2).max(96)
+        roll: z.number().int().min(2).max(96),
+        seed: z.string().max(64).optional()
     });
 
     const getBalance = async (): Promise<BigNumber> => {
@@ -112,7 +123,7 @@ export function createDiceContract(options: DiceContractOptions = {}) {
         state.processingQueue = false;
     };
 
-    const processRoll = async (payload: { roll: number }, ctx: any): Promise<void> => {
+    const processRoll = async (payload: { roll: number; seed?: string }, ctx: any): Promise<void> => {
         if (!ctx.transfer) {
             throw new Error('Transfer context required for roll');
         }
@@ -168,9 +179,41 @@ export function createDiceContract(options: DiceContractOptions = {}) {
                 state.pendingPayouts = state.pendingPayouts.plus(tokensWonBN);
                 let payoutIncremented = true;
 
-                const random = rng(ctx.block.previousId, ctx.block.id, ctx.transaction.id);
-                const winningMemo = `You won ${tokensWon} ${tokenSymbol}. Roll: ${random}, Your guess: ${roll}`;
-                const losingMemo = `You lost ${formatBlockchainAmount(amountParsed)} ${tokenSymbol}. Roll: ${random}, Your guess: ${roll}`;
+                let random: number;
+                let proof: FairDrawProof | null = null;
+
+                if (fairness) {
+                    const draw = await fairness.draw({ type: 'dice', sides: 100 }, {
+                        clientSeed: payload.seed || sender,
+                        blockId: ctx.block.id
+                    });
+                    random = draw.outcome;
+                    proof = draw.proof;
+                } else {
+                    random = rng(ctx.block.previousId, ctx.block.id, ctx.transaction.id);
+                }
+
+                const fairMemo = formatFairnessMemo(proof);
+                const winningMemo = `You won ${tokensWon} ${tokenSymbol}. Roll: ${random}, Your guess: ${roll}${fairMemo}`;
+                const losingMemo = `You lost ${formatBlockchainAmount(amountParsed)} ${tokenSymbol}. Roll: ${random}, Your guess: ${roll}${fairMemo}`;
+
+                if (proof && state.adapter?.addEvent) {
+                    await state.adapter.addEvent(new Date(), name, 'roll', payload, {
+                        action: 'dice_result',
+                        data: {
+                            player: sender,
+                            guess: roll,
+                            roll: random,
+                            result: random < roll ? 'win' : 'lose',
+                            amount: formatBlockchainAmount(amountParsed),
+                            payout: random < roll ? tokensWon : '0',
+                            asset: amountCurrency,
+                            transactionId: ctx.transaction.id,
+                            fairness: proof,
+                            outcomeSpec: { type: 'dice', sides: 100 }
+                        }
+                    });
+                }
 
                 try {
                     if (random < roll) {
@@ -212,7 +255,7 @@ export function createDiceContract(options: DiceContractOptions = {}) {
         }
     };
 
-    const roll = async (payload: { roll: number }, ctx: any): Promise<void> => {
+    const roll = async (payload: { roll: number; seed?: string }, ctx: any): Promise<void> => {
         return new Promise<void>((resolve, reject) => {
             state.betQueue.push(async () => {
                 try {
@@ -230,9 +273,10 @@ export function createDiceContract(options: DiceContractOptions = {}) {
     return defineContract({
         name,
         hooks: {
-            create: ({ streamer, adapter }) => {
+            create: async ({ streamer, adapter }) => {
                 state.streamer = streamer;
                 state.adapter = adapter;
+                await fairSupport.initialize(adapter);
             },
             destroy: () => {
                 state.betQueue = [];
@@ -242,8 +286,10 @@ export function createDiceContract(options: DiceContractOptions = {}) {
         actions: {
             roll: action(roll, {
                 schema: rollSchema,
-                trigger: 'transfer'
+                trigger: 'transfer',
+                description: 'Bet by transferring to the house account; wins when the 1-100 roll is below your guess.'
             }),
+            ...fairSupport.actions,
             testauto: action(() => {
                 getLogger().debug('[DiceContract] test');
             }, {

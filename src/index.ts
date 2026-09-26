@@ -84,3 +84,4 @@ export type {
     SupportedCrypto,
     SupportedFiat
 } from './types/rates';
+export * from './fairness/manager';

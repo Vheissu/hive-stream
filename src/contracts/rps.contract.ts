@@ -4,7 +4,8 @@ import seedrandom from 'seedrandom';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
-import { formatBlockchainAmount, parseBlockchainAmount } from './helpers';
+import { createFairnessSupport, formatBlockchainAmount, formatFairnessMemo, parseBlockchainAmount } from './helpers';
+import { resolveFairnessOption, type FairDrawProof, type FairnessManager, type FairnessOptions } from '../fairness/manager';
 
 const DEFAULT_NAME = 'rps';
 const DEFAULT_ACCOUNT = 'beggars';
@@ -32,6 +33,11 @@ export interface RpsContractOptions {
     validCurrencies?: string[];
     minAmount?: number;
     maxAmount?: number;
+    /**
+     * Provably-fair commit-reveal draws (recommended). When omitted the legacy
+     * RNG (block ids plus an uncommitted per-bet server seed) is used.
+     */
+    fairness?: FairnessManager | FairnessOptions | boolean;
 }
 
 export function createRpsContract(options: RpsContractOptions = {}) {
@@ -41,6 +47,8 @@ export function createRpsContract(options: RpsContractOptions = {}) {
     const validCurrencies = options.validCurrencies || [tokenSymbol];
     const minAmount = options.minAmount ?? DEFAULT_MIN_AMOUNT;
     const maxAmount = options.maxAmount ?? DEFAULT_MAX_AMOUNT;
+    const fairSupport = createFairnessSupport(name, account, resolveFairnessOption(options.fairness));
+    const fairness = fairSupport.fairness;
 
     const state = {
         streamer: null as any,
@@ -54,7 +62,7 @@ export function createRpsContract(options: RpsContractOptions = {}) {
 
     const playSchema = z.object({
         move: z.enum(MOVES),
-        seed: z.string().optional()
+        seed: z.string().max(64).optional()
     });
 
     const getBalance = async (): Promise<BigNumber> => {
@@ -184,8 +192,23 @@ export function createRpsContract(options: RpsContractOptions = {}) {
                 let payoutIncremented = true;
 
                 try {
-                    const serverSeed = randomUUID();
-                    const serverMove = rng(ctx.block.previousId, ctx.block.id, ctx.transaction.id, serverSeed, payload.seed ?? '');
+                    let serverMove: 'rock' | 'paper' | 'scissors';
+                    let serverSeed: string | null = null;
+                    let proof: FairDrawProof | null = null;
+
+                    if (fairness) {
+                        const draw = await fairness.draw({ type: 'int', min: 0, max: 2 }, {
+                            clientSeed: payload.seed || sender,
+                            blockId: ctx.block.id
+                        });
+                        serverMove = MOVES[draw.outcome];
+                        proof = draw.proof;
+                    } else {
+                        serverSeed = randomUUID();
+                        serverMove = rng(ctx.block.previousId, ctx.block.id, ctx.transaction.id, serverSeed, payload.seed ?? '');
+                    }
+
+                    const seedMemo = proof ? formatFairnessMemo(proof) : ` | Seed: ${serverSeed}`;
 
                     let result: 'win' | 'lose' | 'tie' = 'lose';
                     if (serverMove === payload.move) {
@@ -200,7 +223,9 @@ export function createRpsContract(options: RpsContractOptions = {}) {
                             player: sender,
                             playerMove: payload.move,
                             serverMove,
-                            serverSeed,
+                            ...(proof
+                                ? { fairness: proof, outcomeSpec: { type: 'int', min: 0, max: 2 } }
+                                : { serverSeed }),
                             result,
                             blockId: ctx.block.id,
                             transactionId: ctx.transaction.id
@@ -208,13 +233,13 @@ export function createRpsContract(options: RpsContractOptions = {}) {
                     });
 
                     if (result === 'win') {
-                        await state.streamer.transferHiveTokens(account, sender, formatBlockchainAmount(potentialPayout), parsedAmount.asset, `[Winner] | You: ${payload.move} | Server: ${serverMove} | Seed: ${serverSeed}`);
+                        await state.streamer.transferHiveTokens(account, sender, formatBlockchainAmount(potentialPayout), parsedAmount.asset, `[Winner] | You: ${payload.move} | Server: ${serverMove}${seedMemo}`);
                         debitCachedBalance(potentialPayout);
                     } else if (result === 'tie') {
-                        await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, `[Tie] | You: ${payload.move} | Server: ${serverMove} | Seed: ${serverSeed}`);
+                        await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, `[Tie] | You: ${payload.move} | Server: ${serverMove}${seedMemo}`);
                         debitCachedBalance(amountParsed);
                     } else {
-                        await state.streamer.transferHiveTokens(account, sender, '0.001', parsedAmount.asset, `[Lost] | You: ${payload.move} | Server: ${serverMove} | Seed: ${serverSeed}`);
+                        await state.streamer.transferHiveTokens(account, sender, '0.001', parsedAmount.asset, `[Lost] | You: ${payload.move} | Server: ${serverMove}${seedMemo}`);
                         debitCachedBalance(new BigNumber('0.001'));
                     }
                 } finally {
@@ -266,16 +291,19 @@ export function createRpsContract(options: RpsContractOptions = {}) {
     return defineContract({
         name,
         hooks: {
-            create: ({ streamer, adapter }) => {
+            create: async ({ streamer, adapter }) => {
                 state.streamer = streamer;
                 state.adapter = adapter;
+                await fairSupport.initialize(adapter);
             }
         },
         actions: {
             play: action(play, {
                 schema: playSchema,
-                trigger: 'transfer'
-            })
+                trigger: 'transfer',
+                description: 'Play rock-paper-scissors against the house by transferring a wager; ties are refunded.'
+            }),
+            ...fairSupport.actions
         }
     });
 }

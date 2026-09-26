@@ -728,6 +728,12 @@
           "name": "maxAmount",
           "type": "number",
           "required": false
+        },
+        {
+          "name": "fairness",
+          "type": "FairnessManager | FairnessOptions | boolean",
+          "required": false,
+          "description": "Provably-fair commit-reveal draws (recommended). When omitted the legacy\nRNG (block ids plus an uncommitted per-bet server seed) is used."
         }
       ],
       "actions": [
@@ -752,7 +758,8 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "description": "Bet on heads or tails by transferring to the house account; winners receive 2x."
         }
       ]
     },
@@ -1891,6 +1898,12 @@
           "name": "maxBet",
           "type": "number",
           "required": false
+        },
+        {
+          "name": "fairness",
+          "type": "FairnessManager | FairnessOptions | boolean",
+          "required": false,
+          "description": "Provably-fair commit-reveal draws (recommended). `true` uses defaults;\npass options or a shared FairnessManager to customise. When omitted the\nlegacy block-id RNG is used for backwards compatibility."
         }
       ],
       "actions": [
@@ -1905,8 +1918,14 @@
               "name": "roll",
               "type": "number",
               "required": true
+            },
+            {
+              "name": "seed",
+              "type": "string",
+              "required": false
             }
-          ]
+          ],
+          "description": "Bet by transferring to the house account; wins when the 1-100 roll is below your guess."
         },
         {
           "name": "testauto",
@@ -1988,6 +2007,12 @@
           "name": "feePercentage",
           "type": "number",
           "required": false
+        },
+        {
+          "name": "fairness",
+          "type": "FairnessManager | FairnessOptions | boolean",
+          "required": false,
+          "description": "Provably-fair winner selection (recommended). The client seed is the\nsha256 of every entry's transaction id, so all entrants contribute\nentropy. When omitted the legacy block-id RNG is used."
         }
       ],
       "actions": [
@@ -2007,7 +2032,8 @@
                 "daily"
               ]
             }
-          ]
+          ],
+          "description": "Buy a ticket for the hourly or daily draw by transferring the ticket cost."
         },
         {
           "name": "drawHourlyLottery",
@@ -3973,6 +3999,12 @@
           "name": "maxAmount",
           "type": "number",
           "required": false
+        },
+        {
+          "name": "fairness",
+          "type": "FairnessManager | FairnessOptions | boolean",
+          "required": false,
+          "description": "Provably-fair commit-reveal draws (recommended). When omitted the legacy\nRNG (block ids plus an uncommitted per-bet server seed) is used."
         }
       ],
       "actions": [
@@ -4006,7 +4038,8 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "description": "Place a single-zero roulette bet by transferring to the house account."
         }
       ]
     },
@@ -4045,6 +4078,12 @@
           "name": "maxAmount",
           "type": "number",
           "required": false
+        },
+        {
+          "name": "fairness",
+          "type": "FairnessManager | FairnessOptions | boolean",
+          "required": false,
+          "description": "Provably-fair commit-reveal draws (recommended). When omitted the legacy\nRNG (block ids plus an uncommitted per-bet server seed) is used."
         }
       ],
       "actions": [
@@ -4070,7 +4109,8 @@
               "type": "string",
               "required": false
             }
-          ]
+          ],
+          "description": "Play rock-paper-scissors against the house by transferring a wager; ties are refunded."
         }
       ]
     },

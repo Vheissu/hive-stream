@@ -2,6 +2,8 @@ import BigNumber from '../bignumber';
 import { z } from 'zod';
 import type { ContractContext } from '../types/hive-stream';
 import { Utils } from '../utils';
+import { action } from './contract';
+import type { FairDrawProof, FairnessManager } from '../fairness/manager';
 
 export const amountSchema = z.string().regex(/^\d+(?:\.\d{1,8})?$/, 'Invalid amount');
 export const identifierSchema = z.string().min(1).max(80).regex(/^[a-zA-Z0-9:_-]+$/, 'Invalid identifier');
@@ -172,4 +174,51 @@ export function parseBlockchainAmount(rawAmount: string) {
 
 export function formatBlockchainAmount(value: string | number | BigNumber, precision: number = 3): string {
     return Utils.formatAmount(value, precision);
+}
+
+/**
+ * Shared wiring for games that support provably-fair draws: initialises the
+ * manager in the contract's create hook and exposes a `rotateSeed` action the
+ * house account can call to reveal the current server seed.
+ */
+export function createFairnessSupport(contractName: string, houseAccount: string, fairness: FairnessManager | null) {
+    const initialize = async (adapter: any): Promise<void> => {
+        if (fairness) {
+            await fairness.init({ adapter, scope: contractName });
+        }
+    };
+
+    const rotateSeedSchema = z.object({});
+
+    const actions = fairness
+        ? {
+            rotateSeed: action(async (_payload: Record<string, never>, ctx: ContractContext) => {
+                if (ctx.trigger !== 'time' && ctx.sender !== houseAccount) {
+                    throw new Error(`Only ${houseAccount} can rotate the server seed`);
+                }
+
+                const rotation = await fairness.rotate();
+
+                await emitContractEvent(ctx.adapter, contractName, 'rotateSeed', {}, {
+                    action: 'fairness_seed_rotated',
+                    data: rotation
+                });
+            }, {
+                schema: rotateSeedSchema,
+                trigger: ['custom_json', 'time'],
+                requiresActiveKey: true,
+                description: 'Reveal the current server seed and commit to a new one (house account only).'
+            })
+        }
+        : {};
+
+    return { fairness, initialize, actions };
+}
+
+export function formatFairnessMemo(proof: FairDrawProof | null | undefined): string {
+    if (!proof) {
+        return '';
+    }
+
+    return ` | Fair: seed #${proof.seedIndex} nonce ${proof.nonce} commit ${proof.serverSeedHash}`;
 }

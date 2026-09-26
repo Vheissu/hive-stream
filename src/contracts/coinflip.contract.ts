@@ -4,7 +4,8 @@ import seedrandom from 'seedrandom';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
-import { formatBlockchainAmount, parseBlockchainAmount } from './helpers';
+import { createFairnessSupport, formatBlockchainAmount, formatFairnessMemo, parseBlockchainAmount } from './helpers';
+import { resolveFairnessOption, type FairDrawProof, type FairnessManager, type FairnessOptions } from '../fairness/manager';
 
 const DEFAULT_NAME = 'coinflip';
 const DEFAULT_ACCOUNT = 'beggars';
@@ -34,6 +35,11 @@ export interface CoinflipContractOptions {
     validCurrencies?: string[];
     minAmount?: number;
     maxAmount?: number;
+    /**
+     * Provably-fair commit-reveal draws (recommended). When omitted the legacy
+     * RNG (block ids plus an uncommitted per-bet server seed) is used.
+     */
+    fairness?: FairnessManager | FairnessOptions | boolean;
 }
 
 export function createCoinflipContract(options: CoinflipContractOptions = {}) {
@@ -43,6 +49,8 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
     const validCurrencies = options.validCurrencies || [tokenSymbol];
     const minAmount = options.minAmount ?? DEFAULT_MIN_AMOUNT;
     const maxAmount = options.maxAmount ?? DEFAULT_MAX_AMOUNT;
+    const fairSupport = createFairnessSupport(name, account, resolveFairnessOption(options.fairness));
+    const fairness = fairSupport.fairness;
 
     const state = {
         streamer: null as any,
@@ -56,7 +64,7 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
 
     const flipSchema = z.object({
         guess: z.enum(['heads', 'tails']),
-        seed: z.string().optional()
+        seed: z.string().max(64).optional()
     });
 
     const getBalance = async (): Promise<BigNumber> => {
@@ -164,28 +172,50 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
                 let payoutIncremented = true;
 
                 try {
-                    const serverSeed = randomUUID();
-                    if (!serverSeed || typeof serverSeed !== 'string') {
-                        throw new Error('Failed to generate server seed');
+                    let generatedGuess: 'heads' | 'tails';
+                    let serverSeed: string | null = null;
+                    let proof: FairDrawProof | null = null;
+
+                    if (fairness) {
+                        const draw = await fairness.draw({ type: 'coin' }, {
+                            clientSeed: payload.seed || sender,
+                            blockId: ctx.block.id
+                        });
+                        generatedGuess = draw.outcome;
+                        proof = draw.proof;
+                    } else {
+                        serverSeed = randomUUID();
+                        generatedGuess = rng(ctx.block.previousId, ctx.block.id, ctx.transaction.id, serverSeed, payload.seed ?? '');
                     }
 
-                    const generatedGuess = rng(ctx.block.previousId, ctx.block.id, ctx.transaction.id, serverSeed, payload.seed ?? '');
+                    const userWon = generatedGuess === payload.guess;
+                    const eventData: Record<string, any> = {
+                        guess: payload.guess,
+                        previousBlockId: ctx.block.previousId,
+                        blockId: ctx.block.id,
+                        transactionId: ctx.transaction.id,
+                        userWon: userWon ? 'true' : 'false'
+                    };
 
-                    if (generatedGuess === payload.guess) {
+                    if (proof) {
+                        eventData.player = sender;
+                        eventData.result = generatedGuess;
+                        eventData.fairness = proof;
+                        eventData.outcomeSpec = { type: 'coin' };
+                    } else {
+                        eventData.serverSeed = serverSeed;
+                    }
+
+                    if (userWon) {
                         await state.adapter.addEvent(new Date(), name, 'flip', payload, {
                             action: 'transfer',
-                            data: {
-                                date: new Date(),
-                                guess: payload.guess,
-                                serverSeed,
-                                previousBlockId: ctx.block.previousId,
-                                blockId: ctx.block.id,
-                                transactionId: ctx.transaction.id,
-                                userWon: 'true'
-                            }
+                            data: { date: new Date(), ...eventData }
                         });
 
-                        await state.streamer.transferHiveTokens(account, sender, formatBlockchainAmount(potentialPayout), parsedAmount.asset, `[Winner] | Guess: ${payload.guess} | Server Roll: ${generatedGuess} | Previous block id: ${ctx.block.previousId} | BlockID: ${ctx.block.id} | Trx ID: ${ctx.transaction.id} | Server Seed: ${serverSeed}`);
+                        const winMemo = proof
+                            ? `[Winner] | Guess: ${payload.guess} | Server Roll: ${generatedGuess}${formatFairnessMemo(proof)}`
+                            : `[Winner] | Guess: ${payload.guess} | Server Roll: ${generatedGuess} | Previous block id: ${ctx.block.previousId} | BlockID: ${ctx.block.id} | Trx ID: ${ctx.transaction.id} | Server Seed: ${serverSeed}`;
+                        await state.streamer.transferHiveTokens(account, sender, formatBlockchainAmount(potentialPayout), parsedAmount.asset, winMemo);
                         // Invalidate balance cache after payout
                         state.balanceCache = null;
                         return;
@@ -193,17 +223,13 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
 
                     await state.adapter.addEvent(new Date(), name, 'flip', payload, {
                         action: 'transfer',
-                        data: {
-                            guess: payload.guess,
-                            serverSeed,
-                            previousBlockId: ctx.block.previousId,
-                            blockId: ctx.block.id,
-                            transactionId: ctx.transaction.id,
-                            userWon: 'false'
-                        }
+                        data: eventData
                     });
 
-                    await state.streamer.transferHiveTokens(account, sender, '0.001', parsedAmount.asset, `[Lost] | Guess: ${payload.guess} | Server Roll: ${generatedGuess} | Previous block id: ${ctx.block.previousId} | BlockID: ${ctx.block.id} | Trx ID: ${ctx.transaction.id} | Server Seed: ${serverSeed}`);
+                    const loseMemo = proof
+                        ? `[Lost] | Guess: ${payload.guess} | Server Roll: ${generatedGuess}${formatFairnessMemo(proof)}`
+                        : `[Lost] | Guess: ${payload.guess} | Server Roll: ${generatedGuess} | Previous block id: ${ctx.block.previousId} | BlockID: ${ctx.block.id} | Trx ID: ${ctx.transaction.id} | Server Seed: ${serverSeed}`;
+                    await state.streamer.transferHiveTokens(account, sender, '0.001', parsedAmount.asset, loseMemo);
                 } finally {
                     if (payoutIncremented) {
                         state.pendingPayouts = state.pendingPayouts.minus(potentialPayout);
@@ -254,9 +280,10 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
     return defineContract({
         name,
         hooks: {
-            create: ({ streamer, adapter }) => {
+            create: async ({ streamer, adapter }) => {
                 state.streamer = streamer;
                 state.adapter = adapter;
+                await fairSupport.initialize(adapter);
             },
             destroy: () => {
                 state.betQueue = [];
@@ -266,8 +293,10 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
         actions: {
             flip: action(flip, {
                 schema: flipSchema,
-                trigger: 'transfer'
-            })
+                trigger: 'transfer',
+                description: 'Bet on heads or tails by transferring to the house account; winners receive 2x.'
+            }),
+            ...fairSupport.actions
         }
     });
 }

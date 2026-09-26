@@ -4,7 +4,8 @@ import seedrandom from 'seedrandom';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
-import { formatBlockchainAmount, parseBlockchainAmount } from './helpers';
+import { createFairnessSupport, formatBlockchainAmount, formatFairnessMemo, parseBlockchainAmount } from './helpers';
+import { resolveFairnessOption, type FairDrawProof, type FairnessManager, type FairnessOptions } from '../fairness/manager';
 
 const DEFAULT_NAME = 'roulette';
 const DEFAULT_ACCOUNT = 'beggars';
@@ -36,6 +37,11 @@ export interface RouletteContractOptions {
     validCurrencies?: string[];
     minAmount?: number;
     maxAmount?: number;
+    /**
+     * Provably-fair commit-reveal draws (recommended). When omitted the legacy
+     * RNG (block ids plus an uncommitted per-bet server seed) is used.
+     */
+    fairness?: FairnessManager | FairnessOptions | boolean;
 }
 
 function rng(previousBlockId: string, blockId: string, transactionId: string, serverSeed: string, clientSeed = ''): number {
@@ -185,7 +191,7 @@ function getSpinContext(number: number) {
 const spinSchema = z.object({
     betType: z.enum(BET_TYPES),
     value: z.union([z.string(), z.number().int()]),
-    seed: z.string().optional()
+    seed: z.string().max(64).optional()
 }).superRefine((payload, ctx) => {
     try {
         normalizeSpinPayload(payload as RouletteSpinPayload);
@@ -204,6 +210,8 @@ export function createRouletteContract(options: RouletteContractOptions = {}) {
     const validCurrencies = options.validCurrencies || [tokenSymbol];
     const minAmount = options.minAmount ?? DEFAULT_MIN_AMOUNT;
     const maxAmount = options.maxAmount ?? DEFAULT_MAX_AMOUNT;
+    const fairSupport = createFairnessSupport(name, account, resolveFairnessOption(options.fairness));
+    const fairness = fairSupport.fairness;
 
     const state = {
         streamer: null as any,
@@ -333,12 +341,22 @@ export function createRouletteContract(options: RouletteContractOptions = {}) {
             let payoutIncremented = true;
 
             try {
-                const serverSeed = randomUUID();
-                if (!serverSeed || typeof serverSeed !== 'string') {
-                    throw new Error('Failed to generate server seed');
+                let winningNumber: number;
+                let serverSeed: string | null = null;
+                let proof: FairDrawProof | null = null;
+
+                if (fairness) {
+                    const draw = await fairness.draw({ type: 'roulette' }, {
+                        clientSeed: bet.seed || sender,
+                        blockId: ctx.block.id
+                    });
+                    winningNumber = draw.outcome;
+                    proof = draw.proof;
+                } else {
+                    serverSeed = randomUUID();
+                    winningNumber = rng(ctx.block.previousId, ctx.block.id, ctx.transaction.id, serverSeed, bet.seed ?? '');
                 }
 
-                const winningNumber = rng(ctx.block.previousId, ctx.block.id, ctx.transaction.id, serverSeed, bet.seed ?? '');
                 const spinContext = getSpinContext(winningNumber);
                 const won = isWinningBet(bet, winningNumber);
 
@@ -354,7 +372,9 @@ export function createRouletteContract(options: RouletteContractOptions = {}) {
                             winningParity: spinContext.parity,
                             winningRange: spinContext.range,
                             result: won ? 'win' : 'lose',
-                            serverSeed,
+                            ...(proof
+                                ? { fairness: proof, outcomeSpec: { type: 'roulette' } }
+                                : { serverSeed }),
                             blockId: ctx.block.id,
                             transactionId: ctx.transaction.id
                         }
@@ -362,13 +382,14 @@ export function createRouletteContract(options: RouletteContractOptions = {}) {
                 }
 
                 const betDescription = describeBet(bet);
+                const seedMemo = proof ? formatFairnessMemo(proof) : ` | Seed: ${serverSeed}`;
                 if (won) {
                     await state.streamer.transferHiveTokens(
                         account,
                         sender,
                         formatBlockchainAmount(potentialPayout),
                         parsedAmount.asset,
-                        `[Winner] | Bet: ${betDescription} | Number: ${winningNumber} | Color: ${spinContext.color} | Seed: ${serverSeed}`
+                        `[Winner] | Bet: ${betDescription} | Number: ${winningNumber} | Color: ${spinContext.color}${seedMemo}`
                     );
                     invalidateBalanceCache();
                     return;
@@ -379,7 +400,7 @@ export function createRouletteContract(options: RouletteContractOptions = {}) {
                     sender,
                     '0.001',
                     parsedAmount.asset,
-                    `[Lost] | Bet: ${betDescription} | Number: ${winningNumber} | Color: ${spinContext.color} | Seed: ${serverSeed}`
+                    `[Lost] | Bet: ${betDescription} | Number: ${winningNumber} | Color: ${spinContext.color}${seedMemo}`
                 );
                 invalidateBalanceCache();
             } finally {
@@ -432,9 +453,10 @@ export function createRouletteContract(options: RouletteContractOptions = {}) {
     return defineContract({
         name,
         hooks: {
-            create: ({ streamer, adapter }) => {
+            create: async ({ streamer, adapter }) => {
                 state.streamer = streamer;
                 state.adapter = adapter;
+                await fairSupport.initialize(adapter);
             },
             destroy: () => {
                 state.betQueue = [];
@@ -444,8 +466,10 @@ export function createRouletteContract(options: RouletteContractOptions = {}) {
         actions: {
             spin: action(spin, {
                 schema: spinSchema,
-                trigger: 'transfer'
-            })
+                trigger: 'transfer',
+                description: 'Place a single-zero roulette bet by transferring to the house account.'
+            }),
+            ...fairSupport.actions
         }
     });
 }
