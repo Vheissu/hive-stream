@@ -67,3 +67,6 @@ dist
 # VitePress
 docs/.vitepress/cache
 docs/.vitepress/dist
+
+# Agent worktrees
+.claude/worktrees/

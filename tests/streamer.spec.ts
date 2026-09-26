@@ -386,7 +386,12 @@ describe('Streamer', () => {
                 head_block_number: 20,
                 time: '2023-01-01T00:00:00'
             }),
-            getBlock: jest.fn().mockResolvedValue(mockBlock)
+            // Blocks must chain (previous === prior block_id) or the fork check rejects them.
+            getBlock: jest.fn().mockImplementation(async (blockNumber: number) => ({
+                ...mockBlock,
+                block_id: `block-${blockNumber}`,
+                previous: `block-${blockNumber - 1}`
+            }))
         } as any;
 
         const loadBlockSpy = jest.spyOn(sut as any, 'loadBlock');

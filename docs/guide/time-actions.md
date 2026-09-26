@@ -50,9 +50,13 @@ Actions persist through the adapter, so schedules resume after a restart with th
 
 ## How execution works
 
-On each new block, Hive Stream compares the current blockchain time against each action's anchor. When the interval has elapsed, the contract action runs with a `time` trigger context, and the anchor resets to blockchain time — not wall-clock time — so replays, simulations, and clock skew stay consistent.
+After each block's operations have been processed, Hive Stream compares that block's timestamp against each action's anchor. When the interval has elapsed, the contract action runs with a `time` trigger context (`ctx.block` is the block that made it due), and the anchor resets to that timestamp — not wall-clock time — so replays, catch-up, simulations, and clock skew stay consistent.
 
-Errors thrown by time-triggered handlers propagate (unlike other triggers), so a failing scheduled task does not silently reset its timer.
+Each tick is recorded in the idempotency ledger (action id plus block number), so replaying a block after a crash does not run a scheduled payout twice.
+
+If a time-triggered handler throws under the default `errorPolicy: 'skip'`, its timer is not reset and the action runs again on the next block. Under `halt` and `retry` a failing scheduled action halts the streamer like any other contract error. A tick rejected by a guard or a paused contract is skipped: the timer resets but the execution count does not increase.
+
+Persisted actions are restored when the streamer initializes, so a schedule survives a restart even before `registerAction()` is called again.
 
 ## Testing schedules
 

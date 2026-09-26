@@ -22,7 +22,22 @@ const streamer = new Streamer({
     apiNodes: ['https://api.hive.blog', 'https://api.openhive.network', 'https://rpc.ausbit.dev'],
     apiEnabled: false,
     apiPort: 5001,
-    debugMode: false
+    debugMode: false,
+
+    // Reliability (4.0)
+    streamMode: 'irreversible',       // or 'head'
+    checkpointMode: 'block',          // or 'interval'
+    checkpointIntervalMs: 5000,       // only used in 'interval' mode
+    idempotency: true,
+    idempotencyRetentionBlocks: 201600,
+    errorPolicy: 'skip',              // or 'halt' / 'retry'
+    errorMaxRetries: 3,
+    errorRetryDelayMs: 500,
+    retryMaxDelayMs: 30000,
+    apiTimeoutMs: 10000,
+    maxForkDepth: 20,
+
+    hooks: {}                         // see Hooks & Guards
 });
 ```
 
@@ -50,6 +65,53 @@ const streamer = new Streamer({ env: true });
 | `jsonId` | The custom JSON id your app listens on for contract payloads. |
 | `payloadIdentifier` | The wrapper key contract payloads live under in memos and JSON bodies. |
 
+## Reliability settings
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `streamMode` | `'irreversible'` | `'irreversible'` only processes blocks that can't be reverted. `'head'` follows the head block for lower latency and handles forks. See [Streaming](./streaming#irreversible-vs-head-streaming). |
+| `checkpointMode` | `'block'` | `'block'` saves the cursor after every block. `'interval'` saves at most every `checkpointIntervalMs` (fewer writes, more replay after a crash). |
+| `idempotency` | `true` | Record every contract action so a replayed block never runs it twice. |
+| `idempotencyRetentionBlocks` | `201600` | How long ledger rows are kept (about 7 days of blocks). |
+| `errorPolicy` | `'skip'` | What happens when a contract handler or storage write fails. See [Production](./production#error-policy). |
+| `errorMaxRetries` / `errorRetryDelayMs` | `3` / `500` | Retry count and base delay (doubling) for `errorPolicy: 'retry'`. |
+| `retryMaxDelayMs` | `30000` | Ceiling for the backoff used when fetching blocks fails. |
+| `apiTimeoutMs` | `10000` | Per-request timeout before failing over to the next API node. |
+| `maxForkDepth` | `20` | How far back `head` mode searches for a common ancestor after a fork. |
+
+All of these can also be set from the environment with their uppercase names (`STREAM_MODE`, `ERROR_POLICY`, `CHECKPOINT_MODE`, `IDEMPOTENCY_ENABLED`, …).
+
+## Validation
+
+Configuration is validated when the `Streamer` is constructed and on every `setConfig()` call. Every problem is reported at once in a `ConfigValidationError`:
+
+```text
+Invalid hive-stream configuration:
+  - BLOCK_CHECK_INTERVAL must be an integer >= 1 (received 0)
+  - API_NODES contains an invalid URL: "api.hive.blog"
+  - STREAM_MODE must be one of 'irreversible', 'head' (received "fast")
+```
+
+A failed `setConfig()` leaves the previous configuration in place. You can run the same checks yourself with `validateConfig(createConfig(input))`.
+
+## Keeping config in its own module
+
+`defineConfig()` is an identity helper that gives you type checking and autocomplete outside the constructor call:
+
+```ts
+// hive.config.ts
+import { defineConfig } from 'hive-stream';
+
+export default defineConfig({
+    env: true,
+    streamMode: 'irreversible',
+    errorPolicy: 'halt',
+    hooks: {
+        onError: ({ error, fatal }) => fatal && pager.trigger(error.message)
+    }
+});
+```
+
 ## Changing config at runtime
 
 ```ts
@@ -66,4 +128,4 @@ Useful when multiple keys are used for issuing, or when credentials rotate.
 The constructor accepts two infrastructure overrides alongside regular config:
 
 - `blockProvider` — where blocks come from. Defaults to the Hive API; the testing kit supplies an in-memory provider, and a HAF provider ships in `hive-stream/providers`.
-- `client` — the dhive client used for reads and broadcasts. Inject a preconfigured client (custom timeouts) or a fake (captured broadcasts). An injected client is never replaced by `setConfig`.
+- `client` — the dhive client used for reads and broadcasts. Inject a preconfigured client or a fake (captured broadcasts). An injected client is never replaced by `setConfig`. The default client uses `apiTimeoutMs` and fails over across `apiNodes`.

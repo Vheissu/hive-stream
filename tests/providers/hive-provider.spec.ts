@@ -50,7 +50,7 @@ describe('HiveProvider', () => {
 
         provider.updateClient(['https://rpc.ausbit.dev']);
 
-        expect(Client).toHaveBeenCalledWith(['https://rpc.ausbit.dev']);
+        expect(Client).toHaveBeenCalledWith(['https://rpc.ausbit.dev'], expect.objectContaining({ timeout: 10000 }));
     });
 
     test('getClient exposes dhive Client', () => {

@@ -46,6 +46,8 @@ export interface ContractContext extends ContractLifecycleContext {
     };
     transaction: {
         id: string;
+        /** Position of the operation inside its transaction (absent for time triggers). */
+        operationIndex?: number;
     };
     sender?: string;
     transfer?: {
@@ -82,21 +84,81 @@ export interface ContractContext extends ContractLifecycleContext {
     };
 }
 
+/**
+ * Declarative checks the streamer runs before an action handler. Any
+ * failing guard rejects the action (reported via the `onActionRejected`
+ * hook) without calling the handler.
+ *
+ * Amount and asset guards only apply to triggers that carry an amount
+ * (`transfer` and `recurrent_transfer`); other triggers pass them.
+ */
+export interface ContractActionGuards {
+    /** Only these accounts may call the action. */
+    allowedSenders?: string[];
+    /** These accounts may never call the action. */
+    blockedSenders?: string[];
+    /** Accepted asset symbols, e.g. ['HIVE', 'HBD']. */
+    allowedAssets?: string[];
+    /** Minimum transfer amount (inclusive). */
+    minAmount?: string | number;
+    /** Maximum transfer amount (inclusive). */
+    maxAmount?: string | number;
+    /** At most `max` calls per sender within `windowSeconds` of blockchain time. */
+    rateLimit?: {
+        max: number;
+        windowSeconds: number;
+    };
+    /** Reject every call (maintenance mode). */
+    paused?: boolean;
+}
+
+export interface ContractActionHookInfo<Payload = any> {
+    action: string;
+    payload: Payload;
+    ctx: ContractContext;
+}
+
 export interface ContractActionDefinition<Payload = any> {
     handler: (payload: Payload, ctx: ContractContext) => void | Promise<void>;
     schema?: ZodSchema<Payload>;
     trigger?: ContractTrigger | ContractTrigger[];
     requiresActiveKey?: boolean;
     description?: string;
+    guards?: ContractActionGuards;
+}
+
+export interface ContractHooks {
+    create?: (ctx: ContractLifecycleContext) => void | Promise<void>;
+    destroy?: (ctx: ContractLifecycleContext) => void | Promise<void>;
+    /** Runs before every action handler. Return `false` to veto the call. */
+    beforeAction?: (info: ContractActionHookInfo) => void | boolean | Promise<void | boolean>;
+    /** Runs after an action handler completes successfully. */
+    afterAction?: (info: ContractActionHookInfo & { durationMs: number }) => void | Promise<void>;
+    /** Runs when an action handler throws. */
+    onError?: (info: ContractActionHookInfo & { error: Error }) => void | Promise<void>;
 }
 
 export interface ContractDefinition<Actions extends Record<string, ContractActionDefinition<any>> = Record<string, ContractActionDefinition<any>>> {
     name: string;
     actions: Actions;
-    hooks?: {
-        create?: (ctx: ContractLifecycleContext) => void | Promise<void>;
-        destroy?: (ctx: ContractLifecycleContext) => void | Promise<void>;
-    };
+    hooks?: ContractHooks;
+    /** Guards applied to every action; per-action guards override these field by field. */
+    guards?: ContractActionGuards;
+}
+
+/**
+ * One entry in the idempotency ledger: an operation (or time action tick)
+ * that already dispatched a contract action.
+ */
+export interface ProcessedOperationRecord {
+    key: string;
+    blockNumber: number;
+    transactionId?: string;
+    operationIndex?: number;
+    contract?: string;
+    action?: string;
+    status: 'success' | 'failed';
+    processedAt?: Date;
 }
 
 export interface SubscriptionCallback {
@@ -121,7 +183,18 @@ export interface OperationMetadata {
     blockId?: string;
     previousBlockId?: string;
     transactionId?: string;
+    /** Position of the operation inside its transaction. */
+    operationIndex?: number;
     blockTime?: Date;
+}
+
+/**
+ * Row id for per-operation adapter records. Operation 0 keeps the bare
+ * transaction id (the historical format); later operations in the same
+ * transaction get a `:index` suffix so they don't collide.
+ */
+export function operationRecordId(transactionId: string, operationIndex?: number): string {
+    return operationIndex ? `${transactionId}:${operationIndex}` : transactionId;
 }
 
 export interface TransferMetadata extends OperationMetadata {

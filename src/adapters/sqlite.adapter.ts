@@ -1,6 +1,6 @@
 import { getLogger } from '../logger';
 import { TimeAction } from './../actions';
-import { ContractPayload, TransferMetadata, CustomJsonMetadata } from './../types/hive-stream';
+import { ContractPayload, TransferMetadata, CustomJsonMetadata, ProcessedOperationRecord, operationRecordId } from './../types/hive-stream';
 import { AdapterBase } from './base.adapter';
 
 import { Knex, knex } from 'knex';
@@ -48,6 +48,24 @@ export class SqliteAdapter extends AdapterBase {
                     table.integer('id').primary();
                     table.integer('lastBlockNumber');
                     table.text('actions');
+                    table.text('lastBlockId');
+                });
+            } else if (!await this.db.schema.hasColumn('params', 'lastBlockId')) {
+                await this.db.schema.alterTable('params', table => {
+                    table.text('lastBlockId');
+                });
+            }
+
+            if (!await this.db.schema.hasTable('processed_operations')) {
+                await this.db.schema.createTable('processed_operations', table => {
+                    table.text('key').primary();
+                    table.integer('blockNumber').index();
+                    table.text('transactionId');
+                    table.integer('operationIndex');
+                    table.text('contract');
+                    table.text('action');
+                    table.text('status');
+                    table.text('processedAt');
                 });
             }
 
@@ -121,7 +139,7 @@ export class SqliteAdapter extends AdapterBase {
     public async loadState(): Promise<any> {
         try {
             const row = await this.db('params')
-                .select('actions', 'lastBlockNumber')
+                .select('actions', 'lastBlockNumber', 'lastBlockId')
                 .first();
 
             if (row) {
@@ -155,7 +173,8 @@ export class SqliteAdapter extends AdapterBase {
                 .insert({
                     id: 1,
                     actions: actionsJson,
-                    lastBlockNumber: data.lastBlockNumber
+                    lastBlockNumber: data.lastBlockNumber,
+                    lastBlockId: data.lastBlockId ?? null
                 })
                 .onConflict('id')
                 .merge();
@@ -177,7 +196,7 @@ export class SqliteAdapter extends AdapterBase {
     public async processTransfer(operation: any, payload: ContractPayload, metadata: TransferMetadata): Promise<boolean> {
         try {
             await this.db('transfers').insert({
-                id: metadata.transactionId || this.transactionId,
+                id: operationRecordId(metadata.transactionId || this.transactionId, metadata.operationIndex),
                 blockId: metadata.blockId || this.blockId,
                 blockNumber: metadata.blockNumber || this.blockNumber,
                 sender: metadata.sender,
@@ -185,7 +204,7 @@ export class SqliteAdapter extends AdapterBase {
                 contractName: payload.contract,
                 contractAction: payload.action,
                 contractPayload: JSON.stringify(payload.payload)
-            });
+            }).onConflict('id').ignore();
             
             return true;
         } catch (error) {
@@ -197,7 +216,7 @@ export class SqliteAdapter extends AdapterBase {
     public async processCustomJson(operation: any, payload: ContractPayload, metadata: CustomJsonMetadata): Promise<boolean> {
         try {
             await this.db('customJson').insert({
-                id: metadata.transactionId || this.transactionId,
+                id: operationRecordId(metadata.transactionId || this.transactionId, metadata.operationIndex),
                 blockId: metadata.blockId || this.blockId,
                 blockNumber: metadata.blockNumber || this.blockNumber,
                 sender: metadata.sender,
@@ -205,7 +224,7 @@ export class SqliteAdapter extends AdapterBase {
                 contractName: payload.contract,
                 contractAction: payload.action,
                 contractPayload: JSON.stringify(payload.payload)
-            });
+            }).onConflict('id').ignore();
             
             return true;
         } catch (error) {
@@ -617,6 +636,35 @@ export class SqliteAdapter extends AdapterBase {
             transactionAdapter.db = trx as unknown as Knex;
             return work(transactionAdapter);
         });
+    }
+
+    public async hasProcessedOperation(key: string): Promise<boolean> {
+        const row = await this.db('processed_operations').where({ key }).first('key');
+        return Boolean(row);
+    }
+
+    public async markOperationProcessed(record: ProcessedOperationRecord): Promise<void> {
+        await this.db('processed_operations')
+            .insert({
+                key: record.key,
+                blockNumber: record.blockNumber,
+                transactionId: record.transactionId ?? null,
+                operationIndex: record.operationIndex ?? null,
+                contract: record.contract ?? null,
+                action: record.action ?? null,
+                status: record.status,
+                processedAt: (record.processedAt ?? new Date()).toISOString()
+            })
+            .onConflict('key')
+            .ignore();
+    }
+
+    public async pruneProcessedOperations(beforeBlockNumber: number): Promise<number> {
+        const removed = await this.db('processed_operations')
+            .where('blockNumber', '<', beforeBlockNumber)
+            .delete();
+
+        return Number(removed) || 0;
     }
 
     public async query(sql: string, params?: any[]): Promise<any[]> {

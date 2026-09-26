@@ -5,5 +5,7 @@ module.exports = {
         '^.+\\.(ts|tsx)$': 'ts-jest'
     },
     testMatch: ['**/tests/**/*.spec.(ts)'],
-    testEnvironment: 'node'
+    testEnvironment: 'node',
+    modulePathIgnorePatterns: ['<rootDir>/.claude/', '<rootDir>/dist/'],
+    testPathIgnorePatterns: ['/node_modules/', '<rootDir>/.claude/']
 };

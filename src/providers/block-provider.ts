@@ -9,6 +9,11 @@ export interface BlockData {
 
 export interface DynamicGlobalProperties {
     head_block_number: number;
+    /**
+     * Highest block that can no longer be reverted. Providers that omit it
+     * are treated as if every block they serve is irreversible.
+     */
+    last_irreversible_block_num?: number;
     time: string;
     [key: string]: any;
 }

@@ -160,7 +160,8 @@ describe('PostgreSQL Adapter', () => {
         expect(mockInsert).toHaveBeenCalledWith({
             id: 1,
             actions: JSON.stringify(testData.actions),
-            lastBlockNumber: 12345
+            lastBlockNumber: 12345,
+            lastBlockId: null
         });
         expect(mockOnConflict).toHaveBeenCalledWith('id');
         expect(mockMerge).toHaveBeenCalled();

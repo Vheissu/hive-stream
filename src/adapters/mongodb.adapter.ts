@@ -1,6 +1,6 @@
 import { getLogger } from '../logger';
 import { TimeAction } from './../actions';
-import { ContractPayload, TransferMetadata, CustomJsonMetadata } from './../types/hive-stream';
+import { ContractPayload, TransferMetadata, CustomJsonMetadata, ProcessedOperationRecord, operationRecordId } from './../types/hive-stream';
 import { AdapterBase } from './base.adapter';
 
 import * as os from 'os';
@@ -55,6 +55,8 @@ export class MongodbAdapter extends AdapterBase {
 
     public async create(): Promise<boolean> {
         await this.getDbInstance();
+        await this.db.collection('processed_operations').createIndex({ key: 1 }, { unique: true });
+        await this.db.collection('processed_operations').createIndex({ blockNumber: 1 });
         return true;
     }
 
@@ -141,7 +143,7 @@ export class MongodbAdapter extends AdapterBase {
         const collection = this.db.collection('transfers');
 
         const data = {
-            id: metadata.transactionId || this.transactionId,
+            id: operationRecordId(metadata.transactionId || this.transactionId, metadata.operationIndex),
             blockId: metadata.blockId || this.blockId,
             blockNumber: metadata.blockNumber || this.blockNumber,
             sender: metadata.sender,
@@ -164,7 +166,7 @@ export class MongodbAdapter extends AdapterBase {
         const collection = this.db.collection('customJson');
 
         const data = {
-            id: metadata.transactionId || this.transactionId,
+            id: operationRecordId(metadata.transactionId || this.transactionId, metadata.operationIndex),
             blockId: metadata.blockId || this.blockId,
             blockNumber: metadata.blockNumber || this.blockNumber,
             sender: metadata.sender,
@@ -233,6 +235,36 @@ export class MongodbAdapter extends AdapterBase {
         await collection.replaceOne(queryObject, data, { upsert: true });
 
         return data;
+    }
+
+    public async hasProcessedOperation(key: string): Promise<boolean> {
+        if (!this.db) {
+            await this.getDbInstance();
+        }
+
+        const record = await this.db.collection('processed_operations').findOne({ key }, { projection: { _id: 1 } });
+        return Boolean(record);
+    }
+
+    public async markOperationProcessed(record: ProcessedOperationRecord): Promise<void> {
+        if (!this.db) {
+            await this.getDbInstance();
+        }
+
+        await this.db.collection('processed_operations').updateOne(
+            { key: record.key },
+            { $setOnInsert: { ...record, processedAt: record.processedAt ?? new Date() } },
+            { upsert: true }
+        );
+    }
+
+    public async pruneProcessedOperations(beforeBlockNumber: number): Promise<number> {
+        if (!this.db) {
+            await this.getDbInstance();
+        }
+
+        const result = await this.db.collection('processed_operations').deleteMany({ blockNumber: { $lt: beforeBlockNumber } });
+        return result.deletedCount ?? 0;
     }
 
     public async query(sql: string, params?: any[]): Promise<any[]> {
