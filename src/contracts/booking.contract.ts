@@ -30,7 +30,7 @@ export function createBookingContract(options: BookingContractOptions = {}) {
         asset: assetSchema,
         durationMinutes: z.number().int().min(15).max(24 * 60),
         cancellationHours: z.number().int().min(0).max(720).optional(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const reserveSchema = z.object({

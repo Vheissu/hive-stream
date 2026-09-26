@@ -31,7 +31,7 @@ export function createInsurancePoolContract(options: InsurancePoolContractOption
         premiumAmount: amountSchema,
         coverageCap: amountSchema,
         coverageDays: z.number().int().min(1).max(3650),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const poolIdSchema = z.object({

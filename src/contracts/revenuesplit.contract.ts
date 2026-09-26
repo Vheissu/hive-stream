@@ -33,7 +33,7 @@ export function createRevenueSplitContract(options: RevenueSplitContractOptions 
         splitId: identifierSchema,
         title: z.string().min(3).max(140),
         recipients: z.array(recipientSchema).min(1).max(25),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const splitIdSchema = z.object({
@@ -43,7 +43,7 @@ export function createRevenueSplitContract(options: RevenueSplitContractOptions 
     const updateSplitSchema = z.object({
         splitId: identifierSchema,
         recipients: z.array(recipientSchema).min(1).max(25),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const withdrawSchema = z.object({

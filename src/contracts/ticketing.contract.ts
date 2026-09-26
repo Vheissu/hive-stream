@@ -32,7 +32,7 @@ export function createTicketingContract(options: TicketingContractOptions = {}) 
         ticketPrice: amountSchema,
         asset: assetSchema,
         capacity: z.number().int().min(1).max(1000000),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const purchaseSchema = z.object({

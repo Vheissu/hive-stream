@@ -1,7 +1,7 @@
 import { getLogger } from '../logger';
-import BigNumber from 'bignumber.js';
+import BigNumber from '../bignumber';
 import seedrandom from 'seedrandom';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
 import { formatBlockchainAmount, parseBlockchainAmount } from './helpers';
@@ -184,7 +184,7 @@ export function createRpsContract(options: RpsContractOptions = {}) {
                 let payoutIncremented = true;
 
                 try {
-                    const serverSeed = uuidv4();
+                    const serverSeed = randomUUID();
                     const serverMove = rng(ctx.block.previousId, ctx.block.id, ctx.transaction.id, serverSeed, payload.seed ?? '');
 
                     let result: 'win' | 'lose' | 'tie' = 'lose';

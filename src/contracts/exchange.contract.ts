@@ -1,5 +1,5 @@
-import BigNumber from 'bignumber.js';
-import { v4 as uuidv4 } from 'uuid';
+import BigNumber from '../bignumber';
+import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
 import { ensureSqlAdapter } from './helpers';
@@ -40,7 +40,7 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
         quote: z.string().min(1).max(20)
     });
 
-    const depositSchema = z.object({}).passthrough();
+    const depositSchema = z.looseObject({});
 
     const withdrawSchema = z.object({
         asset: z.string().min(1).max(20),
@@ -364,7 +364,7 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
             throw new Error('Invalid price or amount');
         }
 
-        const orderId = uuidv4();
+        const orderId = randomUUID();
 
         await withTransaction(async (adapter) => {
             await ensurePairActive(payload.base, payload.quote, adapter);

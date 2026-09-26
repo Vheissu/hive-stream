@@ -31,7 +31,7 @@ export function createDomainRegistryContract(options: DomainRegistryContractOpti
         registrationPrice: amountSchema,
         asset: assetSchema,
         renewalDays: z.number().int().min(1).max(3650),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const registerNameSchema = z.object({
@@ -39,7 +39,7 @@ export function createDomainRegistryContract(options: DomainRegistryContractOpti
         label: domainNameSchema,
         target: z.string().min(1).max(280),
         years: z.number().int().min(1).max(20).optional(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const transferSchema = z.object({

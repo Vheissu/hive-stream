@@ -1,4 +1,4 @@
-import BigNumber from 'bignumber.js';
+import BigNumber from '../bignumber';
 import { z } from 'zod';
 import type { ContractContext } from '../types/hive-stream';
 import { Utils } from '../utils';

@@ -30,7 +30,7 @@ export function createReferralContract(options: ReferralContractOptions = {}) {
         payoutAsset: assetSchema,
         rewardBps: z.number().int().min(1).max(10000),
         maxPayoutPerConversion: amountSchema.optional(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const fundProgramSchema = z.object({

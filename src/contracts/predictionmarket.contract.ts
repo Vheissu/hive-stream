@@ -30,7 +30,7 @@ export function createPredictionMarketContract(options: PredictionMarketContract
         asset: assetSchema,
         options: z.array(z.string().min(1).max(80)).min(2).max(10),
         closesAt: z.string(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const buyPositionSchema = z.object({

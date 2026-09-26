@@ -35,7 +35,7 @@ export function createAuctionHouseContract(options: AuctionHouseContractOptions 
         buyNowPrice: amountSchema.optional(),
         startsAt: z.string().optional(),
         endsAt: z.string(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const placeBidSchema = z.object({

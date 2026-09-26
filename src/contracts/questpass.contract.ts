@@ -37,7 +37,7 @@ export function createQuestPassContract(options: QuestPassContractOptions = {}) 
         passPrice: amountSchema,
         asset: assetSchema,
         tiers: z.array(tierSchema).min(1).max(25),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const seasonIdSchema = z.object({

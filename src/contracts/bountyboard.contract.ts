@@ -29,13 +29,13 @@ export function createBountyBoardContract(options: BountyBoardContractOptions = 
         description: z.string().max(1200).optional(),
         deadline: z.string().optional(),
         maxWinners: z.number().int().min(1).max(25).optional(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const submitWorkSchema = z.object({
         bountyId: identifierSchema,
         submissionId: identifierSchema,
-        url: z.string().url(),
+        url: z.url(),
         description: z.string().max(1000).optional()
     });
 

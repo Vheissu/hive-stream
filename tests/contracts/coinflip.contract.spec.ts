@@ -3,11 +3,12 @@ import { sleep } from '@hiveio/dhive/lib/utils';
 import { Streamer } from '../../src/streamer';
 import { createMockAdapter } from '../helpers/mock-adapter';
 
-jest.mock('uuid', () => ({
-    v4: jest.fn()
+jest.mock('crypto', () => ({
+    ...jest.requireActual('crypto'),
+    randomUUID: jest.fn()
 }));
 
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 
 describe('Coinflip Contract', () => {
     let sut: Streamer;
@@ -42,7 +43,7 @@ describe('Coinflip Contract', () => {
         jest.spyOn(sut, 'transferHiveTokens').mockResolvedValue(true as any);
         jest.spyOn(sut['client'].database, 'getAccounts').mockResolvedValue([{ balance: '2000.000 HIVE' }] as any);
 
-        (uuidv4 as jest.Mock).mockReturnValue('j93jgsjghjdhgjfhgkfdhgkj34872394723');
+        (randomUUID as jest.Mock).mockReturnValue('j93jgsjghjdhgjfhgkfdhgkj34872394723');
 
         const memo = JSON.stringify({
             hive_stream: {
@@ -71,7 +72,7 @@ describe('Coinflip Contract', () => {
         jest.spyOn(sut, 'transferHiveTokens').mockResolvedValue(true as any);
         jest.spyOn(sut['client'].database, 'getAccounts').mockResolvedValue([{ balance: '2000.000 HIVE' }] as any);
 
-        (uuidv4 as jest.Mock).mockReturnValue('j93jgsjghjdhgjfhgkfdhgkj34872394723');
+        (randomUUID as jest.Mock).mockReturnValue('j93jgsjghjdhgjfhgkfdhgkj34872394723');
 
         const memo = JSON.stringify({
             hive_stream: {

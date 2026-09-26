@@ -1,4 +1,4 @@
-import BigNumber from 'bignumber.js';
+import BigNumber from '../bignumber';
 import seedrandom from 'seedrandom';
 import { z } from 'zod';
 import { action, defineContract } from './contract';

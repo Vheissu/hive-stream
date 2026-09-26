@@ -31,7 +31,7 @@ export function createBundleMarketplaceContract(options: BundleMarketplaceContra
         asset: assetSchema,
         items: z.array(z.string().min(1).max(140)).min(1).max(25),
         inventory: z.number().int().min(1).max(1000000).optional(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const idSchema = z.object({
@@ -44,7 +44,7 @@ export function createBundleMarketplaceContract(options: BundleMarketplaceContra
         price: amountSchema.optional(),
         inventory: z.number().int().min(0).max(1000000).optional(),
         active: z.boolean().optional(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const fulfillSchema = z.object({

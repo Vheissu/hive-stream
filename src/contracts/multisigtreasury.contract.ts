@@ -27,7 +27,7 @@ export function createMultisigTreasuryContract(options: MultisigTreasuryContract
         title: z.string().min(3).max(140),
         signers: z.array(z.string().min(3).max(32)).min(1).max(25),
         threshold: z.number().int().min(1).max(25),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const proposeTransferSchema = z.object({

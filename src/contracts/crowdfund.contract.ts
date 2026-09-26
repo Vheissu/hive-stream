@@ -38,7 +38,7 @@ export function createCrowdfundContract(options: CrowdfundContractOptions = {}) 
         deadline: z.string(),
         beneficiary: z.string().min(3).max(32).optional(),
         milestones: z.array(milestoneSchema).max(10).optional(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const campaignIdSchema = z.object({

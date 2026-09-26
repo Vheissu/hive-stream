@@ -324,7 +324,7 @@ describe('Contract Helpers', () => {
     describe('toBigNumber()', () => {
         test('converts string to BigNumber', () => {
             const bn = toBigNumber('100.500');
-            expect(bn).toBeInstanceOf(BigNumber);
+            expect(BigNumber.isBigNumber(bn)).toBe(true);
             expect(bn.toString()).toBe('100.5');
         });
 

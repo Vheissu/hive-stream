@@ -31,7 +31,7 @@ export function createPaywallContract(options: PaywallContractOptions = {}) {
         asset: assetSchema,
         accessDays: z.number().int().min(1).max(3650),
         maxPurchasesPerAccount: z.number().int().min(1).max(100000).optional(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const resourceIdSchema = z.object({

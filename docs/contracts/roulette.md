@@ -20,7 +20,11 @@ Most built-in contracts persist state in SQL tables and require a SQL-capable ad
 
 **Payload**
 
-_No payload validation defined for this action._
+| Field | Type | Required |
+| --- | --- | --- |
+| `betType` | `"straight" | "color" | "parity" | "dozen" | "column" | "range"` | Yes |
+| `value` | `string | number` | Yes |
+| `seed` | `string` | No |
 
 Send as a transfer memo:
 

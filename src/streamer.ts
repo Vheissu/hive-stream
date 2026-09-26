@@ -6,7 +6,7 @@ import { validateContractDefinition } from './contracts/contract';
 
 import { TimeAction } from './actions';
 import { Client } from '@hiveio/dhive';
-import BigNumber from 'bignumber.js';
+import BigNumber from './bignumber';
 import { Utils } from './utils';
 import {
     HiveBurnBuilder,
@@ -2062,7 +2062,7 @@ export class Streamer {
             const result = actionDefinition.schema.safeParse(actionPayload);
             if (!result.success) {
                 getLogger().warn(`[Streamer] Invalid payload for ${payload.contract}.${payload.action}`, {
-                    errors: result.error?.errors
+                    errors: result.error?.issues
                 });
                 return;
             }

@@ -1,5 +1,5 @@
 import { getLogger } from './logger';
-import BigNumber from 'bignumber.js';
+import BigNumber, { type RoundingMode } from './bignumber';
 import { HiveRates } from './hive-rates';
 import { Client, SignedTransaction, PrivateKey } from '@hiveio/dhive';
 import { Config, ConfigInterface } from './config';
@@ -106,7 +106,7 @@ export const Utils = {
         amount: NumericValue,
         basisPoints: number,
         precision: number = 3,
-        roundingMode: BigNumber.RoundingMode = BigNumber.ROUND_DOWN
+        roundingMode: RoundingMode = BigNumber.ROUND_DOWN
     ): string {
         if (!Number.isInteger(basisPoints) || basisPoints < 0 || basisPoints > 10000) {
             throw new Error('basisPoints must be an integer between 0 and 10000');
@@ -131,7 +131,7 @@ export const Utils = {
     formatAmount(
         amount: NumericValue,
         precision: number = 3,
-        roundingMode: BigNumber.RoundingMode = BigNumber.ROUND_DOWN
+        roundingMode: RoundingMode = BigNumber.ROUND_DOWN
     ): string {
         if (!Number.isInteger(precision) || precision < 0) {
             throw new Error('precision must be a non-negative integer');
@@ -149,7 +149,7 @@ export const Utils = {
         amount: NumericValue,
         symbol: string,
         precision: number = 3,
-        roundingMode: BigNumber.RoundingMode = BigNumber.ROUND_DOWN
+        roundingMode: RoundingMode = BigNumber.ROUND_DOWN
     ): string {
         if (typeof symbol !== 'string' || symbol.trim().length === 0) {
             throw new Error('Asset symbol is required');
@@ -162,7 +162,7 @@ export const Utils = {
         amount: NumericValue,
         percentage: NumericValue,
         precision: number = 3,
-        roundingMode: BigNumber.RoundingMode = BigNumber.ROUND_DOWN
+        roundingMode: RoundingMode = BigNumber.ROUND_DOWN
     ): string {
         if (!Number.isInteger(precision) || precision < 0) {
             throw new Error('precision must be a non-negative integer');
@@ -194,7 +194,7 @@ export const Utils = {
         amount: NumericValue,
         basisPoints: number[],
         precision: number = 3,
-        roundingMode: BigNumber.RoundingMode = BigNumber.ROUND_DOWN
+        roundingMode: RoundingMode = BigNumber.ROUND_DOWN
     ): string[] {
         if (!Array.isArray(basisPoints) || basisPoints.length === 0) {
             throw new Error('basisPoints array cannot be empty');
@@ -234,7 +234,7 @@ export const Utils = {
         amount: NumericValue,
         percentages: Array<string | number>,
         precision: number = 3,
-        roundingMode: BigNumber.RoundingMode = BigNumber.ROUND_DOWN
+        roundingMode: RoundingMode = BigNumber.ROUND_DOWN
     ): string[] {
         if (!Array.isArray(percentages) || percentages.length === 0) {
             throw new Error('percentages array cannot be empty');
@@ -280,7 +280,7 @@ export const Utils = {
         amount: NumericValue,
         weights: Array<string | number>,
         precision: number = 3,
-        roundingMode: BigNumber.RoundingMode = BigNumber.ROUND_DOWN
+        roundingMode: RoundingMode = BigNumber.ROUND_DOWN
     ): string[] {
         if (!Array.isArray(weights) || weights.length === 0) {
             throw new Error('weights array cannot be empty');

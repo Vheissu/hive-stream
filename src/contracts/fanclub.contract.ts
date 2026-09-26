@@ -35,7 +35,7 @@ export function createFanClubContract(options: FanClubContractOptions = {}) {
         joinPrice: amountSchema,
         asset: assetSchema,
         perks: z.array(perkSchema).max(25).optional(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const clubIdSchema = z.object({

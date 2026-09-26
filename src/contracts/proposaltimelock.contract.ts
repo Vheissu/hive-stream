@@ -26,7 +26,7 @@ export function createProposalTimelockContract(options: ProposalTimelockContract
         approvers: z.array(z.string().min(3).max(32)).min(1).max(25),
         threshold: z.number().int().min(1).max(25),
         minDelayHours: z.number().int().min(1).max(24 * 365),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const createProposalSchema = z.object({
@@ -34,7 +34,7 @@ export function createProposalTimelockContract(options: ProposalTimelockContract
         proposalId: identifierSchema,
         title: z.string().min(3).max(140),
         actionType: z.string().min(1).max(60),
-        actionPayload: z.record(z.any()),
+        actionPayload: z.record(z.string(), z.any()),
         note: z.string().max(280).optional()
     });
 

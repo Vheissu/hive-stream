@@ -34,7 +34,7 @@ export function createRentalContract(options: RentalContractOptions = {}) {
         dailyRate: amountSchema,
         rateAsset: assetSchema,
         maxDurationDays: z.number().int().min(1).max(365).optional(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const initiateSchema = z.object({

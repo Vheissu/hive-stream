@@ -33,7 +33,7 @@ export function createInvoiceContract(options: InvoiceContractOptions = {}) {
         asset: assetSchema,
         dueAt: z.string().optional(),
         allowPartial: z.boolean().optional(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const invoiceIdSchema = z.object({

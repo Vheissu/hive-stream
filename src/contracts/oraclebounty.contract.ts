@@ -30,7 +30,7 @@ export function createOracleBountyContract(options: OracleBountyContractOptions 
         rewardPerReport: amountSchema,
         rewardAsset: assetSchema,
         toleranceBps: z.number().int().min(0).max(10000).optional(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const idSchema = z.object({

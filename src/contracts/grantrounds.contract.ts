@@ -29,7 +29,7 @@ export function createGrantRoundsContract(options: GrantRoundsContractOptions = 
         title: z.string().min(3).max(140),
         asset: assetSchema,
         closesAt: z.string(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const idSchema = z.object({

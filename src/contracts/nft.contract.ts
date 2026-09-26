@@ -1,5 +1,5 @@
 import { getLogger } from '../logger';
-import BigNumber from 'bignumber.js';
+import BigNumber from '../bignumber';
 import { Streamer } from '../streamer';
 import { Utils } from '../utils';
 import { action, defineContract } from './contract';

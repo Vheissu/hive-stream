@@ -3,11 +3,12 @@ import { Streamer } from '../../src/streamer';
 import { createRouletteContract } from '../../src/contracts/roulette.contract';
 import { createMockAdapter } from '../helpers/mock-adapter';
 
-jest.mock('uuid', () => ({
-    v4: jest.fn()
+jest.mock('crypto', () => ({
+    ...jest.requireActual('crypto'),
+    randomUUID: jest.fn()
 }));
 
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 
 describe('Roulette Contract', () => {
     let sut: Streamer;
@@ -42,7 +43,7 @@ describe('Roulette Contract', () => {
         jest.spyOn(sut, 'transferHiveTokens').mockResolvedValue(true as any);
         jest.spyOn(sut['client'].database, 'getAccounts').mockResolvedValue([{ balance: '2000.000 HIVE' }] as any);
 
-        (uuidv4 as jest.Mock).mockReturnValue('roulette-seed');
+        (randomUUID as jest.Mock).mockReturnValue('roulette-seed');
 
         const memo = JSON.stringify({
             hive_stream: {
@@ -77,7 +78,7 @@ describe('Roulette Contract', () => {
         jest.spyOn(sut, 'transferHiveTokens').mockResolvedValue(true as any);
         jest.spyOn(sut['client'].database, 'getAccounts').mockResolvedValue([{ balance: '2000.000 HIVE' }] as any);
 
-        (uuidv4 as jest.Mock).mockReturnValue('roulette-seed');
+        (randomUUID as jest.Mock).mockReturnValue('roulette-seed');
 
         const memo = JSON.stringify({
             hive_stream: {

@@ -1,5 +1,5 @@
 import { getLogger } from '../logger';
-import BigNumber from 'bignumber.js';
+import BigNumber from '../bignumber';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
 import { ensureSqlAdapter } from './helpers';

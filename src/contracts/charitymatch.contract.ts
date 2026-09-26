@@ -32,7 +32,7 @@ export function createCharityMatchContract(options: CharityMatchContractOptions 
         matchCap: amountSchema,
         matchBps: z.number().int().min(0).max(100000),
         closesAt: z.string(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const campaignIdSchema = z.object({

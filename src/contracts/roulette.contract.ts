@@ -1,7 +1,7 @@
 import { getLogger } from '../logger';
-import BigNumber from 'bignumber.js';
+import BigNumber from '../bignumber';
 import seedrandom from 'seedrandom';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
 import { formatBlockchainAmount, parseBlockchainAmount } from './helpers';
@@ -333,7 +333,7 @@ export function createRouletteContract(options: RouletteContractOptions = {}) {
             let payoutIncremented = true;
 
             try {
-                const serverSeed = uuidv4();
+                const serverSeed = randomUUID();
                 if (!serverSeed || typeof serverSeed !== 'string') {
                     throw new Error('Failed to generate server seed');
                 }

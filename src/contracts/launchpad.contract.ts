@@ -34,7 +34,7 @@ export function createLaunchpadContract(options: LaunchpadContractOptions = {}) 
         closesAt: z.string(),
         minUnitsPerBuyer: z.number().int().min(1).max(100000000).optional(),
         maxUnitsPerBuyer: z.number().int().min(1).max(100000000).optional(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const saleIdSchema = z.object({

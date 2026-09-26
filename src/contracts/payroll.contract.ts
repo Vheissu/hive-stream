@@ -28,7 +28,7 @@ export function createPayrollContract(options: PayrollContractOptions = {}) {
         title: z.string().min(3).max(140),
         asset: assetSchema,
         intervalDays: z.number().int().min(1).max(3650),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const addRecipientSchema = z.object({

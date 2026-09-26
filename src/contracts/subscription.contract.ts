@@ -31,7 +31,7 @@ export function createSubscriptionContract(options: SubscriptionContractOptions 
         asset: assetSchema,
         intervalDays: z.number().int().min(1).max(365),
         graceDays: z.number().int().min(0).max(90).optional(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const updatePlanSchema = z.object({
@@ -42,7 +42,7 @@ export function createSubscriptionContract(options: SubscriptionContractOptions 
         intervalDays: z.number().int().min(1).max(365).optional(),
         graceDays: z.number().int().min(0).max(90).optional(),
         active: z.boolean().optional(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const planIdSchema = z.object({

@@ -31,7 +31,7 @@ export function createGroupBuyContract(options: GroupBuyContractOptions = {}) {
         asset: assetSchema,
         deadline: z.string(),
         minParticipants: z.number().int().min(1).max(100000).optional(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const idSchema = z.object({

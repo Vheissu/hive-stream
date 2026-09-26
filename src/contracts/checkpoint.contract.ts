@@ -74,7 +74,7 @@ export function createCheckpointContract(options: CheckpointContractOptions) {
         tables: z.array(z.string().regex(TABLE_NAME_PATTERN)).min(1).max(50)
     });
 
-    const publishSchema = z.object({}).passthrough().optional();
+    const publishSchema = z.looseObject({}).optional();
 
     const initialize = async () => {
         await initializeTables(state.adapter, [

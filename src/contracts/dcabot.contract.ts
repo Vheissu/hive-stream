@@ -30,7 +30,7 @@ export function createDcaBotContract(options: DcaBotContractOptions = {}) {
         maxExecutions: z.number().int().min(1).max(100000).optional(),
         slippageBps: z.number().int().min(0).max(10000).optional(),
         startsAt: z.string().optional(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const botIdSchema = z.object({

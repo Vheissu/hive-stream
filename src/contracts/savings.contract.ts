@@ -31,7 +31,7 @@ export function createSavingsContract(options: SavingsContractOptions = {}) {
         asset: assetSchema,
         deadline: z.string().optional(),
         allowEarlyWithdraw: z.boolean().optional(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const goalIdSchema = z.object({

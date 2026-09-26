@@ -3,7 +3,7 @@
  * instantiating every built-in contract factory and introspecting its
  * actions, triggers, and Zod payload schemas.
  *
- * Run with: npx ts-node scripts/generate-contract-docs.ts
+ * Run with: npx tsx scripts/generate-contract-docs.ts
  * (wired into `npm run docs:gen`)
  */
 import * as fs from 'fs';
@@ -58,29 +58,28 @@ const DESCRIPTIONS: Record<string, string> = {
 };
 
 function zodTypeToString(schema: any): string {
-    if (!schema || !schema._def) {
+    const def = schema?._zod?.def;
+
+    if (!def) {
         return 'unknown';
     }
 
-    const def = schema._def;
-    const typeName = def.typeName;
-
-    switch (typeName) {
-        case 'ZodString': return 'string';
-        case 'ZodNumber': return 'number';
-        case 'ZodBoolean': return 'boolean';
-        case 'ZodLiteral': return JSON.stringify(def.value);
-        case 'ZodEnum': return def.values.map((v: any) => JSON.stringify(v)).join(' | ');
-        case 'ZodOptional': return zodTypeToString(def.innerType);
-        case 'ZodDefault': return zodTypeToString(def.innerType);
-        case 'ZodNullable': return `${zodTypeToString(def.innerType)} | null`;
-        case 'ZodArray': return `${zodTypeToString(def.type)}[]`;
-        case 'ZodUnion': return def.options.map((o: any) => zodTypeToString(o)).join(' | ');
-        case 'ZodRecord': return 'record';
-        case 'ZodObject': return 'object';
-        case 'ZodEffects': return zodTypeToString(def.schema);
-        case 'ZodAny': return 'any';
-        default: return typeName ? typeName.replace('Zod', '').toLowerCase() : 'unknown';
+    switch (def.type) {
+        case 'string': return 'string';
+        case 'number': return 'number';
+        case 'boolean': return 'boolean';
+        case 'literal': return def.values.map((v: any) => JSON.stringify(v)).join(' | ');
+        case 'enum': return Object.values(def.entries).map((v: any) => JSON.stringify(v)).join(' | ');
+        case 'optional': return zodTypeToString(def.innerType);
+        case 'default': return zodTypeToString(def.innerType);
+        case 'nullable': return `${zodTypeToString(def.innerType)} | null`;
+        case 'array': return `${zodTypeToString(def.element)}[]`;
+        case 'union': return def.options.map((o: any) => zodTypeToString(o)).join(' | ');
+        case 'record': return 'record';
+        case 'object': return 'object';
+        case 'pipe': return zodTypeToString(def.in);
+        case 'any': return 'any';
+        default: return def.type ?? 'unknown';
     }
 }
 

@@ -33,7 +33,7 @@ export function createSweepstakesContract(options: SweepstakesContractOptions = 
         closesAt: z.string(),
         maxEntries: z.number().int().min(1).max(1000000).optional(),
         maxEntriesPerAccount: z.number().int().min(1).max(100000).optional(),
-        metadata: z.record(z.any()).optional()
+        metadata: z.record(z.string(), z.any()).optional()
     });
 
     const enterSchema = z.object({
