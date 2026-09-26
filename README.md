@@ -1,869 +1,212 @@
 # Hive Stream
 
-A Node.js layer for Hive that allows you to watch for specific actions on the Hive blockchain.
+A Node.js library for building apps on the Hive blockchain. It streams blocks, runs your contract code when a transfer memo or custom JSON calls it, and gives you the write operations to respond. People use it for dice sites, game tournaments, tipping bots, token exchanges and custody bridges.
 
-**Documentation:** [vheissu.github.io/hive-stream](https://vheissu.github.io/hive-stream/) — guides, contract reference, testing, and production docs. Run it locally with `npm run docs:dev`.
+**Documentation:** [vheissu.github.io/hive-stream](https://vheissu.github.io/hive-stream/). Guides, recipes, a reference page for every built-in contract, testing and production. Run it locally with `npm run docs:dev`.
 
-## Scaffold a new app
-
-The bundled CLI scaffolds a ready-to-run game, exchange, social app, blog, token/NFT project, asset platform, or minimal starter:
-
-```shell
-npx hive-stream new my-app
-```
-
-Answer a few prompts (or skip them with flags) and you get registered contracts, environment config, an offline contract test, and copy-paste payload examples:
-
-```shell
-npx hive-stream new my-game --template game --username my-account
-npx hive-stream new my-exchange --template exchange --adapter postgresql --api
-npx hive-stream list   # see all templates and adapters
-```
-
-Templates: `minimal`, `game` (dice, coinflip, roulette, RPS), `exchange` (order book + matching engine), `social` (fan clubs, subscriptions, tips), `blog` (paywall, tips, post streaming), `token` (tokens + NFTs), `assets` (non-custodial NFTs, event tickets, peer-to-peer sales, on-chain state checkpoints).
-
-SQLite and PostgreSQL work with every template. MongoDB is offered for the `minimal` and `game` templates; the other templates register SQL-backed contracts. The CLI rejects incompatible combinations before writing files. Generated projects also include `npm run verify`, which type-checks, tests, and builds the app offline.
+**Upgrading from 3.x?** 4.0 changes how the streamer behaves on errors, forks and restarts. Read [Migrating to 4.0](https://vheissu.github.io/hive-stream/guide/migrating-to-4) before you bump.
 
 ## Install
 
 ```shell
-npm install hive-stream
+npm install hive-stream zod
 ```
 
-Requires Node.js 22 or later. SQLite works out of the box; for the MongoDB or PostgreSQL adapters (or the HAF provider) also install the driver: `npm install mongodb` or `npm install pg`.
+Node.js 22 or later. SQLite works out of the box. For the MongoDB or PostgreSQL adapters (or the HAF block provider) install the driver as well: `npm install mongodb` or `npm install pg`. `import` and `require` both work and resolve to the same implementation.
 
-Hive Stream works in both module systems — `import` and `require` resolve to the same implementation, so classes and `instanceof` checks are always consistent:
+Or scaffold a whole project:
 
-```javascript
-import { Streamer } from 'hive-stream';        // ESM / TypeScript
-const { Streamer } = require('hive-stream');   // CommonJS
+```shell
+npx hive-stream new my-app
+npx hive-stream new my-game --template game --username my-account
+npx hive-stream list
 ```
 
-## Quick Usage
+Templates: `minimal`, `game`, `exchange`, `social`, `blog`, `token` and `assets`. Each one comes with registered contracts, `.env` handling, an offline test and `npm run verify`.
 
-```javascript
-const { Streamer } = require('hive-stream');
-
-const ss = new Streamer();
-
-// Watch for all custom JSON operations
-ss.onCustomJson((op, { sender, isSignedWithActiveKey }, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
-  // React to custom JSON operations
-});
-```
-
-`new Streamer()` is now side-effect free. The default SQLite adapter is created lazily on first use, and the built-in Express API is opt-in via `apiEnabled: true` on `start()` or an explicit `startApiServer()` call.
-
-## Build contract calls safely
-
-`hive-stream/client` builds contract payloads and Hive operations without connecting to a node or handling private keys. Put the action schemas in a shared spec, then use the same spec on the server, in a browser, and in tests:
+## Quick start
 
 ```ts
-import { createContractCaller, defineContractSpec } from 'hive-stream/client';
+import { Streamer, defineContract, action } from 'hive-stream';
 import { z } from 'zod';
 
-export const guestbookSpec = defineContractSpec({
+// env: true reads USERNAME, ACTIVE_KEY and POSTING_KEY from the environment and .env
+const streamer = new Streamer({ env: true });
+
+// Plain subscriptions: react to anything on chain
+streamer.onTransfer('myaccount', (op) => {
+    console.log(`${op.from} sent ${op.amount}`);
+});
+
+// Contracts: named actions with validated payloads
+const guestbook = defineContract({
     name: 'guestbook',
     actions: {
-        sign: {
+        sign: action(async (payload, ctx) => {
+            console.log(`${ctx.sender} signed: ${payload.message}`);
+        }, {
             trigger: 'custom_json',
             schema: z.object({ message: z.string().max(280) })
-        }
+        })
     }
 });
 
-const guestbook = createContractCaller(guestbookSpec);
-const operation = guestbook.customJson('alice', 'sign', { message: 'Hello Hive' });
-
-await streamer.broadcastOperations([operation]);
+await streamer.registerContract(guestbook);
+streamer.enableGracefulShutdown();
+await streamer.start();
 ```
 
-The caller checks action names, Hive account names, Zod schemas, allowed triggers, JSON encoding, and required authority before it returns an operation. Actions marked `requiresActiveKey` select active authority automatically. Lower-level helpers such as `createContractMemo()`, `createContractTransferOperation()`, and `validateHiveAccountName()` are also exported. See [Calling contracts safely](https://vheissu.github.io/hive-stream/guide/contract-calls).
+Anyone can call the contract by broadcasting custom JSON with id `hivestream`:
 
-## Builder/Tooling Metadata
-
-For external tooling (like visual builders), Hive Stream now exports a read-only metadata object:
-
-```javascript
-const { HIVE_STREAM_METADATA, getHiveStreamMetadata } = require('hive-stream');
-
-console.log(HIVE_STREAM_METADATA.subscriptions);
-console.log(getHiveStreamMetadata().writeOperations);
+```json
+{"hive_stream":{"contract":"guestbook","action":"sign","payload":{"message":"hello"}}}
 ```
 
-This metadata is static runtime data (no network calls) and includes config defaults, event callback signatures, write operation signatures, adapter metadata, contract call builders, trigger info, and valid `TimeAction` values.
+## What you're building
 
-## AI Skills
+| App | Start here |
+| --- | --- |
+| Gambling | [Dice recipe](https://vheissu.github.io/hive-stream/guide/recipes#dice-with-provably-fair-rolls): provably fair rolls, bet limits, refunds |
+| Games | [Tournament recipe](https://vheissu.github.io/hive-stream/guide/recipes#a-paid-tournament-for-a-game), plus badges and quest passes |
+| Social | [Tipping recipe](https://vheissu.github.io/hive-stream/guide/recipes#tips-with-public-thank-you-replies), subscriptions for posts, votes and follows |
+| Bridges | [Bridge recipe](https://vheissu.github.io/hive-stream/guide/recipes#a-custody-bridge-with-operator-attestations): M-of-N operator attestations, limits, audit trail |
 
-This repo now includes installable AI skills for both Claude Code and Codex, tailored to building on top of `hive-stream` instead of raw Hive RPC primitives.
+The recipes live in [`examples/recipes`](examples/recipes) and a test type-checks them against the current API.
 
-Quick locations:
+## Built for real money
 
-- Claude bundle: `.claude/skills/hive-stream`
-- Codex bundle: `codex-skills/hive-stream`
+The defaults assume your handlers move funds:
 
-For full install and usage instructions, see [AI-SKILLS.md](AI-SKILLS.md).
+- **Irreversible blocks only.** A block is processed once it can't be undone by a fork, usually a few seconds after it's produced. `streamMode: 'head'` trades that for lower latency, with fork detection and an `onFork` hook.
+- **A checkpoint after every block.** A restart resumes from the exact block it stopped at.
+- **An idempotency ledger.** Every contract action is recorded by transaction id and operation index, so a replayed block never runs it twice.
+- **An error policy you choose.** `errorPolicy: 'skip' | 'halt' | 'retry'`. `halt` stops at the failing block and reports it through `getHealth()`.
 
-Both skill bundles include focused references for package surface, contracts and triggers, transfer flows and builder APIs, and the built-in contract catalog.
-
-## Configuration
-
-The `Streamer` object can accept an object of configuration values which are all optional. However, some operations like transferring Hive Engine tokens or other operations on the blockchain that are not READ ONLY, will require the active key and/or posting keys supplied as well as a username.
-
-The `blockCheckInterval` value is how often to check for new blocks or in cases of error or falling behind, to poll for new blocks. You should keep this as the default 1000ms value which is one second. This allows you to account for situations where blocks fall behind the main block.
-
-The `blocksBehindWarning` value is a numeric value of the number of blocks your API will fall behind from the master before warning to the console.
-
-To resume automatically from stored state, keep `resumeFromState` enabled (default). To force a specific start block, set `resumeFromState` to `false` and supply `lastBlockNumber`.
-
-For faster catch-up, `catchUpBatchSize` controls how many blocks are processed per polling cycle, and `catchUpDelayMs` controls the delay between catch-up batches (set to `0` for fastest catch-up).
-
-The `apiNodes` are the Hive API endpoints used for failover. Set `apiEnabled` to `true` if you want `start()` to boot the built-in API server, or call `startApiServer()` manually. If you want verbose logs, set `debugMode` to `true`. The configuration values and their defaults can be found in `src/config.ts`.
-
-CamelCase config keys are recommended for readability. Legacy uppercase keys are still supported for backwards compatibility.
-
-```
-const options = {
-  env: true,
-  activeKey: '',
-  postingKey: '',
-  jsonId: 'hivestream',
-  hiveEngineApi: 'https://api.hive-engine.com/rpc',
-  hiveEngineId: 'ssc-mainnet-hive',
-  payloadIdentifier: 'hive_stream',
-  appName: 'hive-stream',
-  username: '',
-  lastBlockNumber: 0,
-  blockCheckInterval: 1000,
-  blocksBehindWarning: 25,
-  resumeFromState: true,
-  catchUpBatchSize: 50,
-  catchUpDelayMs: 0,
-  apiNodes: ['https://api.hive.blog', 'https://api.openhive.network', 'https://rpc.ausbit.dev'],
-  apiEnabled: false,
-  apiPort: 5001,
-  debugMode: false
-}
-
-const ss = new Streamer(options);
-```
-
-If you prefer loading credentials from environment variables, pass `env: true`. Hive Stream will read canonical keys like `ACTIVE_KEY` and `USERNAME`, plus Hive-friendly aliases like `HIVE_ACCOUNT` and `HIVE_ACTIVE_KEY`.
-
-If you want the built-in API without starting block streaming yet:
-
-```javascript
-await ss.startApiServer();
-```
-
-The configuration itself can also be overloaded using the `setConfig` method which allows you to pass one or more of the above configuration options, useful in situations where multiple keys might be used for issuing.
-
-```
-ss.setConfig({
-  activeKey: 'newactivekey',
-  username: 'newusername'
+```ts
+const streamer = new Streamer({
+    env: true,
+    errorPolicy: 'halt',
+    hooks: {
+        onError: ({ error, phase, fatal }) => alerts.send(`${phase}: ${error.message}`, { fatal })
+    }
 });
 ```
 
-## Streamer
+Config is validated when the streamer is built. A zero poll interval or an API node without `https://` throws a `ConfigValidationError` listing every problem. See [Configuration](https://vheissu.github.io/hive-stream/guide/configuration) and [Running in Production](https://vheissu.github.io/hive-stream/guide/production).
 
-The following subscription methods are read only methods, they allow you to react to certain Hive and Hive Engine events on the blockchain. You do not need to pass in any keys to use these methods as they're purely read only.
-These event subscriptions and contract actions are separate paths: subscriptions fire for matching operations, while contracts only run when a payload wrapper exists under `PAYLOAD_IDENTIFIER`.
+## Hooks and guards
 
-**The following actions DO require calling the `start` method first to watch the blockchain**
+Hooks observe or steer processing: `beforeBlock`, `beforeOperation`, `beforeContractAction` (veto or rewrite a payload), `afterContractAction`, `onActionRejected`, `onFork`, `onError`, `onCaughtUp` and more. Guards are declarative checks on contract actions:
 
-#### Watch for transfers
-
-```javascript
-ss.onTransfer('myaccount', (op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
-  // Fires only when op.to === 'myaccount'
-  // Parse op.amount yourself, for example: "1.000 HIVE"
-});
-```
-
-#### Watch for escrow operations
-```javascript
-ss.onEscrowTransfer((op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
-  
+```ts
+await streamer.registerContract({
+    ...createDiceContract({ account: 'myhouse', fairness: true }),
+    guards: {
+        allowedAssets: ['HIVE'],
+        maxAmount: 50,
+        rateLimit: { max: 10, windowSeconds: 60 }
+    }
 });
 
-ss.onEscrowApprove((op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
-  
+streamer.hook('afterContractAction', ({ contract, action, durationMs }) => {
+    metrics.timing(`${contract}.${action}`, durationMs);
 });
 
-ss.onEscrowDispute((op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
-  
-});
-
-ss.onEscrowRelease((op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
-  
-});
+streamer.pauseContract('hivedice');   // maintenance mode, no redeploy
 ```
 
-#### Watch for custom JSON operations
-```javascript
-ss.onCustomJson((op, { sender, isSignedWithActiveKey }, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
-  
-})
+See [Hooks & Guards](https://vheissu.github.io/hive-stream/guide/hooks).
+
+## Provably fair randomness
+
+Block-id randomness can be nudged by the witness producing the block and by the player choosing their transaction. The fairness module commits to a server seed before any bet, derives outcomes with HMAC-SHA256 and rejection sampling, and reveals seeds on rotation. Pass `fairness: true` to dice, coinflip, roulette, rps or lotto. `limbo` always uses it. Players verify with the same code in a browser:
+
+```ts
+import { verifyOutcome } from 'hive-stream/client';
+
+const { valid } = verifyOutcome({ serverSeed, ...proof }, { type: 'dice', sides: 100 }, settledRoll);
 ```
 
-#### Watch for custom JSON operations (with a specific ID)
-```javascript
-ss.onCustomJsonId('your-custom-json-id', (op, { sender, isSignedWithActiveKey }, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
-  
-});
-```
+See [Provably Fair Randomness](https://vheissu.github.io/hive-stream/guide/fairness).
 
-#### Watch for Hive Engine custom JSON operations
-```javascript
-ss.onHiveEngine((contractName, contractAction, contractPayload, sender, op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
-  
-});
-```
+## Built-in contracts
 
-#### Watch for post operations
-```javascript
-ss.onPost((op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+45 contracts you can register as they are. Every one has a [reference page](https://vheissu.github.io/hive-stream/contracts/) with options, actions and payloads.
 
-});
-```
+| Category | Contracts |
+| --- | --- |
+| Gambling | dice, coinflip, roulette, lotto, limbo, sweepstakes, prediction markets |
+| Games | tournaments, badges, quest passes, rock-paper-scissors |
+| Social | tip jar, fan clubs, referrals |
+| Commerce | auction house, bookings, bounty board, bundle marketplace, gift cards, group buys, invoices, paywall, rentals, subscriptions, ticketing |
+| Finance | exchange (order book), staking pool, DCA bots, insurance pool, launchpad, payroll, revenue split, savings |
+| Assets | tokens, NFTs, domain registry |
+| Bridge | custody bridge with operator attestations |
+| Fundraising | crowdfunding, charity matching, grant rounds |
+| Governance | polls, multisig treasury, proposal timelock |
+| Utility | state checkpoints, oracle bounties |
 
-#### Watch for comment operations
-```javascript
-ss.onComment((op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+## Testing without a node
 
-});
-```
+`hive-stream/testing` runs the real streamer against simulated blocks and records every broadcast:
 
-## Actions (active key)
+```ts
+import { createTestStreamer } from 'hive-stream/testing';
+import { createDiceContract } from 'hive-stream';
 
-All of the below methods require an active key has been supplied in the constructor above called `ACTIVE_KEY`. The methods below are all promised based, so you can `await` them or use `then` to confirm a successful result.
+const ts = await createTestStreamer({ username: 'myhouse' });
+ts.client.setAccount('myhouse', { balance: '1000.000 HIVE' });   // the bankroll
+await ts.streamer.registerContract(createDiceContract({ account: 'myhouse', fairness: true }));
 
-**The following actions do NOT require calling the `start` method first to watch the blockchain**
+await ts.contractTransfer({ from: 'alice', amount: '5.000 HIVE', contract: 'hivedice', action: 'roll', payload: { roll: 50 } });
+await ts.advanceTime('1h');   // fire due time actions
 
-```javascript
-const ss = new Streamer({
-  ACTIVE_KEY: 'youractivekey'
-});
-```
-
-### Transfer Hive (HIVE or HBD)
-```javascript
-transferHiveTokens(from, to, amount, symbol, memo = '') {
-
-}
-```
-
-### Burn Hive (HIVE or HBD)
-```javascript
-burnHiveTokens(from, amount, symbol, memo = '') {
-
-}
-```
-
-### Burn A Percentage Of An Incoming Transfer
-```javascript
-burnTransferPercentage(from, transferOrAmount, percentage, memo = '', allowedSymbols = ['HIVE', 'HBD']) {
-
-}
-```
-
-### Transfer Hive Engine Tokens
-```javascript
-transferHiveEngineTokens(from, to, symbol, quantity, memo = '') {
-
-}
-```
-
-### Burn Hive Engine Tokens
-```javascript
-burnHiveEngineTokens(from, symbol, quantity, memo = '') {
-
-}
-```
-
-### Transfer Hive Engine Tokens to Multiple Accounts
-```javascript
-transferHiveEngineTokensMultiple(from, accounts = [], symbol, memo = '', amount = '0') {
-
-}
-```
-
-### Burn part of an inbound transfer safely
-```javascript
-const { Streamer } = require('hive-stream');
-
-const ss = new Streamer({ env: true });
-
-ss.flows.autoBurnIncomingTransfers({
-  percentage: 67,
-  memo: ({ transaction }) => `Auto-burn 67% of ${transaction.id}`
-});
-
-ss.start();
-```
-
-### Forward inbound transfers automatically
-```javascript
-const { Streamer } = require('hive-stream');
-
-const ss = new Streamer({ env: true });
-
-ss.flows.autoForwardIncomingTransfers({
-  to: 'treasury',
-  percentage: 100,
-  memo: ({ transaction }) => `Forwarded from ${transaction.id}`
-});
-
-ss.start();
-```
-
-### Split inbound transfers across multiple accounts
-```javascript
-const { Streamer } = require('hive-stream');
-
-const ss = new Streamer({ env: true });
-
-ss.flows.autoSplitIncomingTransfers({
-  recipients: [
-    { account: 'null', percentage: 69, memo: 'Feel the burn' },
-    { account: 'treasury' }
-  ]
-});
-
-ss.start();
-```
-
-### Refund inbound transfers automatically
-```javascript
-const { Streamer } = require('hive-stream');
-
-const ss = new Streamer({ env: true });
-
-ss.flows.autoRefundIncomingTransfers({
-  memo: ({ transfer }) => `Refunded ${transfer.rawAmount} to ${transfer.from}`
-});
-
-ss.start();
-```
-
-### Route inbound transfers with one flow
-```javascript
-const { Streamer } = require('hive-stream');
-
-const ss = new Streamer({ env: true });
-
-ss.flows.autoRouteIncomingTransfers({
-  routes: [
-    { type: 'burn', percentage: 67, memo: 'Auto-burn 67%' },
-    { to: 'treasury', memo: 'Treasury remainder' }
-  ]
-});
-
-ss.start();
-```
-
-### Route grouped payouts with an optional on-top donation
-```javascript
-const { Streamer } = require('hive-stream');
-
-const ss = new Streamer({ env: true });
-
-ss.flows.autoRouteIncomingTransfers({
-  account: 'tweet-backup',
-  routes: [
-    { to: 'tweet-catcher', percentage: 20, memo: 'Tweet watcher share' },
-    { group: [{ account: 'node-1' }, { account: 'node-2' }], percentage: 4, memo: 'Node operator share' },
-    { group: [{ account: 'wit-1' }, { account: 'wit-2' }], percentage: 6, memo: 'Witness share' },
-    { type: 'burn', percentage: 70, memo: 'Burn share' },
-    { to: 'platform-op', mode: 'onTop', percentage: 8, memo: 'Optional platform donation' }
-  ]
-});
-
-ss.start();
-```
-
-### Chain inbound transfer flows with a builder
-```javascript
-const { Streamer } = require('hive-stream');
-
-const ss = new Streamer({ env: true });
-
-ss.flows
-  .incomingTransfers()
-  .burn(69, 'Feel the burn')
-  .remainderTo('treasury', 'Treasury remainder')
-  .start();
-
-ss.start();
-```
-
-### Preview a payout plan before the flow starts
-```javascript
-const { Streamer } = require('hive-stream');
-
-const ss = new Streamer({ env: true });
-
-const plan = ss.flows
-  .incomingTransfers('tweet-backup')
-  .forwardTo('tweet-catcher', 20, 'Tweet watcher share')
-  .forwardGroup([{ account: 'node-1' }, { account: 'node-2' }], 4, { memo: 'Node operator share' })
-  .remainderToGroup([{ account: 'wit-1' }, { account: 'wit-2' }], { memo: 'Witness share' })
-  .burn(70, 'Burn share')
-  .donateOnTop('platform-op', 8, 'Optional platform donation')
-  .plan({ from: 'buyer', to: 'tweet-backup', amount: '1.080 HBD', memo: 'Archive this tweet' });
-
-console.log(plan.baseAmount);  // "1.000"
-console.log(plan.onTopAmount); // "0.080"
-console.log(plan.routes);
-```
-
-`flows.autoBurnIncomingTransfers()` is the quickest high-level option for the burn case. `flows.autoForwardIncomingTransfers()` covers treasury forwarding, `flows.autoSplitIncomingTransfers()` handles common revenue-sharing, and `flows.autoRefundIncomingTransfers()` is useful for rejecting unsupported payments. `flows.autoRouteIncomingTransfers()` is the general router for mixed burn/transfer/group routes, and `flows.planIncomingTransferRoutes()` previews the same math without broadcasting. In base routes, one destination can omit `percentage`/`basisPoints` and automatically receive the remainder. Routes with `mode: 'onTop'` are treated as a surcharge on the base payout amount, so a `1.000 HBD` base payout with an `8%` donation should arrive as `1.080 HBD`.
-
-`flows.incomingTransfers()` is the chainable version of the same idea. Single-step builders compile down to `autoBurnIncomingTransfers()`, `autoForwardIncomingTransfers()`, or `autoRefundIncomingTransfers()`. Multi-step builders compile down to `autoRouteIncomingTransfers()`, and `.plan(...)` gives you the exact rounded output before any transfer is sent.
-
-### Money Namespace
-```javascript
-const ss = new Streamer();
-
-ss.money.parseAssetAmount('1.000 HIVE');
-ss.money.formatAmount('1.2399'); // "1.239"
-ss.money.calculatePercentageAmount('10.000', 12.5); // "1.250"
-ss.money.splitAmountByBasisPoints('1.000', [6900, 3100]); // ["0.690", "0.310"]
-ss.money.splitAmountByWeights('1.080', [10000, 800]); // ["1.000", "0.080"]
-```
-
-### Issue Hive Engine Tokens
-```javascript
-issueHiveEngineTokens(from, to, symbol, quantity, memo = '') {
-
-}
-```
-
-### Issue Hive Engine Tokens to Multiple Accounts
-```javascript
-issueHiveEngineTokensMultiple(from, accounts = [], symbol, memo = '', amount = '0') {
-
-}
-```
-
-### Escrow Operations
-```javascript
-escrowTransfer({
-  from,
-  to,
-  agent,
-  escrow_id,
-  hive_amount = '0.000 HIVE',
-  hbd_amount = '0.000 HBD',
-  fee,
-  ratification_deadline,
-  escrow_expiration,
-  json_meta
-}, signingKeys?)
-
-escrowApprove({ from, to, agent, who, escrow_id, approve }, signingKeys?)
-escrowDispute({ from, to, agent, who, escrow_id }, signingKeys?)
-escrowRelease({ from, to, agent, who, receiver, escrow_id, hive_amount, hbd_amount }, signingKeys?)
-```
-
-### Multisig + Authority Helpers
-```javascript
-broadcastOperations(operations, signingKeys?)
-broadcastMultiSigOperations(operations, signingKeys)
-createAuthority(keyAuths, accountAuths, weightThreshold)
-updateAccountAuthorities(account, authorityUpdate, signingKeys?)
-```
-
-### Recurrent Transfers + Governance
-```javascript
-recurrentTransfer({ from, to, amount, memo, recurrence, executions }, signingKeys?)
-createProposal({ creator, receiver, start_date, end_date, daily_pay, subject, permlink }, signingKeys?)
-updateProposalVotes({ voter, proposal_ids, approve }, signingKeys?)
-removeProposals({ proposal_owner, proposal_ids }, signingKeys?)
-```
-
-### Operation Builders
-```javascript
-const { Streamer } = require('hive-stream');
-
-const ss = new Streamer({ env: true });
-
-await ss.ops
-  .transfer()
-  .from('alice')
-  .to('bob')
-  .hive(1.25)
-  .memo('Builder transfer example')
-  .send();
-
-await ss.ops
-  .createProposal()
-  .creator('alice')
-  .receiver('treasury')
-  .startDate(new Date('2026-04-01T00:00:00.000Z'))
-  .endDate(new Date('2026-05-01T00:00:00.000Z'))
-  .dailyHbd(12.5)
-  .subject('Builder proposal example')
-  .permlink('builder-proposal-example')
-  .send();
-```
-
-Additional chainable write builders are available for Hive Engine token ops and governance/voting:
-
-```javascript
-await ss.ops
-  .transferEngine()
-  .from('alice')
-  .to('bob')
-  .symbol('BEE')
-  .quantity('1.23456')
-  .memo('Engine transfer')
-  .send();
-
-await ss.ops
-  .voteProposals()
-  .voter('alice')
-  .ids(1, 2, 3)
-  .approve()
-  .send();
-
-await ss.ops
-  .upvote()
-  .author('bob')
-  .permlink('my-post')
-  .weight(25)
-  .send();
-```
-
-### Upvote/Downvote Posts
-```javascript
-upvote(votePercentage = '100.0', username, permlink) {
-
-}
-
-downvote(votePercentage = '100.0', username, permlink) {
-
-}
-```
-
-## Testing your app
-
-Hive Stream ships a testing kit at `hive-stream/testing` so you can test contracts and subscriptions with no network, no keys, and no files on disk. Blocks come from an in-memory provider, broadcasts are captured instead of sent, and state lives in an in-memory SQLite database — so the built-in SQL contracts work too.
-
-```javascript
-import { createTestStreamer, hive } from 'hive-stream/testing';
-import { defineContract, action } from 'hive-stream';
-
-const ts = await createTestStreamer({ username: 'myapp' });
-
-await ts.streamer.registerContract(myContract);
-
-// Simulate a player paying 1 HIVE into your contract
-await ts.contractTransfer({
-    from: 'alice',
-    contract: 'mygame',
-    action: 'play',
-    payload: { choice: 'heads' },
-    amount: hive(1)
-});
-
-// Assert on what your contract broadcast back (e.g. payouts)
-console.log(ts.outgoingTransfers); // [{ from: 'myapp', to: 'alice', amount: '2.000 HIVE', memo: '...' }]
-
-// Fast-forward time to fire TimeActions — no real waiting
-await ts.advanceTime('1h');
-
+console.log(ts.outgoingTransfers);   // the payout or loss notice, with the fairness proof
 await ts.stop();
 ```
 
-The kit exports:
+See [Testing Your App](https://vheissu.github.io/hive-stream/guide/testing).
 
-- `createTestStreamer(options)` — boots a real `Streamer` against simulated infrastructure. All regular streamer config options are accepted.
-- `TestStreamer` helpers — `transfer()`, `contractTransfer()`, `customJson()`, `contractJson()`, `sendOperations()` for raw ops, `advanceBlocks(n)`, `advanceTime('30s' | '5m' | '1h' | ms)`, `getEvents()`, and `outgoingTransfers`/`broadcasts` for asserting on what your app sent.
-- `MemoryBlockProvider` — an in-memory `BlockProvider` you can also use directly.
-- `FakeHiveClient` — records broadcasts and answers reads from fixtures (`onCall()`, `setAccount()`).
-- `hive(n)` / `hbd(n)` — asset string formatters (`hive(1)` → `'1.000 HIVE'`).
+## Frontends and tooling
 
-See `DOCUMENTATION.md` for a full guide.
+These entry points have no Node dependencies and run in a browser:
 
-## Contracts
+- `hive-stream/client` builds contract memos and `custom_json` operations, validates payloads against shared zod specs, and verifies fairness proofs.
+- `hive-stream/scaffold` generates the same project files as `npx hive-stream new`, in memory.
+- `hive-stream/catalog` describes every built-in contract (category, options, actions, payload fields) as data, for pickers and form builders.
 
-Hive Stream allows you to register contract definitions that execute when a transfer memo or custom JSON operation includes a contract wrapper. The payload lives under the `PAYLOAD_IDENTIFIER` key (default: `hive_stream`).
-Regular event handlers like `onTransfer` and `onCustomJson` still run for matching operations even when no contract wrapper is present.
+`HIVE_STREAM_METADATA` from the main entry lists subscriptions, write operations, config defaults and time action values for visual builders. See [Building UIs and Tools](https://vheissu.github.io/hive-stream/guide/ui-integration).
 
-The payload shape is:
+## Storage
 
-- `contract`: the name of the contract you registered
-- `action`: the action name defined in your contract
-- `payload`: data passed to the action
-- `meta`: optional metadata
+SQLite is the default and needs no setup. PostgreSQL and MongoDB adapters are included:
 
-### Writing contracts
+```ts
+import { PostgreSQLAdapter } from 'hive-stream';
 
-Contracts are defined with `defineContract` + `action`. Each action can specify a trigger (`custom_json`, `transfer`, `time`, `escrow_transfer`, `escrow_approve`, `escrow_dispute`, `escrow_release`, or `recurrent_transfer`) and an optional Zod schema for payload validation.
-
-For a full contract-building guide (payloads, context, triggers, validation, error handling, and exchange setup), see `DOCUMENTATION.md`.
-
-### Register a contract
-
-Register a contract definition. Registration is async so hooks can initialize state.
-
-```javascript
-import { defineContract, action } from 'hive-stream';
-
-const MyContract = defineContract({
-    name: 'mycontract',
-    actions: {
-        hello: action(async (payload, ctx) => {
-            console.log('hello', payload, ctx.sender);
-        }, { trigger: 'custom_json' })
-    }
-});
-
-await streamer.registerContract(MyContract);
+await streamer.registerAdapter(new PostgreSQLAdapter({ connectionString: process.env.DATABASE_URL }));
 ```
 
-### Unregister a contract
+Most built-in contracts need a SQL adapter. To write your own, extend `AdapterBase` and implement `loadState` and `saveState`. See [Storage Adapters](https://vheissu.github.io/hive-stream/guide/adapters).
 
-Unregister a contract that has been registered.
+## Running in production
 
-```javascript
-await streamer.unregisterContract('mycontract');
+`enableGracefulShutdown()` finishes the current block and writes a checkpoint on SIGINT or SIGTERM. `getHealth()` is also served at `GET /health` (200 or 503) when `apiEnabled` is on. `replayBlocks(from, to)` reprocesses a range for backfills. A PM2 config is in [`ecosystem.config.js`](ecosystem.config.js). See [Running in Production](https://vheissu.github.io/hive-stream/guide/production).
+
+## AI skills
+
+Companion skills for Claude Code (`.claude/skills/hive-stream`) and Codex (`codex-skills/hive-stream`) teach coding agents the package API. Install instructions are in [AI-SKILLS.md](AI-SKILLS.md).
+
+## Development
+
+```shell
+npm test            # Jest; live network suites need RUN_LIVE_TESTS=1
+npm run build       # CommonJS build, ESM wrappers, contract catalog
+npm run docs:dev    # regenerates contract reference pages, then serves the docs
 ```
 
-### Example Payload
+Contract reference pages and `src/catalog/contracts.json` are generated. Don't edit them by hand.
 
-```javascript
-JSON.stringify({
-    hive_stream: {
-        contract: 'hivedice',
-        action: 'roll',
-        payload: { roll: 22 }
-    }
-})
-```
+## License
 
-This will match a registered contract called `hivedice`, run the `roll` action, and pass the payload into your handler.
-
-### Built-in Contract Examples
-
-The library includes several built-in contract examples in the `src/contracts` folder:
-
-- `createDiceContract` - A dice rolling game contract
-- `createCoinflipContract` - A coin flip game contract
-- `createLottoContract` - A lottery-style game contract
-- `createTokenContract` - A contract for token operations
-- `createNFTContract` - A contract for NFT operations
-- `createRpsContract` - A rock-paper-scissors game contract
-- `createRouletteContract` - A roulette game contract with straight, color, parity, dozen, column, and low/high bets
-- `createPollContract` - A poll/voting contract
-- `createTipJarContract` - A tip jar + message board contract
-- `createExchangeContract` - A basic exchange with deposits, withdrawals, balances, and order matching (SQL adapter required)
-- `createAuctionHouseContract` - Auctions with reserve prices, buy-now support, and timed settlement
-- `createSubscriptionContract` - Subscription plans with transfer and recurrent-transfer renewals
-- `createCrowdfundContract` - Crowdfunding campaigns with milestones, finalization, and refund tracking
-- `createBountyBoardContract` - Funded bounties, submissions, and award selection
-- `createInvoiceContract` - Invoices with partial payments, recurring payments, and overdue sweeps
-- `createSavingsContract` - Savings goals with recurring contributions and withdrawal requests
-- `createBookingContract` - Reservable listings with paid booking windows and confirmations
-- `createGiftCardContract` - Gift card issuance, redemption, and cancellation flows
-- `createGroupBuyContract` - Threshold-based pooled purchases and participant commitments
-- `createSweepstakesContract` - Paid-entry sweepstakes with deterministic winner draws
-- `createDcaBotContract` - Time-based DCA bot scheduling and execution request events
-- `createMultisigTreasuryContract` - Multisig vaults, proposal approvals, and execution readiness tracking
-- `createRevenueSplitContract` - Revenue share ledgers and withdrawal requests for collaborators
-- `createPaywallContract` - Paid access control for gated resources and memberships
-- `createDomainRegistryContract` - App-level namespaces with registrations, renewals, transfers, and expiries
-- `createRentalContract` - Escrow-backed rental agreements for items, passes, or assets
-- `createLaunchpadContract` - Launchpad sales with allocations, finalization, and claim flows
-- `createPredictionMarketContract` - Prediction markets with positions, resolution, and winner claims
-- `createQuestPassContract` - Seasonal passes with progress tracking and reward claims
-- `createCharityMatchContract` - Donation campaigns with matched totals and closing summaries
-- `createReferralContract` - Affiliate programs with codes, funded budgets, and payout balances
-- `createInsurancePoolContract` - Insurance pools with premium-backed policies, claims, and reserve management
-- `createOracleBountyContract` - Oracle bounty feeds with report rounds, median finalization, and reporter rewards
-- `createGrantRoundsContract` - Matching grant rounds with project submissions, donations, and post-close allocations
-- `createPayrollContract` - Recurring team payrolls with funded budgets, scheduled runs, and recipient withdrawals
-- `createProposalTimelockContract` - Timelocked governance queues with approvals, delays, and execution requests
-- `createBundleMarketplaceContract` - Fixed-price bundle storefronts with inventory tracking and fulfillment states
-- `createTicketingContract` - Event ticketing with purchases, check-ins, refunds, and capacity enforcement
-- `createFanClubContract` - Paid fan clubs with member renewals, engagement points, and perk redemptions
-
-These can be imported and used as examples for building your own contracts:
-
-```javascript
-import { createDiceContract, createCoinflipContract, createLottoContract, createRouletteContract } from 'hive-stream';
-```
-
-Most built-in contracts in `src/contracts` persist SQL tables internally, so they require a SQL-capable adapter such as SQLite or PostgreSQL. MongoDB remains supported for streamer persistence and custom contracts that do not depend on raw SQL queries.
-
-### Example Snippets
-
-Sample snippets for the newest contracts live in `examples/contracts/`:
-
-- `examples/contracts/rps.ts`
-- `examples/contracts/roulette.ts`
-- `examples/contracts/poll.ts`
-- `examples/contracts/tipjar.ts`
-- `examples/contracts/exchange.ts`
-
-Higher-level flow examples live in `examples/flows/`:
-
-- `examples/flows/auto-burn.ts`
-- `examples/flows/auto-forward.ts`
-- `examples/flows/auto-split.ts`
-- `examples/flows/auto-refund.ts`
-- `examples/flows/builder-burn-route.ts`
-- `examples/flows/grouped-route-on-top.ts`
-- `examples/flows/builder-payout-plan.ts`
-
-Chainable operation examples live in `examples/ops/`:
-
-- `examples/ops/transfer-builder.ts`
-- `examples/ops/proposal-builder.ts`
-
-## Time-based Actions
-
-It's like a cron job for your contracts. Time-based actions allow you to execute contract functions over a wide variety of different periods. Want to call a function every 3 seconds block time or want to call a function once per day? Time-based actions are an easy way to run time code.
-
-The following example will run a contract action every 30 seconds. All you do is register a new `TimeAction` instance.
-
-```
-import { TimeAction, Streamer } from 'hive-stream';
-
-const streamer = new Streamer({
-    ACTIVE_KEY: ''
-});
-
-const testAction = new TimeAction('30s', 'test30s', 'hivedice', 'testauto');
-
-streamer.registerAction(testAction);
-
-streamer.start();
-```
-
-The `TimeAction` instance accepts the following values:
-
-- timeValue - When should this action be run?
-- uniqueId - A unique ID to describe your action
-- contractName - The name of the contract
-- contractAction - The action we are calling inside of the contract
-- date - An optional final parameter that accepts a date of creation
-
-```
-new TimeAction(timeValue, uniqueId, contractName, contractAction, date)
-```
-
-### Valid time values
-
-At the moment, the `timeValue` passed in as the first argument to `TimeAction` cannot accept just any value. However, there are many available out-of-the-box with more flexibility to come in the future.
-
-- `3s` or `block` will run a task every block (3 seconds, approximately)
-- `10s` will run a task every 10 seconds
-- `30s` will run a task every 30 seconds
-- `1m` or `minute` will run a task every 60 seconds (1 minute)
-- `5m` will run a task every 5 minutes
-- `15m` or `quarter` will run a task every 15 minutes
-- `30m` or `halfhour` will run a task every 30 minutes
-- `1h` or `hourly` will run a task every 60 minutes (every hour)
-- `12h` or `halfday` will run a task every 12 hours (half a day)
-- `24h`, `day`, or `daily` will run a task every 24 hours (day)
-- `week` or `weekly` will run a task every 7 days (week)
-
-Values will be persisted if using one of the database adapters that ship with the library.
-
-## Adapters
-
-The Hive Stream library supports custom adapters for various actions that take place in the library. When the library first loads, it makes a call to get the last block number or when a block is processed, storing the processed block number. This library ships with three adapters: SQLite, MongoDB, and PostgreSQL. These provide robust database storage for blockchain state and operations.
-
-By default, Streamer uses SQLite adapter. To use a different adapter, use the `registerAdapter()` method:
-
-### SQLite Adapter (Default)
-```javascript
-import { Streamer, SqliteAdapter } from 'hive-stream';
-
-const streamer = new Streamer(config);
-// SQLite is used by default, but you can explicitly register a custom SQLite database:
-const adapter = new SqliteAdapter('./hive-stream.db');
-await streamer.registerAdapter(adapter);
-```
-
-### MongoDB Adapter
-```javascript
-import { Streamer, MongodbAdapter } from 'hive-stream';
-
-const streamer = new Streamer(config);
-const adapter = new MongodbAdapter('mongodb://localhost:27017', 'hive_stream');
-await streamer.registerAdapter(adapter);
-```
-
-MongoDB supports block state, transfers, custom JSON persistence, and custom contracts that manage their own state without SQL. Built-in SQL-backed contracts should use SQLite or PostgreSQL.
-
-### PostgreSQL Adapter
-```javascript
-import { Streamer, PostgreSQLAdapter } from 'hive-stream';
-
-const streamer = new Streamer(config);
-const adapter = new PostgreSQLAdapter({
-    host: 'localhost',
-    port: 5432,
-    user: 'postgres',
-    password: 'your_password',
-    database: 'hive_stream'
-});
-
-// Or with connection string
-const adapter = new PostgreSQLAdapter({
-    connectionString: 'postgresql://user:pass@localhost:5432/hive_stream'
-});
-
-await streamer.registerAdapter(adapter);
-```
-
-When creating an adapter, at a minimum your adapter requires two methods: `loadState` and `saveState`. It must also extend `AdapterBase` which is exported from the package.
-
-You can see a few adapters that ship with Hive Stream in the `src/adapters` directory.
-
-## Production
-
-Hive Stream ships production plumbing out of the box:
-
-```javascript
-const streamer = new Streamer({
-  env: true,
-  logger: pino()                       // pluggable structured logging (console by default)
-});
-
-streamer.enableGracefulShutdown();     // clean stop on SIGINT/SIGTERM
-
-streamer.getHealth();                  // { status: 'ok'|'behind'|'stalled'|'stopped', blocksBehind, ... }
-// Also served at GET /health (200/503) and /status by the built-in API
-
-await streamer.replayBlocks(from, to); // reprocess a historical range (backfills, debugging)
-```
-
-See the [production guide](https://vheissu.github.io/hive-stream/guide/production) for details.
-
-## Permanently running with PM2
-
-Simply copy the `ecosystem.config.js` file from this repository into your application, globally install `pm2` via `npm install pm2 -g` and change the `script` value below to reflect the main file of your application.
-
-**ecosystem.config.js**
-
-```
-module.exports = {
-  apps: [
-    {
-      name: 'hive-stream',
-      script: 'index.js',
-      ignore_watch: ['node_modules'],
-      env: {
-        NODE_ENV: 'development'
-      },
-      env_production: {
-        NODE_ENV: 'production'
-      }
-    }
-  ]
-```
+MIT
