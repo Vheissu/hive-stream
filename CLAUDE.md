@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Hive Stream is a Node.js library for streaming and reacting to blockchain actions on the Hive blockchain. It provides a layer for monitoring blockchain operations, executing contracts, and managing time-based actions. The library includes adapters for data persistence (SQLite, MongoDB) and supports custom smart contracts.
+Hive Stream is a Node.js library for streaming and reacting to blockchain actions on the Hive blockchain. It provides a layer for monitoring blockchain operations, executing contracts, and managing time-based actions. The library includes adapters for data persistence (SQLite, PostgreSQL, MongoDB), 45 built-in contracts, hooks and guards, provably fair randomness, and an offline testing kit.
 
 ## Development Commands
 
@@ -29,47 +29,39 @@ Hive Stream is a Node.js library for streaming and reacting to blockchain action
 
 ### Core Components
 
-**Streamer (`src/streamer.ts`)**: The main class that manages blockchain streaming, operation processing, and contract execution. Handles block processing, subscriptions, and maintains connection to Hive API nodes.
+**Streamer (`src/streamer.ts`)**: Block polling, operation dispatch, subscriptions, contract execution, time actions and the write-operation namespaces (`ops`, `flows`, `money`, `query`, `engine`). Processes blocks up to the last irreversible block by default (`streamMode: 'irreversible'`); `head` mode detects forks, rewinds to the common ancestor and fires `onFork`. The cursor is checkpointed after every block (`checkpointMode`). `errorPolicy` (`skip` / `halt` / `retry`) decides what a failing handler or storage write does.
 
-**Contracts (`src/contracts/`)**: Smart contract implementations including dice, coinflip, and lotto games. Contracts follow a lifecycle pattern with `create()`, `destroy()`, and `updateBlockInfo()` methods.
+**Hooks (`src/hooks.ts`)**: Streamer hooks (`beforeBlock`, `beforeOperation`, `beforeContractAction`, `afterContractAction`, `onActionRejected`, `onFork`, `onError`, `onCheckpoint`, ...) registered via config, `streamer.hook()` or `streamer.use()`. Hooks and subscription callbacks are awaited in order.
 
-**Adapters (`src/adapters/`)**: Data persistence layer with base adapter class and implementations for SQLite and MongoDB. Adapters handle state management, block processing, and data storage.
+**Contracts (`src/contracts/`)**: `defineContract` / `action` in `contract.ts` (validation of actions, hooks and guards). 45 built-in factories (`create*Contract`). Contract hooks: `create`, `destroy`, `beforeAction`, `afterAction`, `onError`. Declarative guards: `allowedSenders`, `blockedSenders`, `allowedAssets`, `minAmount`, `maxAmount`, `rateLimit`, `paused`. New contracts should use block time (`ctx.block.time`) and key records with `operationRecordId(trxId, opIndex)`.
 
-**Configuration (`src/config.ts`)**: Centralized configuration management supporting environment variables for keys, API endpoints, and blockchain parameters.
+**Fairness (`src/fairness/`)**: Commit-reveal provably fair randomness (`createFairness`, `FairnessManager`), with a dependency-free SHA-256/HMAC so `verifyOutcome()` runs in browsers via `hive-stream/client`. Dice, coinflip, roulette, rps and lotto take an opt-in `fairness` option; limbo always uses it.
 
-### Key Features
+**Adapters (`src/adapters/`)**: SQLite (default, bundled), PostgreSQL and MongoDB (optional peer dependencies loaded lazily through `src/optional-dependency.ts`). Adapters persist state (`lastBlockNumber`, `lastBlockId`), time actions, events, and the idempotency ledger (`hasProcessedOperation` / `markOperationProcessed` / `pruneProcessedOperations`, table `processed_operations`). `AdapterBase` has an in-memory ledger default.
 
-**Blockchain Streaming**: Monitors Hive blockchain for specific operations (transfers, custom JSON, posts, comments) with configurable block intervals and fallback API nodes.
+**Configuration (`src/config.ts`)**: camelCase and uppercase keys, env loading (`env: true`), and validation at construction (`ConfigValidationError`). `defineConfig()` / `validateConfig()`.
 
-**Contract System**: Supports custom smart contracts that execute based on blockchain operations. Contracts can process transfers and custom JSON operations with automatic payload validation.
+**Browser-safe entry points**: `hive-stream/client` (`src/client/`, contract call builders and fairness verifier), `hive-stream/scaffold` (`src/scaffold/`, pure project generator used by the CLI in `src/cli/`), `hive-stream/catalog` (`src/catalog/`, generated contract metadata). `tests/browser-safe-entries.spec.ts` fails if they import Node built-ins or packages.
 
-**Time-based Actions**: Executes contract methods on scheduled intervals (3s, 30s, 1m, 15m, 30m, 1h, 12h, 24h, weekly).
+**Testing kit (`src/testing/`)**: `createTestStreamer()` runs a real Streamer on `MemoryBlockProvider` + `FakeHiveClient` + in-memory SQLite.
 
-**Multi-adapter Support**: Pluggable adapter system for different storage backends with automatic state persistence and action management.
+### Generated files (don't hand-edit)
 
-### Database Schema
-
-When using adapters, the library maintains:
-- Block state (last processed block number)
-- Time-based actions with scheduling metadata
-- Operation logs and contract execution history
+- `docs/contracts/*.md` and `src/catalog/contracts.json` come from `npm run docs:gen` / `npm run catalog:gen` (both run by `npm run build`), via `scripts/lib/contract-introspection.ts`. A new contract factory needs one line in `scripts/lib/contract-metadata.ts`.
+- `src/scaffold/version.ts` comes from `scripts/generate-version.js`.
+- ESM `.mjs` files in `dist/` are thin wrappers from `scripts/generate-esm-wrappers.js`; there is deliberately no dual build.
 
 ### Environment Variables
 
-Required for blockchain operations:
-- `ACTIVE_KEY` - For token transfers and active operations
-- `POSTING_KEY` - For posting operations and signatures
+- `ACTIVE_KEY` / `HIVE_ACTIVE_KEY` - transfers, Hive Engine ops and active-authority custom JSON
+- `POSTING_KEY` / `HIVE_POSTING_KEY` - posting operations
+- `USERNAME` / `HIVE_ACCOUNT` / `HIVE_USERNAME` - the app account
+- Reliability options also read from env (`STREAM_MODE`, `ERROR_POLICY`, `CHECKPOINT_MODE`, ...)
 
 ### Deployment
 
-The library includes PM2 configuration in `ecosystem.config.js` for production deployment. The main entry point expects a compiled JavaScript file at the project root.
+`ecosystem.config.js` is a PM2 reference. `enableGracefulShutdown()` finishes the current block and checkpoints on SIGINT/SIGTERM; `getHealth()` is served at `/health` when the API is enabled.
 
 ### Testing Strategy
 
-Tests are located in `tests/` directory with:
-- Contract testing with mock data in `entrants.json`
-- Adapter testing for data persistence
-- Streamer functionality testing
-- Utility function testing
-
-The test setup in `tests/setup.ts` configures the testing environment for blockchain operations.
+Jest specs live in `tests/` (`tests/integration/` for adapters and live network suites, which need `RUN_LIVE_TESTS=1`). Prefer the testing kit for contract tests. `tests/examples-typecheck.spec.ts` compiles everything under `examples/` against `src/` with strict settings, so docs recipes stay correct.

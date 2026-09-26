@@ -2,13 +2,17 @@
 
 ## Project Structure & Module Organization
 - `src/` holds TypeScript source. Core entry points are `streamer.ts`, `api.ts`, and `index.ts`.
-- `src/adapters/` contains SQLite/Mongo/Postgres adapters; `src/contracts/` has contract examples; `src/exchanges/` has rate helpers; `src/types/` centralizes shared types.
+- `src/adapters/` contains SQLite/Mongo/Postgres adapters (each also stores the idempotency ledger); `src/contracts/` has the 45 built-in contract factories; `src/fairness/` has provably fair randomness; `src/hooks.ts` defines streamer hooks; `src/exchanges/` has rate helpers; `src/types/` centralizes shared types.
+- Browser-safe entry points: `src/client/` (`hive-stream/client`), `src/scaffold/` (`hive-stream/scaffold`, used by the CLI in `src/cli/`), `src/catalog/` (`hive-stream/catalog`). They must not import Node built-ins or packages; `tests/browser-safe-entries.spec.ts` enforces it.
+- `src/testing/` is the offline testing kit (`hive-stream/testing`).
 - `tests/` contains Jest specs (`**/*.spec.ts`) plus `tests/integration/` and `tests/helpers/`.
-- `dist/` is generated build output; `examples/` provides usage samples; `ecosystem.config.js` is a PM2 reference.
+- `dist/` is generated build output; `examples/` provides usage samples (type-checked by `tests/examples-typecheck.spec.ts`; `examples/recipes/` backs the Recipes docs page); `ecosystem.config.js` is a PM2 reference.
+- Generated, never hand-edited: `docs/contracts/*.md` and `src/catalog/contracts.json` (`npm run docs:gen` / `catalog:gen`; add new contracts to `scripts/lib/contract-metadata.ts`), `src/scaffold/version.ts`.
 
 ## Build, Test, and Development Commands
 - `npm install` installs dependencies.
-- `npm run build` compiles TypeScript to `dist/`.
+- `npm run build` regenerates the version file and contract catalog, compiles TypeScript to `dist/`, and writes the ESM wrappers.
+- `npm run docs:dev` / `npm run docs:build` regenerate contract reference pages and run VitePress.
 - `npm run start` runs the local dev harness (`src/test.ts`) via tsx.
 - `npm run watch` enables TypeScript watch mode.
 - `npm test` runs the Jest suite.
@@ -32,4 +36,5 @@
 
 ## Configuration & Security Notes
 - Keys and usernames should come from env/config (see `src/config.ts`); never commit secrets.
-- When adding new config, document defaults and keep backward compatibility.
+- When adding new config, document defaults, add validation in `src/config.ts`, and keep backward compatibility.
+- Money handling: use the BigNumber-based money utilities, never floats; use block time, not wall-clock time, in contracts so replays are deterministic.
