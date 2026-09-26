@@ -67,7 +67,7 @@ export function getIncomingPayment(ctx: ContractContext) {
             amount: ctx.transfer.amount,
             asset: ctx.transfer.asset,
             memo: ctx.transfer.memo,
-            source: 'transfer' as const
+            source: (ctx.trigger === 'recurrent_transfer' ? 'recurrent_transfer' : 'transfer') as 'transfer' | 'recurrent_transfer'
         };
     }
 

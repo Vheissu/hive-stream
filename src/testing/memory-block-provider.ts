@@ -15,6 +15,12 @@ export interface MemoryBlockProviderOptions {
      * provided. Defaults to 3000 (Hive's block interval).
      */
     blockIntervalMs?: number;
+    /**
+     * How many blocks the last irreversible block trails the head. Defaults
+     * to 0 (every minted block is immediately irreversible), which keeps
+     * tests deterministic. Raise it to exercise irreversible streaming.
+     */
+    irreversibleLag?: number;
 }
 
 export interface AddBlockOptions {
@@ -28,14 +34,19 @@ export interface AddBlockOptions {
      * `operations` argument to `addBlock` is ignored.
      */
     transactions?: Array<Array<[string, any]>>;
+    /**
+     * Explicit transaction ids, one per transaction. Useful for simulating a
+     * fork where the same transaction is re-included in a different block.
+     */
+    transactionIds?: string[];
 }
 
-function toBlockId(blockNumber: number): string {
-    return blockNumber.toString(16).padStart(8, '0').concat('0'.repeat(32));
+function toBlockId(blockNumber: number, generation: number = 0): string {
+    return blockNumber.toString(16).padStart(8, '0').concat(generation.toString(16).padStart(32, '0'));
 }
 
-function toTransactionId(blockNumber: number, index: number): string {
-    return (blockNumber * 100000 + index).toString(16).padStart(40, '0');
+function toTransactionId(blockNumber: number, index: number, generation: number = 0): string {
+    return (generation * 1e12 + blockNumber * 100000 + index).toString(16).padStart(40, '0');
 }
 
 function toHiveTimestamp(date: Date): string {
@@ -59,11 +70,14 @@ export class MemoryBlockProvider implements BlockProvider {
     private blocks = new Map<number, BlockData>();
     private headBlockNumber: number;
     private headTime: Date;
+    private forkGeneration = 0;
     private readonly startBlockNumber: number;
     public readonly blockIntervalMs: number;
+    public irreversibleLag: number;
 
     constructor(options: MemoryBlockProviderOptions = {}) {
         this.startBlockNumber = options.startBlockNumber ?? 1;
+        this.irreversibleLag = Math.max(0, options.irreversibleLag ?? 0);
         this.headBlockNumber = this.startBlockNumber - 1;
         this.headTime = truncateToSeconds(options.startTime ?? new Date());
         this.blockIntervalMs = options.blockIntervalMs ?? 3000;
@@ -71,6 +85,35 @@ export class MemoryBlockProvider implements BlockProvider {
 
     public get head(): number {
         return this.headBlockNumber;
+    }
+
+    public get lastIrreversibleBlockNumber(): number {
+        return Math.max(this.startBlockNumber - 1, this.headBlockNumber - this.irreversibleLag);
+    }
+
+    /**
+     * Replaces the block at `blockNumber` (and discards every block above
+     * it) with a new block built from `operations`, simulating a
+     * microfork. The replacement gets a distinct block id.
+     */
+    public forkAt(blockNumber: number, operations: Array<[string, any]> = [], options: AddBlockOptions = {}): BlockData {
+        if (blockNumber < this.startBlockNumber || blockNumber > this.headBlockNumber) {
+            throw new Error(`MemoryBlockProvider: cannot fork at ${blockNumber}; head is ${this.headBlockNumber}`);
+        }
+
+        const replaced = this.blocks.get(blockNumber) as BlockData;
+
+        for (let number = blockNumber; number <= this.headBlockNumber; number++) {
+            this.blocks.delete(number);
+        }
+
+        this.headBlockNumber = blockNumber - 1;
+        this.headTime = new Date(`${replaced.timestamp}Z`);
+        this.forkGeneration++;
+
+        const block = this.addBlock(operations, { ...options, time: options.time ?? this.headTime });
+
+        return block;
     }
 
     public get currentTime(): Date {
@@ -98,12 +141,13 @@ export class MemoryBlockProvider implements BlockProvider {
 
         const transactionOperations = options.transactions ?? (operations.length > 0 ? [operations] : []);
 
+        const previousBlock = this.blocks.get(blockNumber - 1);
         const block: BlockData = {
-            block_id: toBlockId(blockNumber),
-            previous: blockNumber > this.startBlockNumber ? toBlockId(blockNumber - 1) : '0'.repeat(40),
+            block_id: toBlockId(blockNumber, this.forkGeneration),
+            previous: previousBlock ? previousBlock.block_id : '0'.repeat(40),
             timestamp: toHiveTimestamp(time),
             transactions: transactionOperations.map((ops) => ({ operations: ops })),
-            transaction_ids: transactionOperations.map((ops, index) => toTransactionId(blockNumber, index))
+            transaction_ids: transactionOperations.map((ops, index) => options.transactionIds?.[index] ?? toTransactionId(blockNumber, index, this.forkGeneration))
         };
 
         this.blocks.set(blockNumber, block);
@@ -116,6 +160,7 @@ export class MemoryBlockProvider implements BlockProvider {
     public async getDynamicGlobalProperties(): Promise<DynamicGlobalProperties> {
         return {
             head_block_number: this.headBlockNumber,
+            last_irreversible_block_num: this.lastIrreversibleBlockNumber,
             time: toHiveTimestamp(this.headTime)
         };
     }

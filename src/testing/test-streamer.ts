@@ -21,6 +21,11 @@ export interface TestStreamerOptions extends Omit<ConfigInput, 'blockProvider' |
      * Milliseconds between simulated blocks. Defaults to 3000.
      */
     blockIntervalMs?: number;
+    /**
+     * How many blocks the simulated last irreversible block trails the head.
+     * Defaults to 0 so every injected block is processed immediately.
+     */
+    irreversibleLag?: number;
 }
 
 export interface ContractCallOptions {
@@ -119,10 +124,10 @@ export class TestStreamer {
     private isSetup = false;
 
     constructor(options: TestStreamerOptions = {}) {
-        const { adapter, startTime, blockIntervalMs, ...config } = options;
+        const { adapter, startTime, blockIntervalMs, irreversibleLag, ...config } = options;
 
         this.client = new FakeHiveClient();
-        this.provider = new MemoryBlockProvider({ startTime, blockIntervalMs });
+        this.provider = new MemoryBlockProvider({ startTime, blockIntervalMs, irreversibleLag });
         this.adapter = adapter ?? new SqliteAdapter(':memory:');
 
         const streamerConfig: ConfigInput = { ...config };

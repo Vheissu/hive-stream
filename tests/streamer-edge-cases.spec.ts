@@ -374,15 +374,21 @@ describe('Streamer edge cases', () => {
     });
 
     describe('subscription cleanup', () => {
-        test('cleanupSubscriptions trims arrays over 1000', () => {
-            // Fill up subscriptions beyond 1000
+        test('cleanupSubscriptions warns about large lists but never drops handlers', () => {
+            const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
             for (let i = 0; i < 1050; i++) {
                 sut.onTransfer('testaccount', jest.fn());
             }
             expect(sut['transferSubscriptions'].length).toBe(1050);
 
             sut['cleanupSubscriptions']();
-            expect(sut['transferSubscriptions'].length).toBe(1000);
+            sut['cleanupSubscriptions']();
+
+            expect(sut['transferSubscriptions'].length).toBe(1050);
+            expect(warn).toHaveBeenCalledTimes(1);
+            expect(warn.mock.calls[0][0]).toMatch(/transferSubscriptions has 1050 handlers/);
+            warn.mockRestore();
         });
     });
 

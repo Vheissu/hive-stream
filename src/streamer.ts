@@ -48,15 +48,29 @@ import {
     IncomingTransfersBuilder
 } from './builders';
 import { ConfigInput, ConfigInterface, createConfig, normalizeConfigInput } from './config';
-import { BlockProvider } from './providers/block-provider';
+import { BlockData, BlockProvider } from './providers/block-provider';
 import { HiveEngineClient } from './providers/hive-engine-client';
-import { HiveProvider } from './providers/hive-provider';
+import { HiveProvider, createClientOptions } from './providers/hive-provider';
+import {
+    ActionRejectionReason,
+    BlockHookContext,
+    ContractActionHookContext,
+    ErrorPhase,
+    HookRegistry,
+    OperationHookContext,
+    StreamerHookHandler,
+    StreamerHookName,
+    StreamerHooks,
+    StreamerPlugin,
+} from './hooks';
 import { 
     AutoBurnIncomingTransfersOptions,
     AutoForwardIncomingTransfersOptions,
     AutoRefundIncomingTransfersOptions,
     AutoRouteIncomingTransfersOptions,
     AutoSplitIncomingTransfersOptions,
+    ContractActionDefinition,
+    ContractActionGuards,
     ContractDefinition,
     ContractPayload,
     ContractContext,
@@ -82,6 +96,34 @@ import {
     EscrowSubscription,
     EscrowOperationType,
 } from './types/hive-stream';
+
+/**
+ * Thrown when the error policy halts the streamer. The block that failed is
+ * not checkpointed, so it is reprocessed when the streamer resumes.
+ */
+export class StreamHaltError extends Error {
+    public readonly cause: Error;
+    public readonly phase: ErrorPhase;
+    public readonly blockNumber?: number;
+
+    constructor(cause: Error, phase: ErrorPhase, blockNumber?: number) {
+        super(`Streamer halted during ${phase}${blockNumber ? ` at block ${blockNumber}` : ''}: ${cause.message}`);
+        this.name = 'StreamHaltError';
+        this.cause = cause;
+        this.phase = phase;
+        this.blockNumber = blockNumber;
+    }
+}
+
+export type ContractDispatchResult = 'executed' | 'rejected' | 'failed' | 'duplicate';
+
+type LoadBlockResult = 'processed' | 'missing' | 'rewound';
+
+interface ErrorMeta {
+    blockNumber?: number;
+    transactionId?: string;
+    operationIndex?: number;
+}
 
 interface ProcessingAction {
     when: number;
@@ -136,6 +178,18 @@ export class Streamer {
     private transactionId: string;
     private blockTime: Date;
     private latestBlockchainTime: Date;
+    private irreversibleBlockNumber = 0;
+    private lastBlockId: string | null = null;
+    private recentBlockIds = new Map<number, string>();
+    private halted = false;
+    private lastError: { message: string; phase: ErrorPhase; blockNumber?: number; at: Date } | null = null;
+    private isCaughtUp = false;
+    private currentProcessing: Promise<void> | null = null;
+    private readonly hookRegistry = new HookRegistry();
+    private pausedContracts = new Set<string>();
+    private rateLimitHits = new Map<string, number[]>();
+    private lastLedgerPruneBlock = 0;
+    private bypassLedger = false;
     private disableAllProcessing = false;
     private isStarted = false;
     private isInitialized = false;
@@ -152,14 +206,14 @@ export class Streamer {
     private apiServer: Api | null = null;
     private actions: TimeAction[] = [];
 
-    // Performance optimization properties
-    private lastStateSave = Date.now();
-    private stateSaveInterval = 5000; // Save state every 5 seconds instead of every block
+    // Checkpoint bookkeeping for CHECKPOINT_MODE 'interval'
+    private lastStateSave = 0;
     private blockProcessingQueue: Array<() => Promise<void>> = [];
     private isProcessingQueue = false;
     
     // Memory management
     private readonly maxSubscriptions = 1000;
+    private subscriptionWarnings = new Set<string>();
     private subscriptionCleanupInterval: NodeJS.Timeout | null = null;
     
     // Action processing optimization
@@ -382,14 +436,197 @@ export class Streamer {
 
         this.hive = new HiveEngineClient(this.config.HIVE_ENGINE_API);
         this.hasInjectedClient = Boolean(userConfig.client);
-        this.client = userConfig.client ?? new Client(this.config.API_NODES);
+        this.client = userConfig.client ?? this.createHiveClient();
         this.adapter = new SqliteAdapter();
 
         if (userConfig.blockProvider) {
             this.blockProvider = userConfig.blockProvider;
         } else {
-            this.blockProvider = new HiveProvider({ apiNodes: this.config.API_NODES });
+            this.blockProvider = new HiveProvider({
+                apiNodes: this.config.API_NODES,
+                timeout: this.config.API_TIMEOUT_MS
+            });
         }
+
+        if (userConfig.hooks) {
+            this.hookRegistry.addAll(userConfig.hooks);
+        }
+    }
+
+    private createHiveClient(): Client {
+        return new Client(this.config.API_NODES, createClientOptions({ timeout: this.config.API_TIMEOUT_MS }));
+    }
+
+    // ─── Hooks ───────────────────────────────────────────────────────────
+
+    /**
+     * Registers a single hook handler. Returns a function that removes it.
+     *
+     * ```ts
+     * const off = streamer.hook('afterContractAction', ({ contract, action, durationMs }) => {
+     *     metrics.timing(`${contract}.${action}`, durationMs);
+     * });
+     * ```
+     */
+    public hook<K extends StreamerHookName>(name: K, handler: StreamerHookHandler<K>): () => void {
+        return this.hookRegistry.add(name, handler);
+    }
+
+    /**
+     * Registers a plugin: a hooks object, or a function that receives the
+     * streamer and optionally returns hooks. Returns a disposer that removes
+     * every hook the plugin added.
+     */
+    public use(plugin: StreamerPlugin): () => void {
+        if (typeof plugin === 'function') {
+            const hooks = plugin(this);
+            return hooks ? this.hookRegistry.addAll(hooks) : () => undefined;
+        }
+
+        return this.hookRegistry.addAll(plugin);
+    }
+
+    private async runHook<K extends StreamerHookName>(name: K, ctx: Parameters<StreamerHookHandler<K>>[0]): Promise<void> {
+        if (!this.hookRegistry.has(name)) {
+            return;
+        }
+
+        for (const handler of this.hookRegistry.get(name)) {
+            try {
+                await (handler as (context: any) => unknown)(ctx);
+            } catch (error) {
+                if (name === 'onError') {
+                    getLogger().error('[Streamer] onError hook threw:', error);
+                } else {
+                    await this.reportError(error, 'hook', {});
+                }
+            }
+        }
+    }
+
+    private toError(error: unknown): Error {
+        return error instanceof Error ? error : new Error(String(error));
+    }
+
+    /**
+     * Logs a non-fatal error and notifies `onError` hooks.
+     */
+    private async reportError(error: unknown, phase: ErrorPhase, meta: ErrorMeta, fatal: boolean = false): Promise<void> {
+        const err = this.toError(error);
+
+        getLogger().error(`[Streamer] ${fatal ? 'Fatal ' : ''}${phase} error: ${err.message}`, {
+            stack: err.stack,
+            ...meta
+        });
+
+        await this.runHook('onError', {
+            streamer: this,
+            error: err,
+            phase,
+            fatal,
+            ...meta
+        });
+    }
+
+    /**
+     * Stops processing without tearing down the adapter or contracts, so
+     * an operator can inspect state and restart. The failed block is not
+     * checkpointed and will be processed again on restart.
+     */
+    private async haltStream(error: unknown, phase: ErrorPhase, meta: ErrorMeta): Promise<never> {
+        const err = this.toError(error);
+
+        if (err instanceof StreamHaltError) {
+            throw err;
+        }
+
+        this.halted = true;
+        this.disableAllProcessing = true;
+        this.lastError = { message: err.message, phase, blockNumber: meta.blockNumber, at: new Date() };
+        this.clearRuntimeTimers();
+
+        await this.reportError(err, phase, meta, true);
+
+        throw new StreamHaltError(err, phase, meta.blockNumber);
+    }
+
+    private retryDelay(attempt: number): number {
+        const base = this.config.ERROR_RETRY_DELAY_MS;
+        return Math.min(base * Math.pow(2, Math.max(0, attempt - 1)), this.config.RETRY_MAX_DELAY_MS);
+    }
+
+    /**
+     * Applies ERROR_POLICY to an infrastructure failure (adapter writes and
+     * similar). `work` is retried in place under the `retry` policy.
+     */
+    private async runWithErrorPolicy(work: () => Promise<unknown>, phase: ErrorPhase, meta: ErrorMeta): Promise<void> {
+        const policy = this.config.ERROR_POLICY;
+        const maxAttempts = policy === 'retry' ? 1 + this.config.ERROR_MAX_RETRIES : 1;
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                await work();
+                return;
+            } catch (error) {
+                if (error instanceof StreamHaltError) {
+                    throw error;
+                }
+
+                if (attempt < maxAttempts) {
+                    getLogger().warn(`[Streamer] ${phase} failed (attempt ${attempt}/${maxAttempts}), retrying`, { ...meta, error: this.toError(error).message });
+                    await Utils.sleep(this.retryDelay(attempt));
+                    continue;
+                }
+
+                if (policy === 'skip') {
+                    await this.reportError(error, phase, meta);
+                    return;
+                }
+
+                await this.haltStream(error, phase, meta);
+            }
+        }
+    }
+
+    /**
+     * Invokes subscription callbacks one at a time, in registration order,
+     * awaiting each. A throwing callback is logged and reported to
+     * `onError` (phase `subscription`) without affecting the others.
+     */
+    private async notify<T extends SubscriptionCallback>(subscriptions: T[], invoke: (subscription: T) => unknown, meta: ErrorMeta): Promise<void> {
+        if (subscriptions.length === 0) {
+            return;
+        }
+
+        for (const subscription of [...subscriptions]) {
+            try {
+                await invoke(subscription);
+            } catch (error) {
+                await this.reportError(error, 'subscription', meta);
+            }
+        }
+    }
+
+    // ─── Contract pausing ────────────────────────────────────────────────
+
+    /**
+     * Rejects every call to a contract (or one action) until resumed.
+     * Rejections are reported through the `onActionRejected` hook.
+     */
+    public pauseContract(name: string, action?: string): void {
+        this.pausedContracts.add(action ? `${name}.${action}` : name);
+    }
+
+    public resumeContract(name: string, action?: string): void {
+        this.pausedContracts.delete(action ? `${name}.${action}` : name);
+    }
+
+    public isContractPaused(name: string, action?: string): boolean {
+        if (this.pausedContracts.has(name)) {
+            return true;
+        }
+
+        return action ? this.pausedContracts.has(`${name}.${action}`) : false;
     }
 
     private async ensureAdapterReady(): Promise<void> {
@@ -1070,6 +1307,7 @@ export class Streamer {
             if (this.adapterInitialized && this.adapter?.saveState) {
                 await this.adapter.saveState({
                     lastBlockNumber: this.lastBlockNumber,
+                    lastBlockId: this.lastBlockId,
                     actions: this.actions.map(a => a.toJSON())
                 });
             }
@@ -1158,7 +1396,7 @@ export class Streamer {
         this.activeKey = this.config.ACTIVE_KEY;
 
         if (shouldRecreateClient) {
-            this.client = new Client(this.config.API_NODES);
+            this.client = this.createHiveClient();
 
             if (this.blockProvider instanceof HiveProvider) {
                 this.blockProvider.updateClient(this.config.API_NODES);
@@ -1212,15 +1450,51 @@ export class Streamer {
             getLogger().debug(`Restoring state from file`);
         }
 
-        if (this.config.RESUME_FROM_STATE && state?.lastBlockNumber) {
-            this.lastBlockNumber = state.lastBlockNumber;
+        const restoredBlockNumber = Number(state?.lastBlockNumber);
+
+        if (this.config.RESUME_FROM_STATE && Number.isFinite(restoredBlockNumber) && restoredBlockNumber > 0) {
+            this.lastBlockNumber = restoredBlockNumber;
+            this.lastBlockId = typeof state?.lastBlockId === 'string' && state.lastBlockId ? state.lastBlockId : null;
+
+            if (this.lastBlockId) {
+                this.recentBlockIds.set(this.lastBlockNumber, this.lastBlockId);
+            }
         } else if (this.config.LAST_BLOCK_NUMBER) {
             this.lastBlockNumber = this.config.LAST_BLOCK_NUMBER;
         }
 
+        await this.restorePersistedActions();
+
         this.isInitialized = true;
 
         return this;
+    }
+
+    /**
+     * Restores time actions persisted by a previous run, so scheduled work
+     * survives restarts without the app having to re-register it first.
+     */
+    private async restorePersistedActions(): Promise<void> {
+        let persisted: TimeAction[] = [];
+
+        try {
+            persisted = await this.adapter.loadActions() as TimeAction[];
+        } catch (error) {
+            getLogger().warn('[Streamer] Failed to load persisted time actions:', error);
+            return;
+        }
+
+        for (const entry of persisted ?? []) {
+            if (!entry || this.actions.some((existing) => existing.id === entry.id)) {
+                continue;
+            }
+
+            try {
+                this.actions.push(entry instanceof TimeAction ? entry : TimeAction.fromJSON(entry));
+            } catch (error) {
+                getLogger().warn(`[Streamer] Failed to restore action ${(entry as any)?.id}:`, error);
+            }
+        }
     }
 
     public async start(): Promise<Streamer> {
@@ -1233,6 +1507,8 @@ export class Streamer {
         }
 
         this.disableAllProcessing = false;
+        this.halted = false;
+        this.attempts = 0;
         await this.init();
         this.startSubscriptionCleanupInterval();
 
@@ -1240,13 +1516,16 @@ export class Streamer {
             await this.startApiServer(this.config.API_PORT);
         }
 
+        this.isStarted = true;
+        this.startedAt = Date.now();
+        this.lastProcessedAt = Date.now();
+
+        await this.runHook('onStart', { streamer: this });
+
         // Kicks off the blockchain streaming and operation parsing
         this.getBlock();
 
         this.latestBlockTimer = setInterval(() => { this.getLatestBlock(); }, this.config.BLOCK_CHECK_INTERVAL);
-        this.isStarted = true;
-        this.startedAt = Date.now();
-        this.lastProcessedAt = Date.now();
 
         return this;
     }
@@ -1254,12 +1533,24 @@ export class Streamer {
     /**
      * Stop
      *
-     * Stops the streamer from running
+     * Stops the streamer from running. Waits for the block currently being
+     * processed to finish, writes a final checkpoint, then tears down the
+     * API server, contracts, adapter, and block provider.
      */
     public async stop(): Promise<void> {
+        const wasRunning = this.isStarted || this.isInitialized;
+
         this.disableAllProcessing = true;
         this.isStarted = false;
         this.clearRuntimeTimers();
+
+        if (this.currentProcessing) {
+            await this.currentProcessing.catch(() => undefined);
+        }
+
+        if (this.isInitialized && this.adapterInitialized && this.lastBlockNumber > 0) {
+            await this.checkpoint(true);
+        }
 
         await this.stopApiServer();
         await this.destroyContracts();
@@ -1273,6 +1564,10 @@ export class Streamer {
         this.adapterInitialized = false;
         this.adapterInitializationPromise = null;
         this.isInitialized = false;
+
+        if (wasRunning) {
+            await this.runHook('onStop', { streamer: this });
+        }
 
         await Utils.sleep(25);
     }
@@ -1310,6 +1605,7 @@ export class Streamer {
     public async registerBlockProvider(provider: BlockProvider): Promise<void> {
         await this.blockProvider.destroy?.();
         this.blockProvider = provider;
+        this.blockCache.clear();
         await this.blockProvider.create?.();
     }
 
@@ -1318,11 +1614,84 @@ export class Streamer {
     }
 
     /**
+     * The highest block the streamer is allowed to process: the last
+     * irreversible block in `irreversible` mode (falling back to head when
+     * the provider doesn't report one), or the head block in `head` mode.
+     */
+    private resolveTargetBlock(props: { head_block_number: number; last_irreversible_block_num?: number }): number {
+        const head = Number(props.head_block_number);
+        const reported = props.last_irreversible_block_num;
+        const irreversible = reported === undefined || reported === null ? NaN : Number(reported);
+
+        this.headBlockNumber = head;
+        this.irreversibleBlockNumber = Number.isFinite(irreversible) && irreversible >= 0 ? Math.min(irreversible, head) : head;
+
+        return this.config.STREAM_MODE === 'head' ? head : this.irreversibleBlockNumber;
+    }
+
+    /**
+     * Processes blocks sequentially up to `target`, following fork rewinds.
+     * Stops early when a block is unavailable or processing is disabled.
+     */
+    private async processRange(target: number, maxBlocks: number): Promise<number> {
+        let processed = 0;
+        let rewinds = 0;
+
+        while (
+            this.lastBlockNumber < target &&
+            processed < maxBlocks &&
+            !this.disableAllProcessing
+        ) {
+            const result = await this.loadBlock(this.lastBlockNumber + 1);
+
+            if (result === 'missing') {
+                break;
+            }
+
+            if (result === 'rewound') {
+                rewinds++;
+
+                if (rewinds > this.config.MAX_FORK_DEPTH) {
+                    getLogger().warn('[Streamer] Repeated fork rewinds in one pass; waiting for the chain to settle');
+                    break;
+                }
+
+                continue;
+            }
+
+            processed++;
+        }
+
+        return processed;
+    }
+
+    private async updateCatchUpState(target: number): Promise<void> {
+        const remainingBehind = Math.max(0, target - this.lastBlockNumber);
+        this.isCatchingUp = remainingBehind > 0;
+
+        if (remainingBehind === 0 && !this.isCaughtUp) {
+            this.isCaughtUp = true;
+            await this.runHook('onCaughtUp', {
+                streamer: this,
+                blockNumber: this.lastBlockNumber,
+                headBlockNumber: this.headBlockNumber,
+                targetBlockNumber: target
+            });
+        } else if (remainingBehind > 0) {
+            this.isCaughtUp = false;
+        }
+    }
+
+    /**
      * Process Pending Blocks
      *
      * Processes blocks from the last processed block up to the provider's
-     * current head, without scheduling any timers. Useful for tests, block
-     * replays, and environments where polling is driven externally.
+     * current target (last irreversible block, or head in `head` mode),
+     * without scheduling any timers. Useful for tests, block replays, and
+     * environments where polling is driven externally.
+     *
+     * Calling this after the streamer halted retries the failed block.
+     * Throws StreamHaltError if the error policy halts processing.
      *
      * Returns the number of blocks processed.
      */
@@ -1333,42 +1702,39 @@ export class Streamer {
 
         await this.init();
 
+        if (this.halted) {
+            this.halted = false;
+            this.disableAllProcessing = false;
+        }
+
         this.isPollingBlock = true;
 
-        try {
+        const work = (async () => {
             const props = await this.blockProvider.getDynamicGlobalProperties();
 
             if (!props) {
                 return 0;
             }
 
-            this.headBlockNumber = props.head_block_number;
+            const target = this.resolveTargetBlock(props);
             this.latestBlockchainTime = new Date(`${props.time}Z`);
 
-            if (this.lastBlockNumber === 0) {
-                this.lastBlockNumber = props.head_block_number - 1;
+            if (this.lastBlockNumber === 0 && target > 0) {
+                this.lastBlockNumber = target - 1;
             }
 
-            let processed = 0;
-
-            while (
-                this.lastBlockNumber < props.head_block_number &&
-                processed < maxBlocks &&
-                !this.disableAllProcessing
-            ) {
-                const target = this.lastBlockNumber + 1;
-                await this.loadBlock(target);
-
-                if (this.lastBlockNumber < target) {
-                    // The provider could not supply the block; stop rather than spin.
-                    break;
-                }
-
-                processed++;
-            }
+            const processed = await this.processRange(target, maxBlocks);
+            await this.updateCatchUpState(target);
 
             return processed;
+        })();
+
+        this.currentProcessing = work.then(() => undefined, () => undefined);
+
+        try {
+            return await work;
         } finally {
+            this.currentProcessing = null;
             this.isPollingBlock = false;
         }
     }
@@ -1393,6 +1759,8 @@ export class Streamer {
 
         this.isPollingBlock = true;
         let nextDelay = this.config.BLOCK_CHECK_INTERVAL;
+        let resolveProcessing: () => void = () => undefined;
+        this.currentProcessing = new Promise<void>((resolve) => { resolveProcessing = resolve; });
 
         try {
             // Load global properties from the block provider
@@ -1403,50 +1771,56 @@ export class Streamer {
                 return;
             }
 
-            this.headBlockNumber = props.head_block_number;
+            const target = this.resolveTargetBlock(props);
 
-            // If the block number we've got is zero set it to the latest head block
-            if (this.lastBlockNumber === 0) {
-                this.lastBlockNumber = props.head_block_number - 1;
+            // If the block number we've got is zero, start from the current target
+            if (this.lastBlockNumber === 0 && target > 0) {
+                this.lastBlockNumber = target - 1;
             }
 
             if (this.config.DEBUG_MODE) {
                 getLogger().debug(`Head block number: `, props.head_block_number);
+                getLogger().debug(`Target block number: `, target);
                 getLogger().debug(`Last block number: `, this.lastBlockNumber);
             }
 
             const BLOCKS_BEHIND = this.config.BLOCKS_BEHIND_WARNING;
             const maxBatchSize = Math.max(1, this.config.CATCH_UP_BATCH_SIZE || 1);
-            const blocksBehind = Math.max(0, props.head_block_number - this.lastBlockNumber);
-            const blocksToProcess = Math.min(blocksBehind, maxBatchSize);
+            const blocksBehind = Math.max(0, target - this.lastBlockNumber);
 
             if (blocksBehind >= BLOCKS_BEHIND && this.config.DEBUG_MODE) {
-                getLogger().debug(`[Streamer] ${blocksBehind} blocks behind head (${props.head_block_number}). Catching up...`);
+                getLogger().debug(`[Streamer] ${blocksBehind} blocks behind target (${target}). Catching up...`);
             }
 
             if (!this.disableAllProcessing) {
-                for (let i = 0; i < blocksToProcess; i++) {
-                    await this.loadBlock(this.lastBlockNumber + 1);
-                }
+                await this.processRange(target, maxBatchSize);
             }
 
-            const remainingBehind = Math.max(0, props.head_block_number - this.lastBlockNumber);
-            this.isCatchingUp = remainingBehind > 0;
+            this.attempts = 0;
+            await this.updateCatchUpState(target);
 
-            if (remainingBehind > 0) {
+            if (this.isCatchingUp) {
                 nextDelay = Math.max(0, this.config.CATCH_UP_DELAY_MS);
             }
         } catch (e) {
-            const error = e instanceof Error ? e : new Error(String(e));
-            getLogger().error(`[Streamer] Block processing error: ${error.message}`, {
-                stack: error.stack,
-                blockNumber: this.lastBlockNumber + 1
-            });
-            
-            // Retry after a longer delay on error
-            nextDelay = this.config.BLOCK_CHECK_INTERVAL * 2;
+            if (e instanceof StreamHaltError) {
+                // haltStream already reported the error and cleared timers.
+                return;
+            }
+
+            // Exponential backoff so a failing node or provider isn't hammered.
+            this.attempts++;
+            nextDelay = Math.min(
+                this.config.BLOCK_CHECK_INTERVAL * Math.pow(2, this.attempts),
+                this.config.RETRY_MAX_DELAY_MS
+            );
+
+            await this.reportError(e, 'block', { blockNumber: this.lastBlockNumber + 1 });
         } finally {
             this.isPollingBlock = false;
+            this.currentProcessing = null;
+            resolveProcessing();
+
             // Storing timeout allows us to clear it, as this just calls itself
             if (!this.disableAllProcessing) {
                 this.blockNumberTimeout = setTimeout(() => { this.getBlock(); }, nextDelay);
@@ -1454,20 +1828,15 @@ export class Streamer {
         }
     }
 
-    // Takes the block from Hive and allows us to work with it
-    private async loadBlock(blockNumber: number): Promise<void> {
-        // Check cache first
-        let block = this.blockCache.get(blockNumber);
-        
+    private async fetchBlock(blockNumber: number, useCache: boolean = true): Promise<BlockData | null> {
+        let block = useCache ? this.blockCache.get(blockNumber) : undefined;
+
         if (!block) {
-            // Load the block from the active block provider
             block = await this.blockProvider.getBlock(blockNumber);
-            
-            // Cache the block for potential reuse
+
             if (block) {
                 this.blockCache.set(blockNumber, block);
-                
-                // Cleanup old cache entries
+
                 if (this.blockCache.size > this.maxCacheSize) {
                     const oldestKey = this.blockCache.keys().next().value;
                     this.blockCache.delete(oldestKey);
@@ -1475,69 +1844,290 @@ export class Streamer {
             }
         }
 
-        // The block doesn't exist, wait and try again
-        if (!block) {
-            await Utils.sleep(this.config.BLOCK_CHECK_INTERVAL);
+        return block ?? null;
+    }
+
+    private rememberBlockId(blockNumber: number, blockId: string): void {
+        this.recentBlockIds.set(blockNumber, blockId);
+
+        const keep = this.config.MAX_FORK_DEPTH + 1;
+
+        if (this.recentBlockIds.size > keep) {
+            for (const key of this.recentBlockIds.keys()) {
+                if (this.recentBlockIds.size <= keep) {
+                    break;
+                }
+
+                if (key <= blockNumber - keep) {
+                    this.recentBlockIds.delete(key);
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
+     * Handles a block whose `previous` doesn't match the block we processed
+     * at that height: walks back until the provider's chain agrees with
+     * ours, rewinds the cursor to that common ancestor, and notifies
+     * `onFork`. Blocks after the ancestor are re-fetched and processed
+     * again; the idempotency ledger (keyed by transaction id and operation
+     * index) keeps transactions present on both branches from executing
+     * contract actions twice. Transactions that only existed on the
+     * orphaned branch have already run and cannot be undone — `onFork`
+     * lists those blocks so the app can reconcile.
+     */
+    private async handleFork(blockNumber: number, expectedPreviousId: string, actualPreviousId: string): Promise<LoadBlockResult> {
+        const orphanedBlocks: Array<{ blockNumber: number; blockId: string }> = [];
+        const floor = Math.max(0, blockNumber - 1 - this.config.MAX_FORK_DEPTH);
+        let commonAncestor: number | null = null;
+        let historyExhausted = false;
+
+        for (let height = blockNumber - 1; height > floor; height--) {
+            const knownId = this.recentBlockIds.get(height);
+
+            if (!knownId) {
+                historyExhausted = true;
+                break;
+            }
+
+            this.blockCache.delete(height);
+            const canonical = await this.blockProvider.getBlock(height);
+
+            if (canonical && canonical.block_id === knownId) {
+                commonAncestor = height;
+                break;
+            }
+
+            orphanedBlocks.push({ blockNumber: height, blockId: knownId });
+        }
+
+        if (commonAncestor === null && historyExhausted && orphanedBlocks.length > 0) {
+            // We don't remember older block ids (e.g. right after a restart),
+            // so assume the chain agrees below the oldest orphaned block.
+            commonAncestor = orphanedBlocks[orphanedBlocks.length - 1].blockNumber - 1;
+        }
+
+        if (commonAncestor === blockNumber - 1 && orphanedBlocks.length === 0) {
+            // The block we processed is still canonical, so the block we were
+            // handed belongs to a branch that lost (or the node is lagging).
+            // Never process a block that doesn't link to our chain; retry later.
+            getLogger().warn(`[Streamer] Block ${blockNumber} (previous ${actualPreviousId}) does not link to processed block ${blockNumber - 1} (${expectedPreviousId}); waiting for the provider to settle`);
+            return 'missing';
+        }
+
+        getLogger().warn(`[Streamer] Fork detected at block ${blockNumber}: expected previous ${expectedPreviousId}, got ${actualPreviousId}`, {
+            commonAncestor,
+            orphanedBlocks
+        });
+
+        await this.runHook('onFork', {
+            streamer: this,
+            blockNumber,
+            expectedPreviousId,
+            actualPreviousId,
+            commonAncestor,
+            orphanedBlocks
+        });
+
+        if (commonAncestor === null) {
+            await this.haltStream(
+                new Error(`Fork deeper than MAX_FORK_DEPTH (${this.config.MAX_FORK_DEPTH}) at block ${blockNumber}`),
+                'fork',
+                { blockNumber }
+            );
+        }
+
+        for (const orphan of orphanedBlocks) {
+            this.recentBlockIds.delete(orphan.blockNumber);
+            this.blockCache.delete(orphan.blockNumber);
+        }
+
+        this.lastBlockNumber = commonAncestor as number;
+        this.lastBlockId = this.recentBlockIds.get(this.lastBlockNumber) ?? null;
+        await this.checkpoint(true);
+
+        return 'rewound';
+    }
+
+    /**
+     * Persists the cursor. In `block` mode this runs after every block; in
+     * `interval` mode at most every CHECKPOINT_INTERVAL_MS unless forced.
+     */
+    private async checkpoint(force: boolean = false): Promise<void> {
+        if (!this.adapterInitialized || !this.adapter?.saveState) {
             return;
+        }
+
+        if (!force && this.config.CHECKPOINT_MODE === 'interval' &&
+            Date.now() - this.lastStateSave < this.config.CHECKPOINT_INTERVAL_MS) {
+            return;
+        }
+
+        this.lastStateSave = Date.now();
+
+        try {
+            await this.saveStateToDisk();
+        } catch (error) {
+            await this.reportError(error, 'checkpoint', { blockNumber: this.lastBlockNumber });
+            return;
+        }
+
+        await this.runHook('onCheckpoint', {
+            streamer: this,
+            blockNumber: this.lastBlockNumber,
+            blockId: this.lastBlockId ?? ''
+        });
+    }
+
+    private async maybePruneLedger(): Promise<void> {
+        if (!this.config.IDEMPOTENCY_ENABLED || !this.adapter?.pruneProcessedOperations) {
+            return;
+        }
+
+        if (this.lastBlockNumber - this.lastLedgerPruneBlock < 1000) {
+            return;
+        }
+
+        this.lastLedgerPruneBlock = this.lastBlockNumber;
+        const cutoff = this.lastBlockNumber - this.config.IDEMPOTENCY_RETENTION_BLOCKS;
+
+        if (cutoff <= 0) {
+            return;
+        }
+
+        try {
+            await this.adapter.pruneProcessedOperations(cutoff);
+        } catch (error) {
+            await this.reportError(error, 'adapter', { blockNumber: this.lastBlockNumber });
+        }
+    }
+
+    // Takes the block from Hive and allows us to work with it
+    private async loadBlock(blockNumber: number): Promise<LoadBlockResult> {
+        const block = await this.fetchBlock(blockNumber);
+
+        // The block isn't available yet; the caller decides when to retry.
+        if (!block) {
+            return 'missing';
+        }
+
+        const expectedPreviousId = this.lastBlockNumber === blockNumber - 1
+            ? this.recentBlockIds.get(blockNumber - 1)
+            : undefined;
+
+        if (expectedPreviousId && block.previous && block.previous !== expectedPreviousId) {
+            this.blockCache.delete(blockNumber);
+            return this.handleFork(blockNumber, expectedPreviousId, block.previous);
         }
 
         // Get the block date and time
         const blockTime = new Date(`${block.timestamp}Z`);
-
-        if (this.lastBlockNumber !== blockNumber) {
-            this.processActions().catch(error => {
-                getLogger().error('[Streamer] Error processing actions:', error);
-            });
-        }
+        const isNewBlock = this.lastBlockNumber !== blockNumber;
 
         this.blockId = block.block_id;
         this.previousBlockId = block.previous;
-        this.transactionId = block.transaction_ids[0];
+        this.transactionId = block.transaction_ids?.[0];
         this.blockTime = blockTime;
 
+        const blockContext: BlockHookContext = {
+            streamer: this,
+            block,
+            blockNumber,
+            blockId: block.block_id,
+            previousBlockId: block.previous,
+            blockTime
+        };
+
+        await this.runHook('beforeBlock', blockContext);
+
         if (this.adapter?.processBlock) {
-            await this.adapter.processBlock(block);
+            await this.runWithErrorPolicy(() => this.adapter.processBlock(block as any), 'adapter', { blockNumber });
         }
 
-        // Fire onBlock subscribers
-        this.blockSubscriptions.forEach(sub => {
-            sub.callback(block, this.lastBlockNumber);
-        });
+        await this.notify(this.blockSubscriptions, (sub) => sub.callback(block, blockNumber), { blockNumber });
 
         // Hive operations are order-sensitive, so process them sequentially.
-        const transactions = block.transactions as any[];
-        const transactionIds = block.transaction_ids;
+        const transactions = (block.transactions ?? []) as any[];
+        const transactionIds = block.transaction_ids ?? [];
+        const hasOperationHooks = this.hookRegistry.has('beforeOperation') || this.hookRegistry.has('afterOperation');
 
         for (let i = 0; i < transactions.length; i++) {
-            const transaction = transactions[i];
-            const operations = transaction.operations;
+            const operations = transactions[i]?.operations ?? [];
+            const transactionId = transactionIds[i];
 
             for (let opIndex = 0; opIndex < operations.length; opIndex++) {
-                const op = operations[opIndex];
+                const op = operations[opIndex] as [string, any];
+                const operationContext: OperationHookContext | null = hasOperationHooks ? {
+                    streamer: this,
+                    operation: op,
+                    type: op?.[0],
+                    data: op?.[1],
+                    blockNumber,
+                    blockId: block.block_id,
+                    previousBlockId: block.previous,
+                    transactionId,
+                    transactionIndex: i,
+                    operationIndex: opIndex,
+                    blockTime
+                } : null;
 
-                try {
-                    await this.processOperation(
-                        op as [string, any],
-                        blockNumber,
-                        block.block_id,
-                        block.previous,
-                        transactionIds[i],
-                        blockTime
-                    );
-                } catch (error) {
-                    getLogger().error('[Streamer] Operation processing error:', error, {
-                        blockNumber,
-                        transactionIndex: i,
-                        operationIndex: opIndex
-                    });
+                if (operationContext && !(await this.shouldProcessOperation(operationContext))) {
+                    continue;
+                }
+
+                await this.runWithErrorPolicy(() => this.processOperation(
+                    op,
+                    blockNumber,
+                    block.block_id,
+                    block.previous,
+                    transactionId,
+                    blockTime,
+                    opIndex
+                ), 'operation', { blockNumber, transactionId, operationIndex: opIndex });
+
+                if (operationContext) {
+                    await this.runHook('afterOperation', operationContext);
                 }
             }
         }
 
+        // Time actions run after the block's operations, against the block's
+        // own timestamp, so replays and catch-up are deterministic.
+        if (isNewBlock) {
+            await this.processActions(blockTime, blockNumber);
+        }
+
         this.lastBlockNumber = blockNumber;
+        this.lastBlockId = block.block_id;
+        this.rememberBlockId(blockNumber, block.block_id);
         this.lastProcessedAt = Date.now();
-        this.saveStateThrottled();
+
+        await this.checkpoint();
+        await this.runHook('afterBlock', blockContext);
+        await this.maybePruneLedger();
         this.cleanupCaches();
+
+        return 'processed';
+    }
+
+    private async shouldProcessOperation(ctx: OperationHookContext): Promise<boolean> {
+        for (const handler of this.hookRegistry.get('beforeOperation')) {
+            try {
+                if (await handler(ctx) === false) {
+                    return false;
+                }
+            } catch (error) {
+                await this.reportError(error, 'hook', {
+                    blockNumber: ctx.blockNumber,
+                    transactionId: ctx.transactionId,
+                    operationIndex: ctx.operationIndex
+                });
+            }
+        }
+
+        return true;
     }
 
     private cleanupCaches(): void {
@@ -1567,7 +2157,24 @@ export class Streamer {
         }
     }
 
-    public async processOperation(op: [string, any], blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date): Promise<void> {
+    /**
+     * Process Operation
+     *
+     * Runs a single operation through the adapter, subscriptions, and
+     * contracts. `operationIndex` (the operation's position inside its
+     * transaction) enables the idempotency ledger; the block loop always
+     * supplies it. Calls without it — e.g. apps feeding operations in
+     * manually — dispatch contracts without duplicate protection.
+     */
+    public async processOperation(
+        op: [string, any],
+        blockNumber: number,
+        blockId: string,
+        prevBlockId: string,
+        trxId: string,
+        blockTime: Date,
+        operationIndex?: number
+    ): Promise<void> {
         const operationType = op[0];
         const operationData = op[1];
         const operationMetadata = {
@@ -1575,44 +2182,34 @@ export class Streamer {
             blockId,
             previousBlockId: prevBlockId,
             transactionId: trxId,
+            operationIndex,
             blockTime
         };
+        const errorMeta: ErrorMeta = { blockNumber, transactionId: trxId, operationIndex };
+        const ledgerKey = this.buildOperationLedgerKey(blockNumber, trxId, operationIndex);
+        const notifyStandard = (subscriptions: SubscriptionCallback[]) => this.notify(
+            subscriptions,
+            (sub) => sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime),
+            errorMeta
+        );
 
         if (this.adapter?.processOperation) {
             await this.adapter.processOperation(op, blockNumber, blockId, prevBlockId, trxId, blockTime);
         }
 
         // Fire onAnyOperation subscribers
-        this.anyOperationSubscriptions.forEach(sub => {
-            sub.callback(op, blockNumber, blockId, prevBlockId, trxId, blockTime);
-        });
+        await this.notify(
+            this.anyOperationSubscriptions,
+            (sub) => sub.callback(op, blockNumber, blockId, prevBlockId, trxId, blockTime),
+            errorMeta
+        );
 
         // Operation is a "comment" which could either be a post or comment
         if (operationType === 'comment') {
-            // This is a post
-            if (operationData.parent_author === '') {
-                this.postSubscriptions.forEach(sub => {
-                    sub.callback(
-                        operationData,
-                        blockNumber,
-                        blockId,
-                        prevBlockId,
-                        trxId,
-                        blockTime
-                    );
-                });
-                // This is a comment
+            if (operationData?.parent_author === '') {
+                await notifyStandard(this.postSubscriptions);
             } else {
-                this.commentSubscriptions.forEach(sub => {
-                    sub.callback(
-                        operationData,
-                        blockNumber,
-                        blockId,
-                        prevBlockId,
-                        trxId,
-                        blockTime
-                    );
-                });
+                await notifyStandard(this.commentSubscriptions);
             }
         }
 
@@ -1620,28 +2217,9 @@ export class Streamer {
         if (operationType === 'transfer') {
             const sender = operationData?.from;
             const rawAmount = operationData?.amount;
-            let amount = '';
-            let asset = '';
+            const transferInfo = this.buildTransferInfo(operationData);
 
-            try {
-                const parsedAmount = Utils.parseAssetAmount(String(rawAmount || ''));
-                amount = parsedAmount.amount;
-                asset = parsedAmount.asset;
-            } catch (error) {
-                amount = '';
-                asset = '';
-            }
-
-            const transferInfo = {
-                from: sender,
-                to: operationData?.to,
-                rawAmount: rawAmount || '',
-                amount,
-                asset,
-                memo: operationData?.memo
-            };
-
-            const json = Utils.jsonParse(operationData.memo);
+            const json = Utils.jsonParse(operationData?.memo);
             const payload = this.normalizeContractPayload(json?.[this.config.PAYLOAD_IDENTIFIER]);
 
             if (payload) {
@@ -1656,25 +2234,21 @@ export class Streamer {
                 const context = this.buildContractContext('transfer', blockNumber, blockId, prevBlockId, trxId, blockTime, {
                     sender,
                     transfer: transferInfo,
+                    operationIndex,
                     operation: {
                         type: operationType,
                         data: operationData
                     }
                 });
 
-                await this.dispatchContractAction(payload, context);
+                await this.dispatchContractAction(payload, context, { ledgerKey });
             }
 
-            await Promise.all(this.transferSubscriptions
-                .filter((sub) => sub.account === operationData.to)
-                .map((sub) => Promise.resolve(sub.callback(
-                    operationData,
-                    blockNumber,
-                    blockId,
-                    prevBlockId,
-                    trxId,
-                    blockTime
-                ))));
+            await this.notify(
+                this.transferSubscriptions.filter((sub) => sub.account === operationData?.to),
+                (sub) => sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime),
+                errorMeta
+            );
         }
 
         // This is a custom JSON operation
@@ -1692,7 +2266,7 @@ export class Streamer {
                 isSignedWithActiveKey = false;
             }
 
-            const json = Utils.jsonParse(operationData.json);
+            const json = Utils.jsonParse(operationData?.json);
             const payload = id === this.config.JSON_ID
                 ? this.normalizeContractPayload(json?.[this.config.PAYLOAD_IDENTIFIER])
                 : null;
@@ -1713,40 +2287,29 @@ export class Streamer {
                         json,
                         isSignedWithActiveKey
                     },
+                    operationIndex,
                     operation: {
                         type: operationType,
                         data: operationData
                     }
                 });
 
-                await this.dispatchContractAction(payload, context);
+                await this.dispatchContractAction(payload, context, { ledgerKey });
             }
 
-            this.customJsonSubscriptions.forEach(sub => {
-                sub.callback(
-                    operationData,
-                    { sender, isSignedWithActiveKey },
-                    blockNumber,
-                    blockId,
-                    prevBlockId,
-                    trxId,
-                    blockTime
-                );
-            });
+            const authInfo = { sender, isSignedWithActiveKey };
 
-            this.customJsonIdSubscriptions.forEach(sub => {
-                if (sub.id === operationData.id) {
-                    sub.callback(
-                        operationData,
-                        { sender, isSignedWithActiveKey },
-                        blockNumber,
-                        blockId,
-                        prevBlockId,
-                        trxId,
-                        blockTime
-                    ); 
-                }
-            });
+            await this.notify(
+                this.customJsonSubscriptions,
+                (sub) => sub.callback(operationData, authInfo, blockNumber, blockId, prevBlockId, trxId, blockTime),
+                errorMeta
+            );
+
+            await this.notify(
+                this.customJsonIdSubscriptions.filter((sub) => sub.id === id),
+                (sub) => sub.callback(operationData, authInfo, blockNumber, blockId, prevBlockId, trxId, blockTime),
+                errorMeta
+            );
 
             if (id === this.config.HIVE_ENGINE_ID && this.customJsonHiveEngineSubscriptions.length > 0) {
                 const enginePayload = json || {};
@@ -1762,8 +2325,9 @@ export class Streamer {
                 }
 
                 if (!hasVerificationErrors) {
-                    await Promise.all(this.customJsonHiveEngineSubscriptions.map(async (sub: any) => {
-                        sub.callback(
+                    await this.notify(
+                        this.customJsonHiveEngineSubscriptions,
+                        (sub) => sub.callback(
                             contractName,
                             contractAction,
                             contractPayload,
@@ -1774,8 +2338,9 @@ export class Streamer {
                             prevBlockId,
                             trxId,
                             blockTime
-                        );
-                    }));
+                        ),
+                        errorMeta
+                    );
                 }
             }
         }
@@ -1789,13 +2354,15 @@ export class Streamer {
             if (payload) {
                 const context = this.buildContractContext('recurrent_transfer', blockNumber, blockId, prevBlockId, trxId, blockTime, {
                     sender,
+                    transfer: this.buildTransferInfo(operationData),
+                    operationIndex,
                     operation: {
                         type: operationType,
                         data: operationData
                     }
                 });
 
-                await this.dispatchContractAction(payload, context);
+                await this.dispatchContractAction(payload, context, { ledgerKey });
             }
         }
 
@@ -1815,126 +2382,124 @@ export class Streamer {
                     const context = this.buildContractContext('escrow_transfer', blockNumber, blockId, prevBlockId, trxId, blockTime, {
                         sender,
                         escrow,
+                        operationIndex,
                         operation: {
                             type: operationType,
                             data: operationData
                         }
                     });
 
-                    await this.dispatchContractAction(payload, context);
+                    await this.dispatchContractAction(payload, context, { ledgerKey });
                 }
             }
 
-            this.escrowSubscriptions.forEach(sub => {
-                if (sub.type === operationType) {
-                    sub.callback(
-                        operationData,
-                        blockNumber,
-                        blockId,
-                        prevBlockId,
-                        trxId,
-                        blockTime
-                    );
-                }
-            });
+            await notifyStandard(this.escrowSubscriptions.filter((sub) => sub.type === operationType));
         }
 
-        // Vote operations
         if (operationType === 'vote') {
-            this.voteSubscriptions.forEach(sub => {
-                sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
-            });
+            await notifyStandard(this.voteSubscriptions);
         }
 
-        // Delegation operations
         if (operationType === 'delegate_vesting_shares') {
-            this.delegateSubscriptions.forEach(sub => {
-                sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
-            });
+            await notifyStandard(this.delegateSubscriptions);
         }
 
         // Power up (transfer_to_vesting)
         if (operationType === 'transfer_to_vesting') {
-            this.powerUpSubscriptions.forEach(sub => {
-                sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
-            });
+            await notifyStandard(this.powerUpSubscriptions);
         }
 
         // Power down (withdraw_vesting)
         if (operationType === 'withdraw_vesting') {
-            this.powerDownSubscriptions.forEach(sub => {
-                sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
-            });
+            await notifyStandard(this.powerDownSubscriptions);
         }
 
-        // Claim reward balance
         if (operationType === 'claim_reward_balance') {
-            this.claimRewardsSubscriptions.forEach(sub => {
-                sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
-            });
+            await notifyStandard(this.claimRewardsSubscriptions);
         }
 
-        // Witness vote
         if (operationType === 'account_witness_vote') {
-            this.witnessVoteSubscriptions.forEach(sub => {
-                sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
-            });
+            await notifyStandard(this.witnessVoteSubscriptions);
         }
 
         // Follow/unfollow/mute/reblog via custom_json with id 'follow'
         if (operationType === 'custom_json' && operationData?.id === 'follow') {
             const json = Utils.jsonParse(operationData.json);
+
             if (Array.isArray(json) && json.length === 2) {
                 const [type, payload] = json;
+                const notifySocial = (subscriptions: SubscriptionCallback[]) => this.notify(
+                    subscriptions,
+                    (sub) => sub.callback(payload, blockNumber, blockId, prevBlockId, trxId, blockTime),
+                    errorMeta
+                );
 
-                if (type === 'follow' && payload && (this.followSubscriptions.length > 0)) {
-                    this.followSubscriptions.forEach(sub => {
-                        sub.callback(payload, blockNumber, blockId, prevBlockId, trxId, blockTime);
-                    });
+                if (type === 'follow' && payload) {
+                    await notifySocial(this.followSubscriptions);
                 }
 
-                if (type === 'reblog' && payload && (this.reblogSubscriptions.length > 0)) {
-                    this.reblogSubscriptions.forEach(sub => {
-                        sub.callback(payload, blockNumber, blockId, prevBlockId, trxId, blockTime);
-                    });
+                if (type === 'reblog' && payload) {
+                    await notifySocial(this.reblogSubscriptions);
                 }
             }
         }
 
-        // Account updates
         if (operationType === 'account_update' || operationType === 'account_update2') {
-            this.accountUpdateSubscriptions.forEach(sub => {
-                sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
-            });
+            await notifyStandard(this.accountUpdateSubscriptions);
         }
 
-        // Delete comment
         if (operationType === 'delete_comment') {
-            this.deleteCommentSubscriptions.forEach(sub => {
-                sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
-            });
+            await notifyStandard(this.deleteCommentSubscriptions);
         }
 
-        // Limit orders
         if (operationType === 'limit_order_create' || operationType === 'limit_order_create2' || operationType === 'limit_order_cancel') {
-            this.limitOrderSubscriptions.forEach(sub => {
-                sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
-            });
+            await notifyStandard(this.limitOrderSubscriptions);
         }
 
-        // Savings transfers
         if (operationType === 'transfer_to_savings' || operationType === 'transfer_from_savings' || operationType === 'cancel_transfer_from_savings') {
-            this.savingsSubscriptions.forEach(sub => {
-                sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
-            });
+            await notifyStandard(this.savingsSubscriptions);
         }
 
-        // Convert operations
         if (operationType === 'convert' || operationType === 'collateralized_convert') {
-            this.convertSubscriptions.forEach(sub => {
-                sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime);
-            });
+            await notifyStandard(this.convertSubscriptions);
         }
+    }
+
+    /**
+     * Ledger keys use the transaction id and operation index rather than
+     * the block number, so a transaction that moves to a different block
+     * after a fork is still recognised as already processed.
+     */
+    private buildOperationLedgerKey(blockNumber: number, trxId: string, operationIndex?: number): string | undefined {
+        if (operationIndex === undefined || operationIndex === null) {
+            return undefined;
+        }
+
+        return trxId ? `op:${trxId}:${operationIndex}` : `op:${blockNumber}::${operationIndex}`;
+    }
+
+    private buildTransferInfo(operationData: any): NonNullable<ContractContext['transfer']> {
+        const rawAmount = operationData?.amount;
+        let amount = '';
+        let asset = '';
+
+        try {
+            const parsedAmount = Utils.parseAssetAmount(String(rawAmount || ''));
+            amount = parsedAmount.amount;
+            asset = parsedAmount.asset;
+        } catch (error) {
+            amount = '';
+            asset = '';
+        }
+
+        return {
+            from: operationData?.from,
+            to: operationData?.to,
+            rawAmount: rawAmount || '',
+            amount,
+            asset,
+            memo: operationData?.memo
+        };
     }
 
     private normalizeContractPayload(payload: any): ContractPayload | null {
@@ -2001,6 +2566,7 @@ export class Streamer {
             customJson?: ContractContext['customJson'];
             escrow?: ContractContext['escrow'];
             operation?: ContractContext['operation'];
+            operationIndex?: number;
         }
     ): ContractContext {
         return {
@@ -2015,7 +2581,8 @@ export class Streamer {
                 time: blockTime
             },
             transaction: {
-                id: transactionId
+                id: transactionId,
+                operationIndex: details.operationIndex
             },
             sender: details.sender,
             transfer: details.transfer,
@@ -2025,78 +2592,414 @@ export class Streamer {
         };
     }
 
-    private async dispatchContractAction(payload: ContractPayload, context: ContractContext): Promise<void> {
+    private async rejectAction(
+        contract: string,
+        action: string,
+        reason: ActionRejectionReason,
+        message: string,
+        context: ContractContext,
+        level: 'warn' | 'debug' = 'warn'
+    ): Promise<ContractDispatchResult> {
+        if (level === 'warn') {
+            getLogger().warn(`[Streamer] ${message}`);
+        } else if (this.config.DEBUG_MODE) {
+            getLogger().debug(`[Streamer] ${message}`);
+        }
+
+        await this.runHook('onActionRejected', {
+            streamer: this,
+            contract,
+            action,
+            reason,
+            message,
+            context
+        });
+
+        return reason === 'duplicate' ? 'duplicate' : 'rejected';
+    }
+
+    private resolveGuards(contract: ContractDefinition, actionDefinition: ContractActionDefinition<any>): ContractActionGuards {
+        return {
+            ...(contract.guards ?? {}),
+            ...(actionDefinition.guards ?? {})
+        };
+    }
+
+    private rateLimitKey(contract: string, action: string, sender?: string): string {
+        return `${contract}.${action}:${sender ?? ''}`;
+    }
+
+    /**
+     * Evaluates declarative guards. Returns a rejection or null when the
+     * call may proceed.
+     */
+    private evaluateGuards(
+        contractName: string,
+        actionName: string,
+        guards: ContractActionGuards,
+        context: ContractContext
+    ): { reason: ActionRejectionReason; message: string } | null {
+        const label = `${contractName}.${actionName}`;
+
+        if (guards.paused || this.isContractPaused(contractName, actionName)) {
+            return { reason: 'paused', message: `Action '${label}' is paused` };
+        }
+
+        if (context.trigger !== 'time') {
+            const sender = context.sender;
+
+            if (guards.allowedSenders && (!sender || !guards.allowedSenders.includes(sender))) {
+                return { reason: 'sender_not_allowed', message: `Sender '${sender ?? ''}' is not allowed to call '${label}'` };
+            }
+
+            if (guards.blockedSenders && sender && guards.blockedSenders.includes(sender)) {
+                return { reason: 'sender_not_allowed', message: `Sender '${sender}' is blocked from calling '${label}'` };
+            }
+        }
+
+        const transfer = context.transfer;
+
+        if (transfer) {
+            const asset = String(transfer.asset || '').toUpperCase();
+
+            if (guards.allowedAssets && !guards.allowedAssets.map((entry) => entry.toUpperCase()).includes(asset)) {
+                return { reason: 'asset_not_allowed', message: `Asset '${asset}' is not accepted by '${label}'` };
+            }
+
+            const amount = new BigNumber(transfer.amount);
+
+            if (guards.minAmount !== undefined) {
+                if (!amount.isFinite() || amount.isLessThan(guards.minAmount)) {
+                    return { reason: 'amount_too_low', message: `Amount ${transfer.rawAmount} is below the minimum ${guards.minAmount} for '${label}'` };
+                }
+            }
+
+            if (guards.maxAmount !== undefined) {
+                if (!amount.isFinite() || amount.isGreaterThan(guards.maxAmount)) {
+                    return { reason: 'amount_too_high', message: `Amount ${transfer.rawAmount} is above the maximum ${guards.maxAmount} for '${label}'` };
+                }
+            }
+        }
+
+        if (guards.rateLimit && context.trigger !== 'time') {
+            const now = context.block.time.getTime();
+            const windowStart = now - guards.rateLimit.windowSeconds * 1000;
+            const key = this.rateLimitKey(contractName, actionName, context.sender);
+            const hits = (this.rateLimitHits.get(key) ?? []).filter((time) => time > windowStart);
+
+            this.rateLimitHits.set(key, hits);
+
+            if (hits.length >= guards.rateLimit.max) {
+                return {
+                    reason: 'rate_limited',
+                    message: `Sender '${context.sender ?? ''}' exceeded ${guards.rateLimit.max} calls per ${guards.rateLimit.windowSeconds}s on '${label}'`
+                };
+            }
+        }
+
+        return null;
+    }
+
+    private recordRateLimitHit(contractName: string, actionName: string, guards: ContractActionGuards, context: ContractContext): void {
+        if (!guards.rateLimit || context.trigger === 'time') {
+            return;
+        }
+
+        const key = this.rateLimitKey(contractName, actionName, context.sender);
+        const hits = this.rateLimitHits.get(key) ?? [];
+        hits.push(context.block.time.getTime());
+        this.rateLimitHits.set(key, hits);
+
+        if (this.rateLimitHits.size > 50000) {
+            // Bound memory: drop the oldest tracked senders.
+            const excess = this.rateLimitHits.size - 50000;
+            const keys = this.rateLimitHits.keys();
+
+            for (let i = 0; i < excess; i++) {
+                this.rateLimitHits.delete(keys.next().value);
+            }
+        }
+    }
+
+    private async isDuplicate(ledgerKey: string | undefined): Promise<boolean> {
+        if (!ledgerKey || !this.config.IDEMPOTENCY_ENABLED || this.bypassLedger || !this.adapter?.hasProcessedOperation) {
+            return false;
+        }
+
+        return this.adapter.hasProcessedOperation(ledgerKey);
+    }
+
+    private async recordLedger(
+        ledgerKey: string | undefined,
+        payload: ContractPayload,
+        context: ContractContext,
+        status: 'success' | 'failed'
+    ): Promise<void> {
+        if (!ledgerKey || !this.config.IDEMPOTENCY_ENABLED || !this.adapter?.markOperationProcessed) {
+            return;
+        }
+
+        await this.adapter.markOperationProcessed({
+            key: ledgerKey,
+            blockNumber: context.block.number,
+            transactionId: context.transaction.id,
+            operationIndex: context.transaction.operationIndex,
+            contract: payload.contract,
+            action: payload.action,
+            status
+        });
+    }
+
+    private async runContractHook<T>(fn: (() => T | Promise<T>) | undefined, meta: ErrorMeta): Promise<T | undefined> {
+        if (!fn) {
+            return undefined;
+        }
+
+        try {
+            return await fn();
+        } catch (error) {
+            await this.reportError(error, 'hook', meta);
+            return undefined;
+        }
+    }
+
+    /**
+     * Resolves, validates, guards, and executes a contract action.
+     *
+     * Order: contract/action/trigger lookup → idempotency check → active key
+     * → schema → guards → `beforeContractAction` hooks → contract
+     * `beforeAction` → handler (with ERROR_POLICY) → ledger → after hooks.
+     */
+    private async dispatchContractAction(
+        payload: ContractPayload,
+        context: ContractContext,
+        options: { ledgerKey?: string } = {}
+    ): Promise<ContractDispatchResult> {
         const contract = this.contractCache.get(payload.contract) ||
             this.contracts.find(c => c.name === payload.contract);
 
         if (!contract) {
-            getLogger().warn(`[Streamer] Contract '${payload.contract}' not found for action '${payload.action}'`);
-            return;
+            return this.rejectAction(payload.contract, payload.action, 'contract_not_found',
+                `Contract '${payload.contract}' not found for action '${payload.action}'`, context);
         }
 
-        if (contract && !this.contractCache.has(payload.contract)) {
+        if (!this.contractCache.has(payload.contract)) {
             this.contractCache.set(payload.contract, contract);
         }
 
         const actionDefinition = contract.actions?.[payload.action];
 
         if (!actionDefinition || typeof actionDefinition.handler !== 'function') {
-            getLogger().warn(`[Streamer] Action '${payload.action}' not found in contract '${payload.contract}'`);
-            return;
+            return this.rejectAction(payload.contract, payload.action, 'action_not_found',
+                `Action '${payload.action}' not found in contract '${payload.contract}'`, context);
         }
 
         if (!this.isActionTriggerAllowed(actionDefinition, context.trigger)) {
-            getLogger().warn(`[Streamer] Action '${payload.action}' does not allow trigger '${context.trigger}'`);
-            return;
+            return this.rejectAction(payload.contract, payload.action, 'trigger_not_allowed',
+                `Action '${payload.action}' does not allow trigger '${context.trigger}'`, context);
+        }
+
+        const errorMeta: ErrorMeta = {
+            blockNumber: context.block.number,
+            transactionId: context.transaction.id,
+            operationIndex: context.transaction.operationIndex
+        };
+
+        if (await this.isDuplicate(options.ledgerKey)) {
+            return this.rejectAction(payload.contract, payload.action, 'duplicate',
+                `Skipping ${payload.contract}.${payload.action}: operation ${options.ledgerKey} was already processed`, context, 'debug');
         }
 
         if (actionDefinition.requiresActiveKey &&
             context.trigger === 'custom_json' &&
             !context.customJson?.isSignedWithActiveKey) {
-            getLogger().warn(`[Streamer] Action '${payload.action}' requires active key signature`);
-            return;
+            return this.rejectAction(payload.contract, payload.action, 'active_key_required',
+                `Action '${payload.action}' requires active key signature`, context);
         }
 
         let actionPayload: any = payload.payload ?? {};
+
         if (actionDefinition.schema) {
             const result = actionDefinition.schema.safeParse(actionPayload);
+
             if (!result.success) {
+                const issues = (result.error as any)?.issues ?? [];
+
                 getLogger().warn(`[Streamer] Invalid payload for ${payload.contract}.${payload.action}`, {
-                    errors: result.error?.errors
+                    errors: issues
                 });
-                return;
+
+                await this.runHook('onInvalidPayload', {
+                    streamer: this,
+                    contract: payload.contract,
+                    action: payload.action,
+                    payload: actionPayload,
+                    issues,
+                    context
+                });
+
+                return 'rejected';
             }
+
             actionPayload = result.data;
         }
 
-        try {
-            await actionDefinition.handler(actionPayload, context);
-        } catch (error) {
-            getLogger().error(`[Streamer] Contract action error for ${payload.contract}.${payload.action}:`, error);
-            if (context.trigger === 'time') {
-                throw error;
+        const guards = this.resolveGuards(contract, actionDefinition);
+        const rejection = this.evaluateGuards(payload.contract, payload.action, guards, context);
+
+        if (rejection) {
+            return this.rejectAction(payload.contract, payload.action, rejection.reason, rejection.message, context);
+        }
+
+        const hookContext: ContractActionHookContext = {
+            streamer: this,
+            contract: payload.contract,
+            action: payload.action,
+            payload: actionPayload,
+            meta: payload.meta,
+            context
+        };
+
+        for (const handler of this.hookRegistry.get('beforeContractAction')) {
+            let outcome: unknown;
+
+            try {
+                outcome = await handler(hookContext);
+            } catch (error) {
+                // Fail closed: a crashing guard must not let the action through.
+                await this.reportError(error, 'hook', errorMeta);
+                outcome = false;
+            }
+
+            if (outcome === false) {
+                return this.rejectAction(payload.contract, payload.action, 'vetoed',
+                    `Action ${payload.contract}.${payload.action} vetoed by beforeContractAction hook`, context, 'debug');
+            }
+
+            if (outcome && typeof outcome === 'object' && 'payload' in (outcome as any)) {
+                hookContext.payload = (outcome as { payload: any }).payload;
             }
         }
+
+        actionPayload = hookContext.payload;
+
+        if (contract.hooks?.beforeAction) {
+            let proceed: unknown;
+
+            try {
+                proceed = await contract.hooks.beforeAction({ action: payload.action, payload: actionPayload, ctx: context });
+            } catch (error) {
+                await this.reportError(error, 'hook', errorMeta);
+                proceed = false;
+            }
+
+            if (proceed === false) {
+                return this.rejectAction(payload.contract, payload.action, 'vetoed',
+                    `Action ${payload.contract}.${payload.action} vetoed by contract beforeAction hook`, context, 'debug');
+            }
+        }
+
+        this.recordRateLimitHit(payload.contract, payload.action, guards, context);
+
+        const policy = this.config.ERROR_POLICY;
+        const maxAttempts = policy === 'retry' ? 1 + this.config.ERROR_MAX_RETRIES : 1;
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            const startedAt = Date.now();
+
+            try {
+                await actionDefinition.handler(actionPayload, context);
+            } catch (error) {
+                if (error instanceof StreamHaltError) {
+                    throw error;
+                }
+
+                const err = this.toError(error);
+                const willRetry = attempt < maxAttempts;
+
+                getLogger().error(`[Streamer] Contract action error for ${payload.contract}.${payload.action}:`, err);
+
+                await this.runContractHook(
+                    contract.hooks?.onError
+                        ? () => contract.hooks.onError({ action: payload.action, payload: actionPayload, ctx: context, error: err })
+                        : undefined,
+                    errorMeta
+                );
+
+                await this.runHook('onContractError', {
+                    ...hookContext,
+                    payload: actionPayload,
+                    error: err,
+                    attempt,
+                    willRetry
+                });
+
+                if (willRetry) {
+                    await Utils.sleep(this.retryDelay(attempt));
+                    continue;
+                }
+
+                if (policy === 'skip') {
+                    if (context.trigger === 'time') {
+                        // Leave the time action due so it runs again next block.
+                        throw err;
+                    }
+
+                    await this.recordLedger(options.ledgerKey, payload, context, 'failed');
+                    return 'failed';
+                }
+
+                await this.haltStream(err, context.trigger === 'time' ? 'action' : 'contract', errorMeta);
+            }
+
+            const durationMs = Date.now() - startedAt;
+
+            await this.recordLedger(options.ledgerKey, payload, context, 'success');
+
+            await this.runContractHook(
+                contract.hooks?.afterAction
+                    ? () => contract.hooks.afterAction({ action: payload.action, payload: actionPayload, ctx: context, durationMs })
+                    : undefined,
+                errorMeta
+            );
+
+            await this.runHook('afterContractAction', {
+                ...hookContext,
+                payload: actionPayload,
+                durationMs
+            });
+
+            return 'executed';
+        }
+
+        return 'failed';
     }
 
-    private async processActions(): Promise<void> {
-        if (!this.latestBlockchainTime || this.actions.length === 0) {
+    /**
+     * Runs due time actions. The block loop passes the block's timestamp and
+     * number so scheduling follows blockchain time deterministically and
+     * each tick is recorded in the idempotency ledger. Called without
+     * arguments it falls back to the latest known chain time.
+     */
+    private async processActions(referenceTime?: Date, blockNumber?: number): Promise<void> {
+        const now = referenceTime ?? this.latestBlockchainTime;
+
+        if (!now || this.actions.length === 0) {
             return;
         }
-        
-        const currentTime = this.latestBlockchainTime.getTime();
+
+        const currentTime = now.getTime();
+        const contextBlockNumber = blockNumber ?? this.lastBlockNumber;
         const executedActions: string[] = [];
-        
-        // Process actions in batch with optimized time calculations
+
         for (let i = 0; i < this.actions.length; i++) {
             const action = this.actions[i];
-            
+
             // Skip disabled actions or actions that have reached max executions
             if (!action.enabled || action.hasReachedMaxExecutions()) {
                 continue;
             }
-            
-            // Get contract from cache or find and cache it
+
             let contract = this.contractCache.get(action.contractName);
             if (!contract) {
                 contract = this.contracts.find(c => c.name === action.contractName);
@@ -2105,12 +3008,11 @@ export class Streamer {
                 }
             }
 
-            // Contract doesn't exist or method doesn't exist, log warning and skip
             if (!contract) {
                 getLogger().warn(`[Streamer] Contract '${action.contractName}' not found for action '${action.id}'`);
                 continue;
             }
-            
+
             const actionDefinition = contract.actions?.[action.contractAction];
             if (!actionDefinition || typeof actionDefinition.handler !== 'function') {
                 getLogger().warn(`[Streamer] Action '${action.contractAction}' not found in contract '${action.contractName}' for action '${action.id}'`);
@@ -2122,77 +3024,79 @@ export class Streamer {
                 continue;
             }
 
-            // Get frequency in seconds from optimized map
             const frequencySeconds = this.actionFrequencyMap.get(action.timeValue);
             if (!frequencySeconds) {
                 getLogger().warn(`[Streamer] Invalid time value '${action.timeValue}' for action '${action.id}'`);
                 continue;
             }
 
-            // Optimized time difference calculation using timestamps
-            const actionTime = action.date.getTime();
-            const differenceSeconds = (currentTime - actionTime) / 1000;
+            const differenceSeconds = (currentTime - action.date.getTime()) / 1000;
 
-            // Check if enough time has passed
-            if (differenceSeconds >= frequencySeconds) {
-                try {
-                    // Execute the action with error isolation
-                    const context = this.buildContractContext(
-                        'time',
-                        this.lastBlockNumber,
-                        this.blockId,
-                        this.previousBlockId,
-                        action.id,
-                        this.latestBlockchainTime || new Date(),
-                        {}
-                    );
+            if (differenceSeconds < frequencySeconds) {
+                continue;
+            }
 
-                    await this.dispatchContractAction({
-                        contract: action.contractName,
-                        action: action.contractAction,
-                        payload: action.payload || {}
-                    }, context);
-                    
-                    // Reset the action timer and increment execution count,
-                    // anchored to blockchain time so wall-clock skew and
-                    // replayed/simulated blocks stay consistent
-                    action.reset(this.latestBlockchainTime || new Date());
-                    action.incrementExecutionCount(this.latestBlockchainTime || new Date());
-                    executedActions.push(action.id);
-                    
-                    if (this.config.DEBUG_MODE) {
-                        getLogger().debug(`[Streamer] Executed action: ${action.id} (execution #${action.executionCount})`);
-                    }
-                } catch (error) {
-                    const err = error instanceof Error ? error : new Error(String(error));
-                    getLogger().error(`[Streamer] Action execution error for ${action.contractName}.${action.contractAction}:`, {
-                        actionId: action.id,
-                        error: err.message,
-                        stack: err.stack,
-                        payload: action.payload
-                    });
-                    
-                    // Optionally disable action after repeated failures
-                    // This could be configurable in the future
+            try {
+                const context = this.buildContractContext(
+                    'time',
+                    contextBlockNumber,
+                    this.blockId,
+                    this.previousBlockId,
+                    action.id,
+                    now,
+                    {}
+                );
+
+                const result = await this.dispatchContractAction({
+                    contract: action.contractName,
+                    action: action.contractAction,
+                    payload: action.payload || {}
+                }, context, {
+                    ledgerKey: blockNumber !== undefined ? `time:${action.id}:${blockNumber}` : undefined
+                });
+
+                // Reset the timer anchored to blockchain time so wall-clock
+                // skew and replayed/simulated blocks stay consistent. A tick
+                // rejected by a guard (e.g. paused) is skipped, not counted.
+                action.reset(now);
+
+                if (result === 'executed' || result === 'duplicate') {
+                    action.incrementExecutionCount(now);
                 }
+
+                executedActions.push(action.id);
+
+                if (this.config.DEBUG_MODE) {
+                    getLogger().debug(`[Streamer] Time action ${action.id}: ${result} (execution #${action.executionCount})`);
+                }
+            } catch (error) {
+                if (error instanceof StreamHaltError) {
+                    throw error;
+                }
+
+                const err = this.toError(error);
+                getLogger().error(`[Streamer] Action execution error for ${action.contractName}.${action.contractAction}:`, {
+                    actionId: action.id,
+                    error: err.message,
+                    stack: err.stack,
+                    payload: action.payload
+                });
             }
         }
-        
-        // Save state if any actions were executed
+
         if (executedActions.length > 0) {
             await this.saveActionsToDisk();
         }
-        
-        // Clean up disabled or completed actions periodically
+
         this.cleanupActions();
     }
-    
+
     /**
      * Clean up completed or disabled actions to prevent memory leaks
      */
     private cleanupActions(): void {
         const beforeCount = this.actions.length;
-        
+
         // Remove actions that have reached their max executions
         this.actions = this.actions.filter(action => {
             if (action.hasReachedMaxExecutions()) {
@@ -2203,9 +3107,9 @@ export class Streamer {
             }
             return true;
         });
-        
+
         const afterCount = this.actions.length;
-        
+
         if (beforeCount !== afterCount) {
             // Save state if we removed any actions
             this.saveActionsToDisk().catch(error => {
@@ -2218,19 +3122,8 @@ export class Streamer {
         if (this.adapterInitialized && this.adapter?.saveState) {
             await this.adapter.saveState({
                 lastBlockNumber: this.lastBlockNumber,
+                lastBlockId: this.lastBlockId,
                 actions: this.actions.map(action => action.toJSON())
-            });
-        }
-    }
-
-    // Throttled state saving for performance
-    private saveStateThrottled(): void {
-        const now = Date.now();
-        if (now - this.lastStateSave > this.stateSaveInterval) {
-            this.lastStateSave = now;
-            // Save state asynchronously without blocking block processing
-            this.saveStateToDisk().catch(error => {
-                getLogger().error('[Streamer] State save error:', error);
             });
         }
     }
@@ -2747,14 +3640,24 @@ export class Streamer {
     }
 
     public getStatus() {
+        const targetBlockNumber = this.config.STREAM_MODE === 'head'
+            ? this.headBlockNumber
+            : (this.irreversibleBlockNumber || this.headBlockNumber);
+
         return {
+            streamMode: this.config.STREAM_MODE,
             lastBlockNumber: this.lastBlockNumber,
+            lastBlockId: this.lastBlockId,
             headBlockNumber: this.headBlockNumber,
-            blocksBehind: this.headBlockNumber
-                ? Math.max(0, this.headBlockNumber - this.lastBlockNumber)
+            irreversibleBlockNumber: this.irreversibleBlockNumber,
+            targetBlockNumber,
+            blocksBehind: targetBlockNumber
+                ? Math.max(0, targetBlockNumber - this.lastBlockNumber)
                 : 0,
             latestBlockchainTime: this.latestBlockchainTime,
-            isCatchingUp: this.isCatchingUp
+            isCatchingUp: this.isCatchingUp,
+            halted: this.halted,
+            lastError: this.lastError
         };
     }
 
@@ -2766,6 +3669,7 @@ export class Streamer {
      * - `ok`       — started and within the blocks-behind warning threshold
      * - `behind`   — started but at least BLOCKS_BEHIND_WARNING blocks behind head
      * - `stalled`  — started but no block processed in the last 60 seconds
+     * - `halted`   — the error policy stopped processing (see `lastError`)
      * - `stopped`  — not started
      */
     public getHealth() {
@@ -2775,9 +3679,11 @@ export class Streamer {
             ? Math.round((now - this.blockTime.getTime()) / 1000)
             : null;
 
-        let health: 'ok' | 'behind' | 'stalled' | 'stopped' = 'ok';
+        let health: 'ok' | 'behind' | 'stalled' | 'halted' | 'stopped' = 'ok';
 
-        if (!this.isStarted) {
+        if (this.halted) {
+            health = 'halted';
+        } else if (!this.isStarted) {
             health = 'stopped';
         } else if (this.lastProcessedAt && now - this.lastProcessedAt > 60000) {
             health = 'stalled';
@@ -2846,9 +3752,13 @@ export class Streamer {
      * debugging. Cannot run while the streamer is started, and moves the
      * streaming cursor: afterwards the streamer resumes from `toBlock`.
      *
+     * Contract actions that already ran (per the idempotency ledger) are
+     * skipped. Pass `{ force: true }` to run them again — only do that when
+     * the handlers are safe to repeat.
+     *
      * Returns the number of blocks replayed.
      */
-    public async replayBlocks(fromBlock: number, toBlock: number): Promise<number> {
+    public async replayBlocks(fromBlock: number, toBlock: number, options: { force?: boolean } = {}): Promise<number> {
         if (this.isStarted) {
             throw new Error('Stop the streamer before replaying blocks');
         }
@@ -2860,18 +3770,29 @@ export class Streamer {
         await this.init();
 
         this.lastBlockNumber = fromBlock - 1;
+        this.lastBlockId = null;
+        this.recentBlockIds.clear();
+        this.disableAllProcessing = false;
+        this.halted = false;
+        this.bypassLedger = Boolean(options.force);
         let replayed = 0;
 
-        while (this.lastBlockNumber < toBlock) {
-            const target = this.lastBlockNumber + 1;
-            await this.loadBlock(target);
+        try {
+            while (this.lastBlockNumber < toBlock) {
+                const target = this.lastBlockNumber + 1;
+                const result = await this.loadBlock(target);
 
-            if (this.lastBlockNumber < target) {
-                getLogger().warn(`[Streamer] Replay stopped: block ${target} unavailable from provider`);
-                break;
+                if (result === 'missing') {
+                    getLogger().warn(`[Streamer] Replay stopped: block ${target} unavailable from provider`);
+                    break;
+                }
+
+                if (result === 'processed') {
+                    replayed++;
+                }
             }
-
-            replayed++;
+        } finally {
+            this.bypassLedger = false;
         }
 
         await this.saveStateToDisk();
@@ -3190,88 +4111,33 @@ export class Streamer {
         return Utils.unsubscribeCommunity(this.client, this.config, account, community);
     }
 
-    // Memory management: cleanup subscriptions
+    /**
+     * Warns (once per subscription list) when a list grows past
+     * `maxSubscriptions`, which usually means handlers are being registered
+     * in a loop and never removed. Subscriptions are never dropped
+     * automatically: silently discarding a registered handler would lose
+     * events without any signal to the app.
+     */
     private cleanupSubscriptions(): void {
-        // Limit subscription arrays to prevent memory leaks
-        if (this.customJsonSubscriptions.length > this.maxSubscriptions) {
-            this.customJsonSubscriptions = this.customJsonSubscriptions.slice(-this.maxSubscriptions);
-            getLogger().warn(`[Streamer] Trimmed customJsonSubscriptions to ${this.maxSubscriptions} items`);
-        }
-        
-        if (this.customJsonIdSubscriptions.length > this.maxSubscriptions) {
-            this.customJsonIdSubscriptions = this.customJsonIdSubscriptions.slice(-this.maxSubscriptions);
-            getLogger().warn(`[Streamer] Trimmed customJsonIdSubscriptions to ${this.maxSubscriptions} items`);
-        }
-        
-        if (this.customJsonHiveEngineSubscriptions.length > this.maxSubscriptions) {
-            this.customJsonHiveEngineSubscriptions = this.customJsonHiveEngineSubscriptions.slice(-this.maxSubscriptions);
-            getLogger().warn(`[Streamer] Trimmed customJsonHiveEngineSubscriptions to ${this.maxSubscriptions} items`);
-        }
-        
-        if (this.commentSubscriptions.length > this.maxSubscriptions) {
-            this.commentSubscriptions = this.commentSubscriptions.slice(-this.maxSubscriptions);
-            getLogger().warn(`[Streamer] Trimmed commentSubscriptions to ${this.maxSubscriptions} items`);
-        }
-        
-        if (this.postSubscriptions.length > this.maxSubscriptions) {
-            this.postSubscriptions = this.postSubscriptions.slice(-this.maxSubscriptions);
-            getLogger().warn(`[Streamer] Trimmed postSubscriptions to ${this.maxSubscriptions} items`);
-        }
-        
-        if (this.transferSubscriptions.length > this.maxSubscriptions) {
-            this.transferSubscriptions = this.transferSubscriptions.slice(-this.maxSubscriptions);
-            getLogger().warn(`[Streamer] Trimmed transferSubscriptions to ${this.maxSubscriptions} items`);
-        }
-
-        if (this.escrowSubscriptions.length > this.maxSubscriptions) {
-            this.escrowSubscriptions = this.escrowSubscriptions.slice(-this.maxSubscriptions);
-            getLogger().warn(`[Streamer] Trimmed escrowSubscriptions to ${this.maxSubscriptions} items`);
-        }
-
-        if (this.voteSubscriptions.length > this.maxSubscriptions) {
-            this.voteSubscriptions = this.voteSubscriptions.slice(-this.maxSubscriptions);
-            getLogger().warn(`[Streamer] Trimmed voteSubscriptions to ${this.maxSubscriptions} items`);
-        }
-
-        if (this.delegateSubscriptions.length > this.maxSubscriptions) {
-            this.delegateSubscriptions = this.delegateSubscriptions.slice(-this.maxSubscriptions);
-            getLogger().warn(`[Streamer] Trimmed delegateSubscriptions to ${this.maxSubscriptions} items`);
-        }
-
-        if (this.powerUpSubscriptions.length > this.maxSubscriptions) {
-            this.powerUpSubscriptions = this.powerUpSubscriptions.slice(-this.maxSubscriptions);
-            getLogger().warn(`[Streamer] Trimmed powerUpSubscriptions to ${this.maxSubscriptions} items`);
-        }
-
-        if (this.powerDownSubscriptions.length > this.maxSubscriptions) {
-            this.powerDownSubscriptions = this.powerDownSubscriptions.slice(-this.maxSubscriptions);
-            getLogger().warn(`[Streamer] Trimmed powerDownSubscriptions to ${this.maxSubscriptions} items`);
-        }
-
-        if (this.claimRewardsSubscriptions.length > this.maxSubscriptions) {
-            this.claimRewardsSubscriptions = this.claimRewardsSubscriptions.slice(-this.maxSubscriptions);
-            getLogger().warn(`[Streamer] Trimmed claimRewardsSubscriptions to ${this.maxSubscriptions} items`);
-        }
-
-        if (this.witnessVoteSubscriptions.length > this.maxSubscriptions) {
-            this.witnessVoteSubscriptions = this.witnessVoteSubscriptions.slice(-this.maxSubscriptions);
-            getLogger().warn(`[Streamer] Trimmed witnessVoteSubscriptions to ${this.maxSubscriptions} items`);
-        }
-
-        const extraArrays = [
-            'followSubscriptions', 'reblogSubscriptions', 'accountUpdateSubscriptions',
-            'deleteCommentSubscriptions', 'limitOrderSubscriptions', 'savingsSubscriptions',
-            'convertSubscriptions'
+        const lists = [
+            'customJsonSubscriptions', 'customJsonIdSubscriptions', 'customJsonHiveEngineSubscriptions',
+            'commentSubscriptions', 'postSubscriptions', 'transferSubscriptions', 'escrowSubscriptions',
+            'voteSubscriptions', 'delegateSubscriptions', 'powerUpSubscriptions', 'powerDownSubscriptions',
+            'claimRewardsSubscriptions', 'witnessVoteSubscriptions', 'followSubscriptions', 'reblogSubscriptions',
+            'accountUpdateSubscriptions', 'deleteCommentSubscriptions', 'limitOrderSubscriptions',
+            'savingsSubscriptions', 'convertSubscriptions', 'blockSubscriptions', 'anyOperationSubscriptions'
         ] as const;
 
-        for (const name of extraArrays) {
-            if (this[name].length > this.maxSubscriptions) {
-                (this as any)[name] = this[name].slice(-this.maxSubscriptions);
-                getLogger().warn(`[Streamer] Trimmed ${name} to ${this.maxSubscriptions} items`);
+        for (const name of lists) {
+            const size = this[name].length;
+
+            if (size > this.maxSubscriptions && !this.subscriptionWarnings.has(name)) {
+                this.subscriptionWarnings.add(name);
+                getLogger().warn(`[Streamer] ${name} has ${size} handlers (over ${this.maxSubscriptions}). Are handlers being registered repeatedly without being removed?`);
             }
         }
     }
-    
+
     // Add method to remove specific subscriptions
     public removeTransferSubscription(account: string, callback?: (...args: any[]) => void): void {
         this.transferSubscriptions = this.transferSubscriptions.filter((sub) => {

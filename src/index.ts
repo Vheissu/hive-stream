@@ -1,4 +1,5 @@
 export * from './config';
+export * from './hooks';
 export * from './logger';
 export * from './streamer';
 export * from './utils';

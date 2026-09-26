@@ -1,4 +1,4 @@
-import type { ContractActionDefinition, ContractContext, ContractDefinition } from '../types/hive-stream';
+import type { ContractActionDefinition, ContractActionGuards, ContractContext, ContractDefinition } from '../types/hive-stream';
 
 const CONTRACT_TRIGGERS = new Set([
     'custom_json',
@@ -10,6 +10,80 @@ const CONTRACT_TRIGGERS = new Set([
     'escrow_release',
     'recurrent_transfer'
 ]);
+
+function isAmountLike(value: unknown): boolean {
+    if (typeof value === 'number') {
+        return Number.isFinite(value) && value >= 0;
+    }
+
+    if (typeof value === 'string') {
+        return /^\d+(\.\d+)?$/.test(value.trim());
+    }
+
+    return false;
+}
+
+function validateStringList(label: string, value: unknown): void {
+    if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string' || !entry.trim())) {
+        throw new Error(`${label} must be an array of non-empty strings`);
+    }
+}
+
+export function validateGuards(label: string, guards: ContractActionGuards | undefined): void {
+    if (guards === undefined) {
+        return;
+    }
+
+    if (!guards || typeof guards !== 'object' || Array.isArray(guards)) {
+        throw new Error(`${label} guards must be an object`);
+    }
+
+    const known = new Set(['allowedSenders', 'blockedSenders', 'allowedAssets', 'minAmount', 'maxAmount', 'rateLimit', 'paused']);
+
+    for (const key of Object.keys(guards)) {
+        if (!known.has(key)) {
+            throw new Error(`${label} has unknown guard '${key}'`);
+        }
+    }
+
+    if (guards.allowedSenders !== undefined) {
+        validateStringList(`${label} guards.allowedSenders`, guards.allowedSenders);
+    }
+
+    if (guards.blockedSenders !== undefined) {
+        validateStringList(`${label} guards.blockedSenders`, guards.blockedSenders);
+    }
+
+    if (guards.allowedAssets !== undefined) {
+        validateStringList(`${label} guards.allowedAssets`, guards.allowedAssets);
+    }
+
+    if (guards.minAmount !== undefined && !isAmountLike(guards.minAmount)) {
+        throw new Error(`${label} guards.minAmount must be a non-negative number or numeric string`);
+    }
+
+    if (guards.maxAmount !== undefined && !isAmountLike(guards.maxAmount)) {
+        throw new Error(`${label} guards.maxAmount must be a non-negative number or numeric string`);
+    }
+
+    if (guards.minAmount !== undefined && guards.maxAmount !== undefined && Number(guards.minAmount) > Number(guards.maxAmount)) {
+        throw new Error(`${label} guards.minAmount must not exceed guards.maxAmount`);
+    }
+
+    if (guards.rateLimit !== undefined) {
+        const rateLimit = guards.rateLimit;
+
+        if (!rateLimit || typeof rateLimit !== 'object' ||
+            !Number.isInteger(rateLimit.max) || rateLimit.max < 1 ||
+            typeof rateLimit.windowSeconds !== 'number' || !Number.isFinite(rateLimit.windowSeconds) || rateLimit.windowSeconds <= 0) {
+            throw new Error(`${label} guards.rateLimit must be { max: positive integer, windowSeconds: positive number }`);
+        }
+    }
+
+    if (guards.paused !== undefined && typeof guards.paused !== 'boolean') {
+        throw new Error(`${label} guards.paused must be a boolean`);
+    }
+}
 
 function validateActionDefinition(contractName: string, actionName: string, definition: ContractActionDefinition<any>): void {
     if (!definition || typeof definition !== 'object' || Array.isArray(definition)) {
@@ -31,6 +105,8 @@ function validateActionDefinition(contractName: string, actionName: string, defi
     if (definition.description !== undefined && typeof definition.description !== 'string') {
         throw new Error(`Contract '${contractName}' action '${actionName}' description must be a string`);
     }
+
+    validateGuards(`Contract '${contractName}' action '${actionName}'`, definition.guards);
 
     if (definition.trigger === undefined) {
         return;
@@ -93,10 +169,22 @@ export function validateContractDefinition<Definition extends ContractDefinition
             throw new Error(`Contract '${definition.name}' create hook must be a function`);
         }
 
-        if (definition.hooks.destroy !== undefined && typeof definition.hooks.destroy !== 'function') {
-            throw new Error(`Contract '${definition.name}' destroy hook must be a function`);
+        for (const hookName of ['create', 'destroy', 'beforeAction', 'afterAction', 'onError'] as const) {
+            if (definition.hooks[hookName] !== undefined && typeof definition.hooks[hookName] !== 'function') {
+                throw new Error(`Contract '${definition.name}' ${hookName} hook must be a function`);
+            }
+        }
+
+        const knownHooks = new Set(['create', 'destroy', 'beforeAction', 'afterAction', 'onError']);
+
+        for (const hookName of Object.keys(definition.hooks)) {
+            if (!knownHooks.has(hookName)) {
+                throw new Error(`Contract '${definition.name}' has unknown hook '${hookName}'`);
+            }
         }
     }
+
+    validateGuards(`Contract '${definition.name}'`, definition.guards);
 
     return definition;
 }
