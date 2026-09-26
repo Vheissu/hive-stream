@@ -11,7 +11,7 @@ await streamer.registerContract(createTournamentContract({ account: '...' }));
 ```
 
 ::: tip SQL adapter
-Most built-in contracts persist state in SQL tables and require a SQL-capable adapter (SQLite or PostgreSQL).
+This contract keeps its state in SQL tables and needs a SQL-capable adapter (SQLite or PostgreSQL). Registering it on MongoDB fails.
 :::
 
 ## Options

@@ -41,10 +41,16 @@ const { files, nextSteps } = generateProjectFiles({
 ## hive-stream/catalog
 
 ```ts
-import { contractCatalog, getCatalogContract, getCatalogContractsByCategory } from 'hive-stream/catalog';
+import {
+    contractCatalog,
+    getCatalogContract,
+    getCatalogContractsByCategory,
+    getCatalogContractsForAdapter
+} from 'hive-stream/catalog';
 
 const gambling = getCatalogContractsByCategory('gambling');
 const dice = getCatalogContract('hivedice'); // or getCatalogContract('createDiceContract')
+const mongoSafe = getCatalogContractsForAdapter({ sql: false }); // contracts that work on MongoDB
 ```
 
 Each entry looks like this:
@@ -55,6 +61,7 @@ Each entry looks like this:
   "factory": "createRouletteContract",
   "category": "gambling",
   "description": "Roulette with straight, color, parity, dozen, column, and low/high bets.",
+  "storage": "any",
   "options": [
     { "name": "minAmount", "type": "number", "required": false }
   ],
@@ -78,6 +85,7 @@ Each entry looks like this:
 ```
 
 - `name` is the contract name used in payloads when the factory's `name` option is left at its default.
+- `storage` is `sql` when the contract keeps its state in SQL tables and fails to register on MongoDB, and `any` when it works with every built-in adapter. `getCatalogContractsForAdapter({ sql })` filters by it.
 - `options` come from the factory's TypeScript options interface. `type` is the type as written in the source.
 - `payload` is `null` when an action has no schema and `[]` when it takes an empty object. `values` is present for enum and literal fields, `default` for fields with a zod default, and `description` for fields using `.describe()`.
 - `example` is a payload that passes the action's schema, with required fields only and placeholder values (`alice`, `1.000`, `HIVE`, `example-1`). Use it to prefill forms or as a starting point for call builders. It's absent when the action has no schema.

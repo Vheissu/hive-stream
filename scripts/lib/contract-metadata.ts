@@ -21,6 +21,11 @@ export interface ContractMetadata {
     description: string;
     args?: unknown[];
     examples?: Record<string, Record<string, unknown>>;
+    /**
+     * Overrides the storage requirement derived from the contract source
+     * (see readStorageRequirement in contract-introspection.ts).
+     */
+    storage?: 'sql' | 'any';
 }
 
 export const CONTRACT_METADATA: Record<string, ContractMetadata> = {

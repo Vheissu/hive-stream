@@ -83,9 +83,15 @@ function renderContractPage(entry: ContractCatalogEntry): string {
     lines.push(`await streamer.registerContract(${entry.factory}(${factoryArgs}));`);
     lines.push('```');
     lines.push('');
-    lines.push('::: tip SQL adapter');
-    lines.push('Most built-in contracts persist state in SQL tables and require a SQL-capable adapter (SQLite or PostgreSQL).');
-    lines.push(':::');
+    if (entry.storage === 'sql') {
+        lines.push('::: tip SQL adapter');
+        lines.push('This contract keeps its state in SQL tables and needs a SQL-capable adapter (SQLite or PostgreSQL). Registering it on MongoDB fails.');
+        lines.push(':::');
+    } else {
+        lines.push('::: tip Any adapter');
+        lines.push('This contract works with every built-in adapter, including MongoDB.');
+        lines.push(':::');
+    }
     lines.push('');
 
     if (entry.options.length > 0) {
@@ -150,11 +156,11 @@ function run(): void {
     index.push('');
     index.push(`Hive Stream ships ${catalog.contracts.length} ready-to-register contracts. Every page here is generated from the contract source, so triggers, options and payload schemas are always current. The same data is available to tools as JSON through \`hive-stream/catalog\`.`);
     index.push('');
-    index.push('| Contract | Category | Actions | Description |');
-    index.push('| --- | --- | --- | --- |');
+    index.push('| Contract | Category | Storage | Actions | Description |');
+    index.push('| --- | --- | --- | --- | --- |');
 
     for (const entry of catalog.contracts) {
-        index.push(`| [${entry.name}](./${entry.name}) | ${entry.category} | ${entry.actions.length} | ${escapeTableCell(entry.description)} |`);
+        index.push(`| [${entry.name}](./${entry.name}) | ${entry.category} | ${entry.storage === 'sql' ? 'SQL' : 'Any'} | ${entry.actions.length} | ${escapeTableCell(entry.description)} |`);
     }
 
     index.push('');

@@ -16,7 +16,8 @@ export type {
     ContractCatalogField,
     ContractCatalogOption,
     ContractCatalogTrigger,
-    ContractCategory
+    ContractCategory,
+    ContractStorageRequirement
 } from './types';
 
 export const contractCatalog: ContractCatalog = catalogData as ContractCatalog;
@@ -28,4 +29,13 @@ export function getCatalogContract(nameOrFactory: string): ContractCatalogEntry 
 
 export function getCatalogContractsByCategory(category: ContractCategory): ContractCatalogEntry[] {
     return contractCatalog.contracts.filter((entry) => entry.category === category);
+}
+
+/**
+ * Contracts that can be registered on an adapter with the given
+ * capabilities: pass `{ sql: false }` for MongoDB to leave out contracts
+ * that need SQL tables.
+ */
+export function getCatalogContractsForAdapter(capabilities: { sql: boolean }): ContractCatalogEntry[] {
+    return contractCatalog.contracts.filter((entry) => capabilities.sql || entry.storage === 'any');
 }

@@ -5,7 +5,8 @@ import {
     CONTRACT_CATEGORIES,
     contractCatalog,
     getCatalogContract,
-    getCatalogContractsByCategory
+    getCatalogContractsByCategory,
+    getCatalogContractsForAdapter
 } from '../src/catalog';
 import {
     CATALOG_JSON_PATH,
@@ -55,6 +56,41 @@ describe('contract catalog', () => {
                 expect({ action: `${entry.name}.${action.name}`, valid: schema.safeParse(action.example).success }).toEqual({ action: `${entry.name}.${action.name}`, valid: true });
             }
         }
+    });
+
+    test('storage requirements match what registration actually needs', async () => {
+        const metadata = require('../scripts/lib/contract-metadata').CONTRACT_METADATA;
+
+        for (const entry of contractCatalog.contracts) {
+            const definition = (hiveStream as any)[entry.factory](...(metadata[entry.factory]?.args ?? []));
+            // A document-store adapter (like MongoDB): no SQL, raw queries fail.
+            const adapter: any = {
+                capabilities: { sql: false },
+                find: async () => [],
+                findOne: async () => null,
+                insert: async () => true,
+                replace: async () => true,
+                addEvent: async () => true,
+                query: async () => { throw new Error('raw SQL is not available on this adapter'); }
+            };
+            const streamer: any = { getConfig: () => ({ USERNAME: 'house' }), getAdapter: () => adapter };
+            const create = Promise.resolve().then(() => definition.hooks?.create?.({ streamer, adapter, config: { USERNAME: 'house' } }));
+
+            if (entry.storage === 'sql') {
+                await expect(create).rejects.toThrow();
+            } else {
+                await expect(create).resolves.toBeUndefined();
+            }
+        }
+    });
+
+    test('getCatalogContractsForAdapter leaves SQL contracts out for document stores', () => {
+        const documentStore = getCatalogContractsForAdapter({ sql: false });
+
+        expect(documentStore.length).toBeGreaterThan(0);
+        expect(documentStore.every((entry) => entry.storage === 'any')).toBe(true);
+        expect(documentStore.map((entry) => entry.name)).toEqual(expect.arrayContaining(['hivedice', 'hivelotto']));
+        expect(getCatalogContractsForAdapter({ sql: true })).toHaveLength(contractCatalog.contracts.length);
     });
 
     test('entries are well formed', () => {

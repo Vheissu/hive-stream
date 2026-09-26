@@ -7,6 +7,7 @@
  * scripts/generate-contract-docs.ts and scripts/generate-contract-catalog.ts
  * render from the catalog this returns, so they can never disagree.
  */
+import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
 import { z } from 'zod';
@@ -20,7 +21,8 @@ import {
     ContractCatalogField,
     ContractCatalogOption,
     ContractCatalogTrigger,
-    ContractCategory
+    ContractCategory,
+    ContractStorageRequirement
 } from '../../src/catalog/types';
 import { CONTRACT_METADATA } from './contract-metadata';
 import { examplePayload } from './example-payload';
@@ -252,6 +254,38 @@ function resolveMetadata(exportName: string, definition: any, problems: string[]
     return { category: category && CONTRACT_CATEGORIES.includes(category) ? category : 'utility', description: description ?? '' };
 }
 
+const CONTRACTS_DIR = path.join(ROOT, 'src', 'contracts');
+
+/**
+ * Derives a factory's storage requirement from its source file: contracts
+ * that branch on `adapter.capabilities.sql` support both storage styles;
+ * contracts that require a SQL adapter, create tables or run raw queries
+ * need SQL; everything else (event-only games) works anywhere.
+ */
+export function readStorageRequirement(factory: string): ContractStorageRequirement {
+    const override = CONTRACT_METADATA[factory]?.storage;
+
+    if (override) {
+        return override;
+    }
+
+    const file = fs.readdirSync(CONTRACTS_DIR)
+        .map((name) => path.join(CONTRACTS_DIR, name))
+        .find((candidate) => fs.readFileSync(candidate, 'utf8').includes(`export function ${factory}(`));
+
+    if (!file) {
+        return 'sql';
+    }
+
+    const source = fs.readFileSync(file, 'utf8');
+
+    if (/capabilities\??\.sql/.test(source)) {
+        return 'any';
+    }
+
+    return /ensureSqlAdapter\(|initializeTables\(|\.query\(/.test(source) ? 'sql' : 'any';
+}
+
 export function introspectContracts(): IntrospectionResult {
     const problems: string[] = [];
     const factories = Object.entries(hiveStream)
@@ -309,6 +343,7 @@ export function introspectContracts(): IntrospectionResult {
             factory: exportName,
             category,
             description,
+            storage: readStorageRequirement(exportName),
             options: optionsByFactory.get(exportName) ?? [],
             actions
         });

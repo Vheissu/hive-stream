@@ -6,6 +6,7 @@
       "factory": "createAuctionHouseContract",
       "category": "commerce",
       "description": "Auctions with reserve prices, buy-now support, and timed settlement.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -151,6 +152,7 @@
       "factory": "createBadgesContract",
       "category": "games",
       "description": "Non-transferable achievements and badges issued by authorised issuers or earned by payment and check-in rules.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -356,6 +358,7 @@
       "factory": "createBookingContract",
       "category": "commerce",
       "description": "Reservable listings with paid booking windows and confirmations.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -524,6 +527,7 @@
       "factory": "createBountyBoardContract",
       "category": "commerce",
       "description": "Funded bounties, submissions, and award selection.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -668,6 +672,7 @@
       "factory": "createBridgeContract",
       "category": "bridge",
       "description": "A custody bridge/peg with M-of-N operator attestations, fees, per-transaction and daily limits, a pause switch and a full audit trail.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -957,6 +962,7 @@
       "factory": "createBundleMarketplaceContract",
       "category": "commerce",
       "description": "Fixed-price bundle storefronts with inventory tracking.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -1107,6 +1113,7 @@
       "factory": "createCharityMatchContract",
       "category": "fundraising",
       "description": "Donation campaigns with matched totals and closing summaries.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -1216,6 +1223,7 @@
       "factory": "createCheckpointContract",
       "category": "utility",
       "description": "Deterministic state hashes published on-chain for operator verification.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -1287,6 +1295,7 @@
       "factory": "createCoinflipContract",
       "category": "gambling",
       "description": "A heads-or-tails coin flip game.",
+      "storage": "any",
       "options": [
         {
           "name": "name",
@@ -1360,6 +1369,7 @@
       "factory": "createCrowdfundContract",
       "category": "fundraising",
       "description": "Crowdfunding campaigns with milestones, finalization, and refunds.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -1512,6 +1522,7 @@
       "factory": "createDcaBotContract",
       "category": "finance",
       "description": "Time-based DCA bot scheduling and execution request events.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -1676,6 +1687,7 @@
       "factory": "createDomainRegistryContract",
       "category": "assets",
       "description": "App-level namespaces with registrations, renewals, and transfers.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -1855,6 +1867,7 @@
       "factory": "createExchangeContract",
       "category": "finance",
       "description": "An order-book exchange with deposits, withdrawals, balances, and matching.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -2093,6 +2106,7 @@
       "factory": "createFanClubContract",
       "category": "social",
       "description": "Paid fan clubs with renewals, engagement points, and perk redemptions.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -2228,6 +2242,7 @@
       "factory": "createGiftCardContract",
       "category": "commerce",
       "description": "Gift card issuance, redemption, and cancellation.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -2315,6 +2330,7 @@
       "factory": "createGrantRoundsContract",
       "category": "fundraising",
       "description": "Matching grant rounds with submissions, donations, and allocations.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -2493,6 +2509,7 @@
       "factory": "createGroupBuyContract",
       "category": "commerce",
       "description": "Threshold-based pooled purchases.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -2612,6 +2629,7 @@
       "factory": "createDiceContract",
       "category": "gambling",
       "description": "A dice rolling game with configurable win chance and payout multipliers.",
+      "storage": "any",
       "options": [
         {
           "name": "name",
@@ -2686,6 +2704,7 @@
       "factory": "createLottoContract",
       "category": "gambling",
       "description": "A lottery-style game with scheduled draws.",
+      "storage": "any",
       "options": [
         {
           "name": "name",
@@ -2805,6 +2824,7 @@
       "factory": "createNFTContract",
       "category": "assets",
       "description": "NFT minting, transfers, market listings, and direct peer-to-peer sales.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -2930,6 +2950,7 @@
       "factory": "createTokenContract",
       "category": "assets",
       "description": "App-level token issuance, transfers, and balances.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -3092,6 +3113,7 @@
       "factory": "createInsurancePoolContract",
       "category": "finance",
       "description": "Insurance pools with premium-backed policies, claims, and reserves.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -3266,6 +3288,7 @@
       "factory": "createInvoiceContract",
       "category": "commerce",
       "description": "Invoices with partial payments, recurring payments, and overdue sweeps.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -3386,6 +3409,7 @@
       "factory": "createLaunchpadContract",
       "category": "finance",
       "description": "Launchpad sales with allocations, finalization, and claim flows.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -3522,6 +3546,7 @@
       "factory": "createLimboContract",
       "category": "gambling",
       "description": "A provably-fair limbo/crash game: pick a target multiplier and win when the committed-seed result reaches it, with bankroll-based payout caps.",
+      "storage": "any",
       "options": [
         {
           "name": "name",
@@ -3632,6 +3657,7 @@
       "factory": "createMultisigTreasuryContract",
       "category": "governance",
       "description": "Multisig vaults, proposal approvals, and execution readiness.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -3797,6 +3823,7 @@
       "factory": "createOracleBountyContract",
       "category": "utility",
       "description": "Oracle bounty feeds with report rounds and median finalization.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -3941,6 +3968,7 @@
       "factory": "createPayrollContract",
       "category": "finance",
       "description": "Recurring team payrolls with funded budgets and scheduled runs.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -4069,6 +4097,7 @@
       "factory": "createPaywallContract",
       "category": "commerce",
       "description": "Paid access control for gated resources and memberships.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -4185,6 +4214,7 @@
       "factory": "createPollContract",
       "category": "governance",
       "description": "Polls and voting.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -4260,6 +4290,7 @@
       "factory": "createPredictionMarketContract",
       "category": "gambling",
       "description": "Prediction markets with positions, resolution, and winner claims.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -4389,6 +4420,7 @@
       "factory": "createProposalTimelockContract",
       "category": "governance",
       "description": "Timelocked governance queues with approvals and delays.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -4555,6 +4587,7 @@
       "factory": "createQuestPassContract",
       "category": "games",
       "description": "Seasonal passes with progress tracking and reward claims.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -4703,6 +4736,7 @@
       "factory": "createReferralContract",
       "category": "social",
       "description": "Affiliate programs with codes, funded budgets, and payout balances.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -4858,6 +4892,7 @@
       "factory": "createRentalContract",
       "category": "commerce",
       "description": "Escrow-backed rental agreements for items, passes, or assets.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -5015,6 +5050,7 @@
       "factory": "createRevenueSplitContract",
       "category": "finance",
       "description": "Revenue share ledgers and withdrawal requests for collaborators.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -5128,6 +5164,7 @@
       "factory": "createRouletteContract",
       "category": "gambling",
       "description": "Roulette with straight, color, parity, dozen, column, and low/high bets.",
+      "storage": "any",
       "options": [
         {
           "name": "name",
@@ -5211,6 +5248,7 @@
       "factory": "createRpsContract",
       "category": "games",
       "description": "Rock-paper-scissors with wagers.",
+      "storage": "any",
       "options": [
         {
           "name": "name",
@@ -5285,6 +5323,7 @@
       "factory": "createSavingsContract",
       "category": "finance",
       "description": "Savings goals with recurring contributions and withdrawal requests.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -5413,6 +5452,7 @@
       "factory": "createStakingPoolContract",
       "category": "finance",
       "description": "Staking pools with reward-per-share accrual (per second or per block), funded reward reserves, cooldowns and claims.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -5628,6 +5668,7 @@
       "factory": "createSubscriptionContract",
       "category": "commerce",
       "description": "Subscription plans renewed by transfers or recurrent transfers.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -5790,6 +5831,7 @@
       "factory": "createSweepstakesContract",
       "category": "gambling",
       "description": "Paid-entry sweepstakes with deterministic winner draws.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -5907,6 +5949,7 @@
       "factory": "createTicketingContract",
       "category": "commerce",
       "description": "Event ticketing with purchases, check-ins, refunds, transfers, and resale.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -6138,6 +6181,7 @@
       "factory": "createTipJarContract",
       "category": "social",
       "description": "A tip jar with an optional message board.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",
@@ -6168,6 +6212,7 @@
       "factory": "createTournamentContract",
       "category": "games",
       "description": "Game tournaments with entry fees, registration windows, oracle-submitted scores, tie handling and basis-point prize splits.",
+      "storage": "sql",
       "options": [
         {
           "name": "name",

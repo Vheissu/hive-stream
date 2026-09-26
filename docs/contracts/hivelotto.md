@@ -10,8 +10,8 @@ import { createLottoContract } from 'hive-stream';
 await streamer.registerContract(createLottoContract());
 ```
 
-::: tip SQL adapter
-Most built-in contracts persist state in SQL tables and require a SQL-capable adapter (SQLite or PostgreSQL).
+::: tip Any adapter
+This contract works with every built-in adapter, including MongoDB.
 :::
 
 ## Options

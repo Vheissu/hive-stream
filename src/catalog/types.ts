@@ -64,6 +64,12 @@ export interface ContractCatalogAction {
     example?: Record<string, unknown>;
 }
 
+/**
+ * `sql`: needs a SQL-capable adapter (SQLite or PostgreSQL) and fails to
+ * register on MongoDB. `any`: works with every built-in adapter.
+ */
+export type ContractStorageRequirement = 'sql' | 'any';
+
 export interface ContractCatalogEntry {
     /** Contract name used in payloads when the factory's `name` option is left at its default. */
     name: string;
@@ -71,6 +77,8 @@ export interface ContractCatalogEntry {
     factory: string;
     category: ContractCategory;
     description: string;
+    /** Adapter capability the contract needs. */
+    storage: ContractStorageRequirement;
     options: ContractCatalogOption[];
     actions: ContractCatalogAction[];
 }

@@ -95,6 +95,7 @@ Upgrading? Read the [migration guide](docs/guide/migrating-to-4.md) ([online](ht
 - Fixed: the `game` scaffold template's dice memo named contract `dice` instead of `hivedice`. The template now enables fairness and adds limbo
 
 ### Tooling
+- **Storage requirements in the catalog** - Each catalog entry has `storage: 'sql' | 'any'`, derived from the contract source and verified by registering every contract on a document-store adapter in the tests. `getCatalogContractsForAdapter({ sql })` filters by it, and the generated contract pages now say per contract whether SQL is needed.
 - **Example payloads** - Catalog actions carry an `example` payload built from the zod schema (required fields, defaults and enum values first, name-based placeholders) and verified against it; generated contract pages show it in the memo/custom JSON snippets instead of `payload: {}`. Cross-field rules can be covered with `examples` overrides in `scripts/lib/contract-metadata.ts`.
 - **Browser-safe scaffolder (`hive-stream/scaffold`)** - Generate exactly what `npx hive-stream new` writes, in memory
   - `generateProjectFiles(options)` returns `{ files, template, adapter, nextSteps }`; `username`, `api` and `hiveStreamVersion` are now optional (the version defaults to the installed hive-stream)
