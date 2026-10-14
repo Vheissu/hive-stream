@@ -70,3 +70,9 @@ docs/.vitepress/dist
 
 # Agent worktrees
 .claude/worktrees/
+
+# Local SQLite databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
