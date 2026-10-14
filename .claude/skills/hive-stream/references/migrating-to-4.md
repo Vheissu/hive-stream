@@ -12,4 +12,4 @@ When reviewing or upgrading an app written for 3.x, check these:
 - `lotto` splits the pot across winners actually drawn, rounding down.
 - `createTestStreamer()` supplies throwaway keys and serves `getBlock` from simulated blocks, so built-in games work offline.
 
-Full guide: `docs/guide/migrating-to-4.md`.
+Full guide: `docs/guide/migrating-to-4.md`. Then apply `migrating-to-5.md` for the 5.0 safety defaults.

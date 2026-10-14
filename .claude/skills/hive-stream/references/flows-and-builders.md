@@ -16,6 +16,10 @@ Available helpers:
 
 Use `planIncomingTransferRoutes(...)` or builder `.plan(...)` when the task needs a dry run or preview.
 
+Flows pay out exactly once. Each incoming transfer is keyed by transaction id + operation index (two transfers to the app in one transaction are both handled), and what a flow paid is recorded in the adapter's idempotency ledger (`flow:<name>:<trx>:<op>`), so a crash, halt, fork rewind or `replayBlocks()` never resends. `replayBlocks(..., { force: true })` deliberately runs them again. A custom `dedupeStore` (`{ has(key), add(key) }`) is still honoured; with `idempotency: false` and no store, the fallback is an in-memory set lost on restart.
+
+Flows see every transfer to their account, including ones carrying a wrapped contract memo. Don't run a flow and a paid contract action on the same account unless both should act on the payment.
+
 ## Chainable Transfer Flow Builder
 
 ```ts
@@ -74,6 +78,11 @@ Available builders:
 - `ops.removeProposals()`
 - `ops.upvote()`
 - `ops.downvote()`
+- social and account builders: `post()`, `follow()`, `unfollow()`, `mute()`, `reblog()`, `updateProfile()`, `commentOptions()`, `deleteComment()`, `subscribeCommunity()`, `unsubscribeCommunity()`
+- wallet builders: `powerUp()`, `powerDown()`, `cancelPowerDown()`, `delegate()`, `undelegate()`, `claimRewards()`, `transferToSavings()`, `transferFromSavings()`, `convert()`, `collateralizedConvert()`, `limitOrder()`, `cancelOrder()`, `withdrawRoute()`, `cancelRecurrentTransfer()`, `witnessVote()`, `setProxy()`, `clearProxy()`
+- Hive Engine builders: `stakeEngine()`, `unstakeEngine()`, `buyEngine()`, `sellEngine()`, `cancelEngineOrder()`, `delegateEngine()`, `undelegateEngine()`
+
+Every write signs with the keys of the account it acts as (the `from`/author account), so with several app accounts configured (`accounts`) a builder acting as `myapp-vault` uses the vault's key. `streamer.batch()` collects operations into one transaction signed with every key it needs. `HIVE_STREAM_METADATA` lists the full write surface with signatures.
 
 Example:
 
@@ -100,4 +109,6 @@ Use the money namespace for exact asset math instead of ad hoc string parsing:
 - `splitAmountByPercentage`
 - `splitAmountByWeights`
 
-Prefer these helpers when generating payout plans or validating route math. Hive amounts should stay normalized to three-decimal asset strings.
+Prefer these helpers when generating payout plans or validating route math. Hive amounts should stay normalized to three-decimal asset strings. Hive Engine quantities go through `Utils.formatEngineQuantity()` (plain decimal string, up to 8 decimals).
+
+Hive Engine batch helpers (`transferHiveEngineTokensMultiple`, `issueHiveEngineTokensMultiple`) return `{ sent, failed }`; retry only the `failed` recipients.

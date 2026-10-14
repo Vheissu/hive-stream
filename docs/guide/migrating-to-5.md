@@ -64,7 +64,7 @@ Any transfer to the app account whose contract action is rejected (invalid paylo
 
 The built-in contracts were audited as part of this release. The ones below changed behaviour; the [contract reference](/contracts/) has the current options and actions.
 
-- **Three contracts need an `account` option or a streamer username that they didn't before:** auction house, launchpad, insurance pool, crowdfund and booking resolve the account that holds bids, payouts and refunds. Registering them with neither throws `createXContract: set options.account or the streamer username`.
+- **Seven contracts need an `account` option or a streamer username that they didn't before:** auction house, launchpad, insurance pool, crowdfund, booking, group buy and bounty board resolve the account that holds bids, payouts and refunds. Registering them with neither throws `createXContract: set options.account or the streamer username`.
 - **Active key now required** for exchange `transfer`/`placeOrder`/`cancelOrder`, token `issueTokens`/`transferTokens`, nft `transferNFT`/`listNFT`/`burnNFT`, multisig treasury `approveProposal`/`markExecuted`. Frontends that sent these with posting authority get `active_key_required`.
 - **Auction house holds bids** and refunds outbid bidders; the seller is paid on settlement. If your UI explained the old "bids are not refunded" behaviour, update it.
 - **Prediction market** can only be resolved once and becomes `void` (refundable) when nobody backed the winning option.
