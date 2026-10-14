@@ -212,10 +212,20 @@ export class TestStreamer {
     }
 
     /**
-     * Transfers the streamer attempted to broadcast, e.g. game payouts.
+     * Transfers the streamer attempted to broadcast, e.g. game payouts and
+     * refunds, in order. Includes transfers sent through `broadcast.transfer`
+     * and `transfer` operations inside `sendOperations` batches.
      */
     public get outgoingTransfers(): any[] {
-        return this.client.transfers;
+        return this.client.operationsOfType('transfer');
+    }
+
+    /**
+     * Comment operations (posts and replies) the streamer attempted to
+     * broadcast, in order.
+     */
+    public get comments(): any[] {
+        return this.client.operationsOfType('comment');
     }
 
     /**
@@ -333,6 +343,10 @@ export class TestStreamer {
      * Moves simulated chain time forward and processes a block at the new
      * time, firing any due TimeActions. Accepts milliseconds or duration
      * strings like '30s', '5m', '1h', '2d'.
+     *
+     * Only one block is minted, so each due action fires at most once per
+     * call: `advanceTime('3h')` runs an hourly action once, not three times.
+     * Call it repeatedly (or use `advanceBlocks`) to step through intervals.
      */
     public async advanceTime(duration: string | number): Promise<void> {
         await this.setup();

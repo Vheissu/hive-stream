@@ -9,6 +9,15 @@ import type { ParsedAssetAmount } from './types/hive-stream';
 const MAX_PAYLOAD_SIZE = 2000;
 const MAX_ACCOUNTS_CHECK = 999;
 const NULL_ACCOUNT = 'null';
+// Hive Engine tokens allow up to 8 decimal places.
+const MAX_TOKEN_PRECISION = 8;
+const HIVE_NATIVE_PRECISION: Record<string, number> = {
+    HIVE: 3,
+    HBD: 3,
+    TESTS: 3,
+    TBD: 3,
+    VESTS: 6
+};
 
 type HiveKeyInput = string | PrivateKey;
 
@@ -19,6 +28,175 @@ interface AuthorityInput {
 }
 
 type NumericValue = string | number | BigNumber;
+
+export interface HiveEngineBatchRecipient {
+    account: string;
+    /** Per-recipient quantity; falls back to the call's default amount. */
+    amount?: string | number;
+}
+
+export interface HiveEngineBatch {
+    /** Zero-based batch index, in broadcast order. */
+    batch: number;
+    /** Recipients and the quantity each was sent in this batch. */
+    recipients: Array<{ account: string; quantity: string }>;
+}
+
+export interface HiveEngineBatchResult {
+    /** Batches that were broadcast, with the broadcast result. */
+    sent: Array<HiveEngineBatch & { result: any }>;
+    /** Batches whose broadcast failed. Nothing in them was sent. */
+    failed: Array<HiveEngineBatch & { error: unknown }>;
+}
+
+async function broadcastHiveEngineBatches(
+    client: Client,
+    config: ConfigInterface,
+    from: string,
+    accounts: HiveEngineBatchRecipient[],
+    symbol: string,
+    memo: string,
+    defaultAmount: string | number,
+    contractAction: 'transfer' | 'issue'
+): Promise<HiveEngineBatchResult> {
+    if (!Array.isArray(accounts) || accounts.length === 0) {
+        throw new Error('Accounts array cannot be empty');
+    }
+
+    if (!symbol || typeof symbol !== 'string') {
+        throw new Error('Token symbol is required');
+    }
+
+    // Validate every entry before broadcasting anything, so a bad row never
+    // leaves the payout half done.
+    const entries = accounts.map((user, index) => {
+        const account = typeof user?.account === 'string' ? user.account.replace('@', '').trim() : '';
+
+        if (!account) {
+            throw new Error(`Recipient ${index + 1} is missing an account name`);
+        }
+
+        const rawQuantity = user.amount !== undefined && user.amount !== null && user.amount !== ''
+            ? user.amount
+            : defaultAmount;
+
+        let quantity: string;
+
+        try {
+            quantity = Utils.formatEngineQuantity(rawQuantity);
+        } catch (error) {
+            throw new Error(`Recipient ${index + 1} (@${account}): ${error instanceof Error ? error.message : String(error)}`);
+        }
+
+        const json = {
+            contractName: 'tokens',
+            contractAction,
+            contractPayload: {
+                symbol: symbol.toUpperCase(),
+                to: account,
+                quantity,
+                memo
+            }
+        };
+
+        return { account, quantity, json };
+    });
+
+    const key = PrivateKey.fromString(config.ACTIVE_KEY);
+    const batches: Array<typeof entries> = [[]];
+
+    for (const entry of entries) {
+        const current = batches[batches.length - 1];
+        const currentSize = JSON.stringify(current.map((item) => item.json)).length;
+        const entrySize = JSON.stringify(entry.json).length;
+
+        if (current.length > 0 && entrySize + currentSize > MAX_PAYLOAD_SIZE) {
+            batches.push([entry]);
+        } else {
+            current.push(entry);
+        }
+    }
+
+    const outcome: HiveEngineBatchResult = { sent: [], failed: [] };
+
+    for (let index = 0; index < batches.length; index++) {
+        const batch = batches[index];
+        const summary: HiveEngineBatch = {
+            batch: index,
+            recipients: batch.map(({ account, quantity }) => ({ account, quantity }))
+        };
+
+        try {
+            const result = await client.broadcast.json({
+                required_auths: [from],
+                required_posting_auths: [],
+                id: config.HIVE_ENGINE_ID,
+                json: JSON.stringify(batch.map((item) => item.json))
+            }, key);
+
+            outcome.sent.push({ ...summary, result });
+        } catch (error) {
+            getLogger().error(`[Utils] Hive Engine ${contractAction} batch ${index + 1}/${batches.length} failed:`, error);
+            outcome.failed.push({ ...summary, error });
+        }
+
+        if (index < batches.length - 1) {
+            await Utils.sleep(3000);
+        }
+    }
+
+    return outcome;
+}
+
+/**
+ * Validates a split input and rounds it down to `precision`, so the parts of
+ * a split can never add up to more than the caller actually holds.
+ */
+function normalizeSplitTotal(amount: NumericValue, precision: number): BigNumber {
+    const value = BigNumber.isBigNumber(amount) ? amount : new BigNumber(amount);
+
+    if (value.isNaN() || !value.isFinite()) {
+        throw new Error('Invalid amount');
+    }
+
+    if (value.isNegative()) {
+        throw new Error('Amount cannot be negative');
+    }
+
+    return value.decimalPlaces(precision, BigNumber.ROUND_DOWN);
+}
+
+/**
+ * Allocates `total` into `count` parts. Every part but the last comes from
+ * `shareFor`; the last takes the exact remainder. Throws rather than return
+ * parts that sum above the total (possible with a rounding mode that rounds up).
+ */
+function allocateSplit(
+    total: BigNumber,
+    count: number,
+    precision: number,
+    shareFor: (index: number) => BigNumber
+): string[] {
+    const shares: BigNumber[] = [];
+    let allocated = new BigNumber(0);
+
+    for (let index = 0; index < count; index++) {
+        const share = index === count - 1 ? total.minus(allocated) : shareFor(index);
+
+        if (share.isNegative()) {
+            throw new Error('Split allocation exceeds the amount; use a rounding mode that rounds down');
+        }
+
+        shares.push(share);
+        allocated = allocated.plus(share);
+    }
+
+    if (allocated.gt(total)) {
+        throw new Error('Split allocation exceeds the amount');
+    }
+
+    return shares.map((share) => share.toFixed(precision));
+}
 
 /**
  * Utility functions for Hive blockchain operations and general helpers
@@ -79,6 +257,61 @@ export const Utils = {
         return JSON.stringify(meta);
     },
 
+    /**
+     * Formats a Hive Engine token quantity (or price) as the plain decimal
+     * string Hive Engine expects. Numbers go through BigNumber and are rounded
+     * to 8 decimal places, so 0.1 + 0.2 becomes "0.3" and 1e-7 "0.0000001".
+     * Strings must already be plain decimals: exponent notation, signs and
+     * commas are rejected. Zero and negative values are rejected.
+     */
+    formatEngineQuantity(quantity: string | number | BigNumber, label: string = 'quantity'): string {
+        let value: BigNumber;
+
+        if (typeof quantity === 'number') {
+            if (!Number.isFinite(quantity)) {
+                throw new Error(`Invalid Hive Engine ${label} '${quantity}': must be a finite number`);
+            }
+
+            value = new BigNumber(quantity).decimalPlaces(MAX_TOKEN_PRECISION, BigNumber.ROUND_HALF_UP);
+        } else if (BigNumber.isBigNumber(quantity)) {
+            if (quantity.isNaN() || !quantity.isFinite()) {
+                throw new Error(`Invalid Hive Engine ${label} '${quantity.toString()}': must be a finite number`);
+            }
+
+            if ((quantity.decimalPlaces() ?? 0) > MAX_TOKEN_PRECISION) {
+                throw new Error(`Invalid Hive Engine ${label} '${quantity.toFixed()}': at most ${MAX_TOKEN_PRECISION} decimal places`);
+            }
+
+            value = quantity;
+        } else if (typeof quantity === 'string') {
+            const trimmed = quantity.trim();
+
+            if (trimmed.includes(',')) {
+                throw new Error(`Invalid Hive Engine ${label} '${quantity}': use a dot as the decimal separator and no thousands separators`);
+            }
+
+            const match = /^\d+(?:\.(\d+))?$/.exec(trimmed);
+
+            if (!match) {
+                throw new Error(`Invalid Hive Engine ${label} '${quantity}': must be a plain decimal number like '10.5'`);
+            }
+
+            if ((match[1]?.length ?? 0) > MAX_TOKEN_PRECISION) {
+                throw new Error(`Invalid Hive Engine ${label} '${quantity}': at most ${MAX_TOKEN_PRECISION} decimal places`);
+            }
+
+            value = new BigNumber(trimmed);
+        } else {
+            throw new Error(`Hive Engine ${label} is required`);
+        }
+
+        if (!value.isGreaterThan(0)) {
+            throw new Error(`Invalid Hive Engine ${label} '${value.toFixed()}': must be greater than zero`);
+        }
+
+        return value.toFixed();
+    },
+
     parseAssetAmount(rawAmount: string): ParsedAssetAmount {
         if (typeof rawAmount !== 'string' || rawAmount.trim().length === 0) {
             throw new Error('Asset amount must be a non-empty string');
@@ -87,6 +320,18 @@ export const Utils = {
         const parts = rawAmount.trim().split(/\s+/);
         if (parts.length !== 2) {
             throw new Error(`Invalid asset amount '${rawAmount}'`);
+        }
+
+        // Plain non-negative decimals only: no sign, hex, exponent or commas.
+        const match = /^\d+(?:\.(\d+))?$/.exec(parts[0]);
+        if (!match) {
+            throw new Error(`Invalid asset amount '${rawAmount}': amount must be a plain decimal number like '1.000'`);
+        }
+
+        const decimals = match[1]?.length ?? 0;
+        const maxDecimals = HIVE_NATIVE_PRECISION[parts[1]] ?? MAX_TOKEN_PRECISION;
+        if (decimals > maxDecimals) {
+            throw new Error(`Invalid asset amount '${rawAmount}': ${parts[1]} allows at most ${maxDecimals} decimal places`);
         }
 
         const value = new BigNumber(parts[0]);
@@ -209,24 +454,16 @@ export const Utils = {
             throw new Error('basisPoints allocations must total 10000');
         }
 
-        const value = BigNumber.isBigNumber(amount) ? amount : new BigNumber(amount);
-        if (value.isNaN() || !value.isFinite()) {
-            throw new Error('Invalid amount');
-        }
-
-        let allocated = new BigNumber(0);
-
-        return basisPoints.map((bps, index) => {
+        for (const bps of basisPoints) {
             if (!Number.isInteger(bps) || bps < 0 || bps > 10000) {
                 throw new Error('basisPoints must be integers between 0 and 10000');
             }
+        }
 
-            const share = index === basisPoints.length - 1
-                ? value.minus(allocated)
-                : value.multipliedBy(bps).dividedBy(10000).decimalPlaces(precision, roundingMode);
+        const total = normalizeSplitTotal(amount, precision);
 
-            allocated = allocated.plus(share);
-            return share.toFixed(precision);
+        return allocateSplit(total, basisPoints.length, precision, (index) => {
+            return total.multipliedBy(basisPoints[index]).dividedBy(10000).decimalPlaces(precision, roundingMode);
         });
     },
 
@@ -238,6 +475,10 @@ export const Utils = {
     ): string[] {
         if (!Array.isArray(percentages) || percentages.length === 0) {
             throw new Error('percentages array cannot be empty');
+        }
+
+        if (!Number.isInteger(precision) || precision < 0) {
+            throw new Error('precision must be a non-negative integer');
         }
 
         const normalized = percentages.map((percentage) => {
@@ -259,20 +500,10 @@ export const Utils = {
             throw new Error('percentages must total 100');
         }
 
-        const value = BigNumber.isBigNumber(amount) ? amount : new BigNumber(amount);
-        if (value.isNaN() || !value.isFinite()) {
-            throw new Error('Invalid amount');
-        }
+        const value = normalizeSplitTotal(amount, precision);
 
-        let allocated = new BigNumber(0);
-
-        return normalized.map((percentage, index) => {
-            const share = index === normalized.length - 1
-                ? value.minus(allocated)
-                : value.multipliedBy(percentage).dividedBy(100).decimalPlaces(precision, roundingMode);
-
-            allocated = allocated.plus(share);
-            return share.toFixed(precision);
+        return allocateSplit(value, normalized.length, precision, (index) => {
+            return value.multipliedBy(normalized[index]).dividedBy(100).decimalPlaces(precision, roundingMode);
         });
     },
 
@@ -305,21 +536,10 @@ export const Utils = {
         });
 
         const totalWeight = normalized.reduce((sum, value) => sum.plus(value), new BigNumber(0));
-        const value = BigNumber.isBigNumber(amount) ? amount : new BigNumber(amount);
+        const value = normalizeSplitTotal(amount, precision);
 
-        if (value.isNaN() || !value.isFinite()) {
-            throw new Error('Invalid amount');
-        }
-
-        let allocated = new BigNumber(0);
-
-        return normalized.map((weight, index) => {
-            const share = index === normalized.length - 1
-                ? value.minus(allocated)
-                : value.multipliedBy(weight).dividedBy(totalWeight).decimalPlaces(precision, roundingMode);
-
-            allocated = allocated.plus(share);
-            return share.toFixed(precision);
+        return allocateSplit(value, normalized.length, precision, (index) => {
+            return value.multipliedBy(normalized[index]).dividedBy(totalWeight).decimalPlaces(precision, roundingMode);
         });
     },
 
@@ -365,12 +585,13 @@ export const Utils = {
             throw new Error('Precision must be a non-negative number');
         }
 
-        const numberSign = value >= 0 ? 1 : -1;
-        const factor = Math.pow(10, precision);
-        
-        return parseFloat(
-            (Math.round((value * factor) + (numberSign * 0.0001)) / factor).toFixed(precision)
-        );
+        if (!Number.isFinite(value)) {
+            return value;
+        }
+
+        // Decimal rounding (half away from zero) on the number's shortest
+        // decimal form, so 1.0005 rounds to 1.001 and 1.0004999 to 1.000.
+        return new BigNumber(value).decimalPlaces(precision, BigNumber.ROUND_HALF_UP).toNumber();
     },
 
     /**
@@ -420,37 +641,39 @@ export const Utils = {
      * @param fiatSymbol - The source currency symbol
      * @param hiveSymbol - The target Hive currency symbol
      * @returns The converted amount rounded to 3 decimal places
+     * @throws When rates cannot be fetched or no positive rate exists for the
+     *   pair. It never returns 0 as a fallback: an app pricing in fiat must not
+     *   accept arbitrary payments while rate sources are down.
      */
     async convertHiveAmount(amount: number, fiatSymbol: string, hiveSymbol: string): Promise<number> {
-        if (typeof amount !== 'number' || amount < 0) {
+        if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0) {
             throw new Error('Amount must be a non-negative number');
         }
         if (!fiatSymbol || !hiveSymbol) {
             throw new Error('Currency symbols cannot be empty');
         }
-        
+
         if (fiatSymbol === hiveSymbol) {
             return amount;
         }
-    
+
+        let rate: number | null;
+
         try {
             const rates = new HiveRates();
             await rates.fetchRates();
-    
-            const rate = rates.fiatToHiveRate(fiatSymbol, hiveSymbol);
-            
-            if (rate <= 0) {
-                return 0;
-            }
-            
-            const total = amount / rate;
-            return Utils.roundPrecision(total, 3);
+            rate = rates.fiatToHiveRate(fiatSymbol, hiveSymbol);
         } catch (error) {
-            if (Config.DEBUG_MODE) {
-                getLogger().error('[Utils] Failed to convert Hive amount:', error);
-            }
-            return 0;
+            const reason = error instanceof Error ? error.message : String(error);
+
+            throw new Error(`convertHiveAmount: could not fetch exchange rates to convert ${fiatSymbol} to ${hiveSymbol}: ${reason}`, { cause: error });
         }
+
+        if (typeof rate !== 'number' || !Number.isFinite(rate) || rate <= 0) {
+            throw new Error(`convertHiveAmount: no exchange rate available for ${fiatSymbol} to ${hiveSymbol}`);
+        }
+
+        return new BigNumber(amount).dividedBy(rate).decimalPlaces(3, BigNumber.ROUND_HALF_UP).toNumber();
     },
 
     /**
@@ -516,20 +739,33 @@ export const Utils = {
     },
 
     /**
-     * Verifies that a transfer transaction matches the expected parameters
+     * Verifies that one transfer operation in a transaction matches the
+     * expected parameters. Pass the operation's index within the transaction
+     * (`ctx.transaction.operationIndex`) so a transaction carrying several
+     * transfers is checked at the right operation; it defaults to 0.
      * @param transaction - The signed transaction to verify
      * @param from - Expected sender account
      * @param to - Expected recipient account
-     * @param amount - Expected transfer amount
-     * @returns True if the transfer matches all parameters
+     * @param amount - Expected transfer amount, e.g. '1.000 HIVE'
+     * @param operationIndex - Index of the transfer operation to check (default 0)
+     * @returns True if that operation is a transfer matching all parameters
      */
-    async verifyTransfer(transaction: SignedTransaction, from: string, to: string, amount: string): Promise<boolean> {
-        if (!transaction || !transaction.operations || transaction.operations.length === 0) {
+    async verifyTransfer(transaction: SignedTransaction, from: string, to: string, amount: string, operationIndex: number = 0): Promise<boolean> {
+        if (!transaction || !Array.isArray(transaction.operations) || transaction.operations.length === 0) {
             return false;
         }
-        
+
+        if (!Number.isInteger(operationIndex) || operationIndex < 0 || operationIndex >= transaction.operations.length) {
+            return false;
+        }
+
         try {
-            const operation = transaction.operations[0][1] as any;
+            const [type, operation] = transaction.operations[operationIndex] as [string, any];
+
+            if (type !== 'transfer' && type !== 'recurrent_transfer') {
+                return false;
+            }
+
             return (operation.from === from && operation.to === to && operation.amount === amount);
         } catch (error) {
             if (Config.DEBUG_MODE) {
@@ -1044,14 +1280,15 @@ export const Utils = {
         config: ConfigInterface, 
         from: string, 
         to: string, 
-        quantity: string, 
+        quantity: string | number, 
         symbol: string, 
         memo: string = ''
     ) {
         if (!client || !config.ACTIVE_KEY || !from || !to || !quantity || !symbol) {
             throw new Error('Missing required parameters for Hive Engine token transfer');
         }
-        
+
+        const formattedQuantity = this.formatEngineQuantity(quantity);
         const key = PrivateKey.fromString(config.ACTIVE_KEY);
 
         const json = {
@@ -1060,7 +1297,7 @@ export const Utils = {
             contractPayload: {
                 symbol: symbol.toUpperCase(),
                 to,
-                quantity,
+                quantity: formattedQuantity,
                 memo,
             }
         };
@@ -1088,98 +1325,40 @@ export const Utils = {
         config: ConfigInterface,
         from: string,
         symbol: string,
-        quantity: string,
+        quantity: string | number,
         memo: string = ''
     ) {
         return this.transferHiveEngineTokens(client, config, from, NULL_ACCOUNT, quantity, symbol, memo);
     },
 
     /**
-     * Transfers Hive Engine tokens to multiple accounts in batches
+     * Transfers Hive Engine tokens to multiple accounts in batched custom_json
+     * operations (each kept under the custom_json size limit).
+     *
+     * Every recipient and quantity is validated before anything is broadcast;
+     * an invalid entry throws and nothing is sent. Batches are then broadcast
+     * in order, and a failing batch does not stop the rest: inspect `failed`
+     * and retry only those recipients, because the `sent` batches are on-chain.
+     *
      * @param client - The Hive client instance
      * @param config - Configuration containing the active key and Hive Engine ID
      * @param from - Sender account name
-     * @param accounts - Array of account objects with 'account' and optional 'amount' properties
+     * @param accounts - Recipients as `{ account, amount? }`; `amount` falls back to `amount`
      * @param symbol - Token symbol
      * @param memo - Memo for all transfers
-     * @param amount - Default amount if not specified per account
-     * @returns Promise that resolves when all batches are completed
+     * @param amount - Default quantity for recipients without their own `amount`
+     * @returns `{ sent, failed }`, one entry per batch with its recipients
      */
     async transferHiveEngineTokensMultiple(
-        client: Client, 
-        config: ConfigInterface, 
-        from: string, 
-        accounts: any[], 
-        symbol: string, 
-        memo: string, 
-        amount: string = '0'
-    ): Promise<void> {
-        if (!Array.isArray(accounts) || accounts.length === 0) {
-            throw new Error('Accounts array cannot be empty');
-        }
-        
-        const key = PrivateKey.fromString(config.ACTIVE_KEY);
-        const payloads: any[][] = [[]];
-        let completed = 0;
-
-        // Build payloads in batches to respect size limits
-        for (const user of accounts) {
-            const account = user.account?.replace('@', '') || '';
-            const quantity = user.amount 
-                ? parseFloat(user.amount.replace(',', '.')).toString() 
-                : parseFloat(amount).toString();
-
-            // Skip if no valid quantity
-            if (parseFloat(quantity) <= 0 || !account) {
-                continue;
-            }
-
-            const json = {
-                contractName: 'tokens',
-                contractAction: 'transfer',
-                contractPayload: {
-                    symbol: symbol.toUpperCase(),
-                    to: account,
-                    quantity,
-                    memo,
-                },
-            };
-
-            const lastPayloadSize = JSON.stringify(payloads[payloads.length - 1]).length;
-            const payloadSize = JSON.stringify(json).length;
-
-            if (payloadSize + lastPayloadSize > MAX_PAYLOAD_SIZE) {
-                payloads.push([json]);
-            } else {
-                payloads[payloads.length - 1].push(json);
-            }
-        }
-
-        // Execute batches with delays
-        for (const payload of payloads) {
-            if (payload.length === 0) continue;
-            
-            try {
-                await client.broadcast.json({
-                    required_auths: [from], 
-                    required_posting_auths: [], 
-                    id: config.HIVE_ENGINE_ID, 
-                    json: JSON.stringify(payload)
-                }, key);
-
-                completed++;
-
-                // Add delay between batches
-                if (completed < payloads.length) {
-                    await this.sleep(3000);
-                }
-            } catch (error) {
-                if (Config.DEBUG_MODE) {
-                    getLogger().error('[Utils] Failed to transfer Hive Engine tokens batch:', error);
-                }
-                throw error;
-            }
-        }
+        client: Client,
+        config: ConfigInterface,
+        from: string,
+        accounts: HiveEngineBatchRecipient[],
+        symbol: string,
+        memo: string,
+        amount: string | number = '0'
+    ): Promise<HiveEngineBatchResult> {
+        return broadcastHiveEngineBatches(client, config, from, accounts, symbol, memo, amount, 'transfer');
     },
 
     /**
@@ -1199,13 +1378,14 @@ export const Utils = {
         from: string, 
         to: string, 
         symbol: string, 
-        quantity: string, 
+        quantity: string | number, 
         memo: string = ''
     ) {
         if (!client || !config.ACTIVE_KEY || !from || !to || !symbol || !quantity) {
             throw new Error('Missing required parameters for Hive Engine token issuance');
         }
-        
+
+        const formattedQuantity = this.formatEngineQuantity(quantity);
         const key = PrivateKey.fromString(config.ACTIVE_KEY);
 
         const json = {
@@ -1214,7 +1394,7 @@ export const Utils = {
             contractPayload: {
                 symbol,
                 to,
-                quantity,
+                quantity: formattedQuantity,
                 memo,
             },
         };
@@ -1232,91 +1412,30 @@ export const Utils = {
     },
 
     /**
-     * Issues Hive Engine tokens to multiple accounts in batches
+     * Issues Hive Engine tokens to multiple accounts in batched custom_json
+     * operations. Same validation and result semantics as
+     * `transferHiveEngineTokensMultiple`: nothing is broadcast if any entry is
+     * invalid, and per-batch failures are reported instead of thrown.
+     *
      * @param client - The Hive client instance
      * @param config - Configuration containing the active key and Hive Engine ID
      * @param from - Issuer account name
-     * @param accounts - Array of account objects with 'account' and optional 'amount' properties
+     * @param accounts - Recipients as `{ account, amount? }`; `amount` falls back to `amount`
      * @param symbol - Token symbol
      * @param memo - Memo for all issuances
-     * @param amount - Default amount if not specified per account
-     * @returns Promise that resolves when all batches are completed
+     * @param amount - Default quantity for recipients without their own `amount`
+     * @returns `{ sent, failed }`, one entry per batch with its recipients
      */
     async issueHiveEngineTokensMultiple(
-        client: Client, 
-        config: ConfigInterface, 
-        from: string, 
-        accounts: any[], 
-        symbol: string, 
-        memo: string, 
-        amount: string = '0'
-    ): Promise<void> {
-        if (!Array.isArray(accounts) || accounts.length === 0) {
-            throw new Error('Accounts array cannot be empty');
-        }
-        
-        const key = PrivateKey.fromString(config.ACTIVE_KEY);
-        const payloads: any[][] = [[]];
-        let completed = 0;
-
-        // Build payloads in batches to respect size limits
-        for (const user of accounts) {
-            const to = user.account?.replace('@', '') || '';
-            const quantity = user.amount 
-                ? parseFloat(user.amount.replace(',', '.')).toString() 
-                : parseFloat(amount).toString();
-
-            // Skip if no valid quantity
-            if (parseFloat(quantity) <= 0 || !to) {
-                continue;
-            }
-
-            const json = {
-                contractName: 'tokens',
-                contractAction: 'issue',
-                contractPayload: {
-                    symbol: symbol.toUpperCase(),
-                    to,
-                    quantity,
-                    memo,
-                },
-            };
-
-            const lastPayloadSize = JSON.stringify(payloads[payloads.length - 1]).length;
-            const payloadSize = JSON.stringify(json).length;
-
-            if (payloadSize + lastPayloadSize > MAX_PAYLOAD_SIZE) {
-                payloads.push([json]);
-            } else {
-                payloads[payloads.length - 1].push(json);
-            }
-        }
-
-        // Execute batches with delays
-        for (const payload of payloads) {
-            if (payload.length === 0) continue;
-            
-            try {
-                await client.broadcast.json({
-                    required_auths: [from], 
-                    required_posting_auths: [], 
-                    id: config.HIVE_ENGINE_ID, 
-                    json: JSON.stringify(payload)
-                }, key);
-
-                completed++;
-
-                // Add delay between batches
-                if (completed < payloads.length) {
-                    await this.sleep(3000);
-                }
-            } catch (error) {
-                if (Config.DEBUG_MODE) {
-                    getLogger().error('[Utils] Failed to issue Hive Engine tokens batch:', error);
-                }
-                throw error;
-            }
-        }
+        client: Client,
+        config: ConfigInterface,
+        from: string,
+        accounts: HiveEngineBatchRecipient[],
+        symbol: string,
+        memo: string,
+        amount: string | number = '0'
+    ): Promise<HiveEngineBatchResult> {
+        return broadcastHiveEngineBatches(client, config, from, accounts, symbol, memo, amount, 'issue');
     },
 
     /**
@@ -3352,17 +3471,19 @@ export const Utils = {
         from: string,
         to: string,
         symbol: string,
-        quantity: string
+        quantity: string | number
     ) {
         if (!client || !config.ACTIVE_KEY || !from || !symbol || !quantity) {
             throw new Error('Missing required parameters for stake engine tokens');
         }
 
+        const formattedQuantity = this.formatEngineQuantity(quantity);
+
         const key = PrivateKey.fromString(config.ACTIVE_KEY);
         const json = JSON.stringify({
             contractName: 'tokens',
             contractAction: 'stake',
-            contractPayload: { to: to || from, symbol, quantity: String(quantity) }
+            contractPayload: { to: to || from, symbol, quantity: formattedQuantity }
         });
 
         return client.broadcast.json({
@@ -3378,17 +3499,19 @@ export const Utils = {
         config: Partial<ConfigInterface>,
         from: string,
         symbol: string,
-        quantity: string
+        quantity: string | number
     ) {
         if (!client || !config.ACTIVE_KEY || !from || !symbol || !quantity) {
             throw new Error('Missing required parameters for unstake engine tokens');
         }
 
+        const formattedQuantity = this.formatEngineQuantity(quantity);
+
         const key = PrivateKey.fromString(config.ACTIVE_KEY);
         const json = JSON.stringify({
             contractName: 'tokens',
             contractAction: 'unstake',
-            contractPayload: { symbol, quantity: String(quantity) }
+            contractPayload: { symbol, quantity: formattedQuantity }
         });
 
         return client.broadcast.json({
@@ -3404,18 +3527,21 @@ export const Utils = {
         config: Partial<ConfigInterface>,
         from: string,
         symbol: string,
-        quantity: string,
-        price: string
+        quantity: string | number,
+        price: string | number
     ) {
         if (!client || !config.ACTIVE_KEY || !from || !symbol || !quantity || !price) {
             throw new Error('Missing required parameters for buy engine tokens');
         }
 
+        const formattedQuantity = this.formatEngineQuantity(quantity);
+        const formattedPrice = this.formatEngineQuantity(price, 'price');
+
         const key = PrivateKey.fromString(config.ACTIVE_KEY);
         const json = JSON.stringify({
             contractName: 'market',
             contractAction: 'buy',
-            contractPayload: { symbol, quantity: String(quantity), price: String(price) }
+            contractPayload: { symbol, quantity: formattedQuantity, price: formattedPrice }
         });
 
         return client.broadcast.json({
@@ -3431,18 +3557,21 @@ export const Utils = {
         config: Partial<ConfigInterface>,
         from: string,
         symbol: string,
-        quantity: string,
-        price: string
+        quantity: string | number,
+        price: string | number
     ) {
         if (!client || !config.ACTIVE_KEY || !from || !symbol || !quantity || !price) {
             throw new Error('Missing required parameters for sell engine tokens');
         }
 
+        const formattedQuantity = this.formatEngineQuantity(quantity);
+        const formattedPrice = this.formatEngineQuantity(price, 'price');
+
         const key = PrivateKey.fromString(config.ACTIVE_KEY);
         const json = JSON.stringify({
             contractName: 'market',
             contractAction: 'sell',
-            contractPayload: { symbol, quantity: String(quantity), price: String(price) }
+            contractPayload: { symbol, quantity: formattedQuantity, price: formattedPrice }
         });
 
         return client.broadcast.json({
@@ -3485,17 +3614,19 @@ export const Utils = {
         from: string,
         to: string,
         symbol: string,
-        quantity: string
+        quantity: string | number
     ) {
         if (!client || !config.ACTIVE_KEY || !from || !to || !symbol || !quantity) {
             throw new Error('Missing required parameters for delegate engine tokens');
         }
 
+        const formattedQuantity = this.formatEngineQuantity(quantity);
+
         const key = PrivateKey.fromString(config.ACTIVE_KEY);
         const json = JSON.stringify({
             contractName: 'tokens',
             contractAction: 'delegate',
-            contractPayload: { to, symbol, quantity: String(quantity) }
+            contractPayload: { to, symbol, quantity: formattedQuantity }
         });
 
         return client.broadcast.json({
@@ -3512,17 +3643,19 @@ export const Utils = {
         from: string,
         to: string,
         symbol: string,
-        quantity: string
+        quantity: string | number
     ) {
         if (!client || !config.ACTIVE_KEY || !from || !to || !symbol || !quantity) {
             throw new Error('Missing required parameters for undelegate engine tokens');
         }
 
+        const formattedQuantity = this.formatEngineQuantity(quantity);
+
         const key = PrivateKey.fromString(config.ACTIVE_KEY);
         const json = JSON.stringify({
             contractName: 'tokens',
             contractAction: 'undelegate',
-            contractPayload: { from: to, symbol, quantity: String(quantity) }
+            contractPayload: { from: to, symbol, quantity: formattedQuantity }
         });
 
         return client.broadcast.json({

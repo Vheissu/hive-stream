@@ -308,7 +308,8 @@ describe('TestStreamer', () => {
     test('runs built-in games that re-read their transaction, with no keys configured', async () => {
         ts = await createTestStreamer({ username: 'myhouse' });
         ts.client.setAccount('myhouse', { balance: '1000.000 HIVE' });
-        await ts.streamer.registerContract(createDiceContract({ account: 'myhouse', fairness: true }));
+        // Loss notices are opt-in; turn them on so every outcome sends one transfer.
+        await ts.streamer.registerContract(createDiceContract({ account: 'myhouse', notifyLosses: true }));
 
         await ts.contractTransfer({ from: 'alice', amount: '5.000 HIVE', contract: 'hivedice', action: 'roll', payload: { roll: 50 } });
 
@@ -316,6 +317,112 @@ describe('TestStreamer', () => {
         expect(ts.outgoingTransfers).toHaveLength(1);
         expect(ts.outgoingTransfers[0]).toMatchObject({ from: 'myhouse', to: 'alice' });
         expect(ts.outgoingTransfers[0].memo).toMatch(/Fair: seed #0 nonce 0/);
+    });
+
+    test('anchors a TimeAction registered without a date to simulated chain time', async () => {
+        const executions: Date[] = [];
+
+        const contract = defineContract({
+            name: 'undated',
+            actions: {
+                tick: action(async (_payload: any, ctx) => {
+                    executions.push(ctx.block.time);
+                }, { trigger: 'time' })
+            }
+        });
+
+        ts = await createTestStreamer({ startTime: new Date('2024-01-01T00:00:00Z') });
+        await ts.streamer.registerContract(contract);
+
+        const timeAction = new TimeAction('1m', 'undated-tick', 'undated', 'tick');
+        expect(timeAction.hasExplicitDate).toBe(false);
+        expect(Object.keys(timeAction)).not.toContain('hasExplicitDate');
+        expect(timeAction.toJSON()).not.toHaveProperty('hasExplicitDate');
+
+        await ts.streamer.registerAction(timeAction);
+        expect(timeAction.date.getTime()).toBe(ts.currentTime.getTime());
+
+        await ts.advanceTime('1m');
+        expect(executions).toHaveLength(1);
+    });
+
+    test('advanceTime fires a due action at most once per call', async () => {
+        let executions = 0;
+
+        const contract = defineContract({
+            name: 'once',
+            actions: {
+                tick: action(async () => {
+                    executions++;
+                }, { trigger: 'time' })
+            }
+        });
+
+        ts = await createTestStreamer({ startTime: new Date('2024-01-01T00:00:00Z') });
+        await ts.streamer.registerContract(contract);
+        await ts.streamer.registerAction(new TimeAction('1m', 'once-tick', 'once', 'tick'));
+
+        await ts.advanceTime('10m');
+        expect(executions).toBe(1);
+    });
+
+    test('keeps an explicit TimeAction date', async () => {
+        ts = await createTestStreamer({ startTime: new Date('2024-01-01T00:00:00Z') });
+        await ts.streamer.registerContract(defineContract({
+            name: 'dated',
+            actions: { tick: action(async () => undefined, { trigger: 'time' }) }
+        }));
+
+        const start = new Date('2023-06-01T00:00:00Z');
+        const timeAction = new TimeAction('1h', 'dated-tick', 'dated', 'tick', {}, start);
+
+        expect(timeAction.hasExplicitDate).toBe(true);
+        await ts.streamer.registerAction(timeAction);
+        expect(timeAction.date).toEqual(start);
+
+        // Assigning a date after construction also counts as explicit.
+        const reassigned = new TimeAction('1h', 'reassigned-tick', 'dated', 'tick');
+        expect(reassigned.hasExplicitDate).toBe(false);
+        reassigned.date = start;
+        expect(reassigned.hasExplicitDate).toBe(true);
+        await ts.streamer.registerAction(reassigned);
+        expect(reassigned.date).toBe(start);
+    });
+
+    test('outgoingTransfers includes transfers sent in operation batches, and comments are captured', async () => {
+        const contract = defineContract({
+            name: 'batcher',
+            actions: {
+                pay: action(async (_payload: any, ctx) => {
+                    await ctx.streamer.transferHiveTokens('myapp', ctx.sender as string, '0.100', 'HIVE', 'single');
+                    await ctx.streamer.broadcastOperations([
+                        ['transfer', { from: 'myapp', to: 'bob', amount: '0.200 HIVE', memo: 'batched' }],
+                        ['comment', {
+                            parent_author: 'alice',
+                            parent_permlink: 'post',
+                            author: 'myapp',
+                            permlink: 're-post',
+                            title: '',
+                            body: 'Thanks!',
+                            json_metadata: '{}'
+                        }]
+                    ]);
+                }, { trigger: 'transfer' })
+            }
+        });
+
+        ts = await createTestStreamer({ username: 'myapp', activeKey: TEST_ACTIVE_KEY });
+        await ts.streamer.registerContract(contract);
+        await ts.contractTransfer({ from: 'alice', contract: 'batcher', action: 'pay' });
+
+        expect(ts.outgoingTransfers).toEqual([
+            { from: 'myapp', to: 'alice', amount: '0.100 HIVE', memo: 'single' },
+            { from: 'myapp', to: 'bob', amount: '0.200 HIVE', memo: 'batched' }
+        ]);
+        expect(ts.client.transfers).toHaveLength(1);
+        expect(ts.comments).toEqual([
+            expect.objectContaining({ author: 'myapp', permlink: 're-post', parent_author: 'alice' })
+        ]);
     });
 
     test('transfer rejects malformed amounts with a helpful error', async () => {

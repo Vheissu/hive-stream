@@ -17,6 +17,11 @@ export interface TemplateDefinition {
     setup: string[];
     usage: UsageExample[];
     requiredAdapterCapabilities?: AdapterCapability[];
+    /**
+     * Generate the streamer with `refundRejectedTransfers: true`. Templates
+     * without it get the option as a commented-out line.
+     */
+    refundRejectedTransfers?: boolean;
 }
 
 export interface AdapterDefinition {
@@ -34,6 +39,32 @@ export interface AdapterDefinition {
 const wrap = (contract: string, actionName: string, payload: string): string => {
     return `{"hive_stream":{"contract":"${contract}","action":"${actionName}","payload":${payload}}}`;
 };
+
+// Names the built-in factories register under by default (see the `name`
+// field in hive-stream/catalog). Kept as literals so this browser-safe module
+// does not pull the whole catalog into bundles; tests/scaffold-usage.spec.ts
+// checks them against the catalog and runs every README payload against the
+// real contracts.
+export const TEMPLATE_CONTRACT_NAMES = {
+    dice: 'hivedice',
+    coinflip: 'coinflip',
+    roulette: 'roulette',
+    rps: 'rps',
+    limbo: 'limbo',
+    exchange: 'exchange',
+    fanclub: 'fanclub',
+    subscriptions: 'subscriptions',
+    tipjar: 'tipjar',
+    paywall: 'paywall',
+    token: 'hivetoken',
+    ticketing: 'ticketing',
+    checkpoint: 'checkpoint'
+} as const;
+
+const CONTRACT_NAMES = TEMPLATE_CONTRACT_NAMES;
+
+// The templates register the NFT contract with { name: 'nft' }.
+const NFT_CONTRACT = 'nft';
 
 export const TEMPLATES: TemplateDefinition[] = [
     {
@@ -80,36 +111,37 @@ export const TEMPLATES: TemplateDefinition[] = [
             `await streamer.registerContract(createLimboContract({ account: HIVE_USERNAME, fairness: { rotateAfter: 1000 } }));`
         ],
         setup: [],
+        refundRejectedTransfers: true,
         usage: [
             {
                 title: 'Roll the dice',
                 description: 'Send HIVE to your app account with this transfer memo:',
-                payload: wrap('hivedice', 'roll', '{"roll":50,"seed":"my-client-seed"}')
+                payload: wrap(CONTRACT_NAMES.dice, 'roll', '{"roll":50,"seed":"my-client-seed"}')
             },
             {
                 title: 'Flip a coin',
                 description: 'Send HIVE with this transfer memo:',
-                payload: wrap('coinflip', 'flip', '{"guess":"heads"}')
+                payload: wrap(CONTRACT_NAMES.coinflip, 'flip', '{"guess":"heads"}')
             },
             {
                 title: 'Spin the roulette wheel',
                 description: 'Send HIVE with this transfer memo:',
-                payload: wrap('roulette', 'spin', '{"betType":"color","value":"red"}')
+                payload: wrap(CONTRACT_NAMES.roulette, 'spin', '{"betType":"color","value":"red"}')
             },
             {
                 title: 'Play rock-paper-scissors',
                 description: 'Send HIVE with this transfer memo:',
-                payload: wrap('rps', 'play', '{"move":"rock"}')
+                payload: wrap(CONTRACT_NAMES.rps, 'play', '{"move":"rock"}')
             },
             {
                 title: 'Play limbo',
                 description: 'Send HIVE with a target multiplier; you win bet x target when the result reaches it:',
-                payload: wrap('limbo', 'bet', '{"target":"2.5"}')
+                payload: wrap(CONTRACT_NAMES.limbo, 'bet', '{"target":"2.5"}')
             },
             {
                 title: 'Reveal a server seed',
                 description: 'From the app account, broadcast custom_json (active authority) so players can verify past bets:',
-                payload: wrap('hivedice', 'rotateSeed', '{}')
+                payload: wrap(CONTRACT_NAMES.dice, 'rotateSeed', '{}')
             }
         ]
     },
@@ -134,18 +166,18 @@ export const TEMPLATES: TemplateDefinition[] = [
         usage: [
             {
                 title: 'Create a trading pair',
-                description: 'Broadcast a custom_json operation with id `hivestream`:',
-                payload: wrap('exchange', 'createPair', '{"base":"HIVE","quote":"HBD"}')
+                description: 'From the app account (only it can create pairs), broadcast a custom_json operation with id `hivestream`:',
+                payload: wrap(CONTRACT_NAMES.exchange, 'createPair', '{"base":"HIVE","quote":"HBD"}')
             },
             {
                 title: 'Deposit funds',
                 description: 'Send HIVE or HBD to your app account with this transfer memo:',
-                payload: wrap('exchange', 'deposit', '{}')
+                payload: wrap(CONTRACT_NAMES.exchange, 'deposit', '{}')
             },
             {
                 title: 'Place an order',
-                description: 'Broadcast a custom_json operation with id `hivestream`:',
-                payload: wrap('exchange', 'placeOrder', '{"side":"buy","base":"HIVE","quote":"HBD","price":"2","amount":"5"}')
+                description: 'Broadcast a custom_json operation with id `hivestream`, signed with your active key:',
+                payload: wrap(CONTRACT_NAMES.exchange, 'placeOrder', '{"side":"buy","base":"HIVE","quote":"HBD","price":"2","amount":"5"}')
             }
         ]
     },
@@ -177,22 +209,22 @@ export const TEMPLATES: TemplateDefinition[] = [
             {
                 title: 'Create a fan club',
                 description: 'Broadcast a custom_json operation with id `hivestream`:',
-                payload: wrap('fanclub', 'createClub', '{"clubId":"my-club","title":"My Club","joinPrice":"1.000","asset":"HIVE"}')
+                payload: wrap(CONTRACT_NAMES.fanclub, 'createClub', '{"clubId":"my-club","title":"My Club","joinPrice":"1.000","asset":"HIVE"}')
             },
             {
                 title: 'Join a fan club',
                 description: 'Send the join price to your app account with this transfer memo:',
-                payload: wrap('fanclub', 'joinClub', '{"clubId":"my-club"}')
+                payload: wrap(CONTRACT_NAMES.fanclub, 'joinClub', '{"clubId":"my-club"}')
             },
             {
                 title: 'Create a subscription plan',
                 description: 'Broadcast a custom_json operation with id `hivestream`:',
-                payload: wrap('subscription', 'createPlan', '{"planId":"monthly","title":"Monthly Supporter","price":"5.000","asset":"HIVE","intervalDays":30}')
+                payload: wrap(CONTRACT_NAMES.subscriptions, 'createPlan', '{"planId":"monthly","title":"Monthly Supporter","price":"5.000","asset":"HIVE","intervalDays":30}')
             },
             {
                 title: 'Leave a tip',
                 description: 'Send any amount to your app account with this transfer memo:',
-                payload: wrap('tipjar', 'tip', '{"message":"Great work!"}')
+                payload: wrap(CONTRACT_NAMES.tipjar, 'tip', '{"message":"Great work!"}')
             }
         ]
     },
@@ -219,17 +251,17 @@ export const TEMPLATES: TemplateDefinition[] = [
             {
                 title: 'Create a paywalled resource',
                 description: 'Broadcast a custom_json operation with id `hivestream`:',
-                payload: wrap('paywall', 'createResource', '{"resourceId":"premium-post","title":"Premium Post","price":"1.000","asset":"HBD","accessDays":30}')
+                payload: wrap(CONTRACT_NAMES.paywall, 'createResource', '{"resourceId":"premium-post","title":"Premium Post","price":"1.000","asset":"HBD","accessDays":30}')
             },
             {
                 title: 'Buy access',
                 description: 'Send the price to your app account with this transfer memo:',
-                payload: wrap('paywall', 'grantAccess', '{"resourceId":"premium-post"}')
+                payload: wrap(CONTRACT_NAMES.paywall, 'grantAccess', '{"resourceId":"premium-post"}')
             },
             {
                 title: 'Leave a tip',
                 description: 'Send any amount to your app account with this transfer memo:',
-                payload: wrap('tipjar', 'tip', '{"message":"Loved this post!"}')
+                payload: wrap(CONTRACT_NAMES.tipjar, 'tip', '{"message":"Loved this post!"}')
             }
         ]
     },
@@ -248,17 +280,17 @@ export const TEMPLATES: TemplateDefinition[] = [
             {
                 title: 'Create a token',
                 description: 'Broadcast a custom_json operation with id `hivestream`:',
-                payload: wrap('token', 'createToken', '{"symbol":"MYTOKEN","name":"My Token","maxSupply":"1000000","precision":3}')
+                payload: wrap(CONTRACT_NAMES.token, 'createToken', '{"symbol":"MYTOKEN","name":"My Token","maxSupply":"1000000","precision":3}')
             },
             {
                 title: 'Issue tokens',
-                description: 'Broadcast a custom_json operation with id `hivestream` (token creator only):',
-                payload: wrap('token', 'issueTokens', '{"symbol":"MYTOKEN","to":"some-account","amount":"100"}')
+                description: 'Broadcast a custom_json operation with id `hivestream`, signed with your active key (token creator only):',
+                payload: wrap(CONTRACT_NAMES.token, 'issueTokens', '{"symbol":"MYTOKEN","to":"some-account","amount":"100"}')
             },
             {
                 title: 'Create an NFT collection',
                 description: 'Broadcast a custom_json operation with id `hivestream`:',
-                payload: wrap('nft', 'createCollection', '{"symbol":"MYNFT","name":"My Collection"}')
+                payload: wrap(NFT_CONTRACT, 'createCollection', '{"symbol":"MYNFT","name":"My Collection"}')
             }
         ]
     },
@@ -290,47 +322,47 @@ export const TEMPLATES: TemplateDefinition[] = [
             {
                 title: 'Create an NFT collection',
                 description: 'Broadcast a custom_json operation with id `hivestream`:',
-                payload: wrap('nft', 'createCollection', '{"symbol":"TICKETS","name":"Event Tickets","maxSupply":1000}')
+                payload: wrap(NFT_CONTRACT, 'createCollection', '{"symbol":"TICKETS","name":"Event Tickets","maxSupply":1000}')
             },
             {
                 title: 'Batch mint numbered editions',
                 description: 'Broadcast a custom_json operation with id `hivestream` (collection creator only):',
-                payload: wrap('nft', 'mintBatchNFT', '{"collectionSymbol":"TICKETS","to":"some-account","editions":{"baseTokenId":"GA","count":100}}')
+                payload: wrap(NFT_CONTRACT, 'mintBatchNFT', '{"collectionSymbol":"TICKETS","to":"some-account","editions":{"baseTokenId":"GA","count":100}}')
             },
             {
                 title: 'List an NFT for sale',
-                description: 'Broadcast a custom_json operation with id `hivestream` (token owner only):',
-                payload: wrap('nft', 'listNFT', '{"collectionSymbol":"TICKETS","tokenId":"GA-1","price":"5.000","currency":"HIVE"}')
+                description: 'Broadcast a custom_json operation with id `hivestream`, signed with your active key (token owner only):',
+                payload: wrap(NFT_CONTRACT, 'listNFT', '{"collectionSymbol":"TICKETS","tokenId":"GA-1","price":"5.000","currency":"HIVE"}')
             },
             {
                 title: 'Buy an NFT non-custodially',
                 description: 'Send the exact price directly to the seller with this transfer memo (funds never touch the app account):',
-                payload: wrap('nft', 'buyNFTDirect', '{"collectionSymbol":"TICKETS","tokenId":"GA-1"}')
+                payload: wrap(NFT_CONTRACT, 'buyNFTDirect', '{"collectionSymbol":"TICKETS","tokenId":"GA-1"}')
             },
             {
                 title: 'Create a ticketed event',
                 description: 'Broadcast a custom_json operation with id `hivestream`:',
-                payload: wrap('ticketing', 'createEvent', '{"eventId":"launch-party","title":"Launch Party","venue":"Online","startsAt":"2026-12-01T18:00:00Z","ticketPrice":"2.000","asset":"HBD","capacity":500}')
+                payload: wrap(CONTRACT_NAMES.ticketing, 'createEvent', '{"eventId":"launch-party","title":"Launch Party","venue":"Online","startsAt":"2026-12-01T18:00:00Z","ticketPrice":"2.000","asset":"HBD","capacity":500}')
             },
             {
                 title: 'Buy a ticket',
                 description: 'Send the ticket price to your app account with this transfer memo:',
-                payload: wrap('ticketing', 'purchaseTicket', '{"eventId":"launch-party","ticketId":"launch-party:1"}')
+                payload: wrap(CONTRACT_NAMES.ticketing, 'purchaseTicket', '{"eventId":"launch-party","ticketId":"launch-party:1"}')
             },
             {
                 title: 'Transfer a ticket',
                 description: 'Broadcast a custom_json operation with id `hivestream` (ticket owner only):',
-                payload: wrap('ticketing', 'transferTicket', '{"ticketId":"launch-party:1","to":"friend-account"}')
+                payload: wrap(CONTRACT_NAMES.ticketing, 'transferTicket', '{"ticketId":"launch-party:1","to":"friend-account"}')
             },
             {
                 title: 'List a ticket for resale',
                 description: 'Broadcast a custom_json operation with id `hivestream` (ticket owner only):',
-                payload: wrap('ticketing', 'listTicket', '{"ticketId":"launch-party:1","price":"3.000"}')
+                payload: wrap(CONTRACT_NAMES.ticketing, 'listTicket', '{"ticketId":"launch-party:1","price":"3.000"}')
             },
             {
                 title: 'Buy a resale ticket non-custodially',
                 description: 'Send the resale price directly to the seller with this transfer memo (funds never touch the app account):',
-                payload: wrap('ticketing', 'buyTicketDirect', '{"ticketId":"launch-party:1"}')
+                payload: wrap(CONTRACT_NAMES.ticketing, 'buyTicketDirect', '{"ticketId":"launch-party:1"}')
             }
         ]
     }

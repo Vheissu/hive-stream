@@ -24,7 +24,10 @@ export class TimeAction implements TimeActionInterface {
     public executionCount: number;
     public maxExecutions?: number;
     public timezone?: string;
-    
+    // The wall-clock placeholder used when no start date was given. Kept
+    // non-enumerable so it never leaks into persisted or compared state.
+    private declare implicitDate?: Date;
+
     private static readonly VALID_TIME_VALUES = [
         '3s', 'block', '10s', '30s', '1m', '5m', 'minute', '15m', 'quarter',
         '30m', 'halfhour', 'hourly', '1h', '12h', 'halfday', '24h', 
@@ -37,7 +40,7 @@ export class TimeAction implements TimeActionInterface {
         contractName: string, 
         contractAction: string, 
         payload: any = {},
-        date: Date | string = new Date(),
+        date?: Date | string,
         enabled: boolean = true,
         executionCount: number = 0,
         maxExecutions?: number,
@@ -53,11 +56,28 @@ export class TimeAction implements TimeActionInterface {
         this.contractName = contractName;
         this.contractAction = contractAction;
         this.payload = payload || {};
-        this.date = this.parseDate(date);
+        this.date = this.parseDate(date ?? new Date());
+        Object.defineProperty(this, 'implicitDate', {
+            value: date === undefined || date === null ? this.date : undefined,
+            enumerable: false,
+            writable: true,
+            configurable: true
+        });
         this.enabled = enabled;
         this.executionCount = executionCount;
         this.maxExecutions = maxExecutions;
         this.timezone = timezone || 'UTC';
+    }
+
+    /**
+     * False while the action still carries the wall-clock placeholder from a
+     * constructor call without a start date. `Streamer.registerAction`
+     * anchors such an action to the chain's current block time instead, so
+     * simulated or replayed chains schedule it correctly. Assigning `date`
+     * (or calling `reset`) makes the date explicit.
+     */
+    public get hasExplicitDate(): boolean {
+        return this.implicitDate === undefined || this.date !== this.implicitDate;
     }
 
     private validateTimeValue(timeValue: string): void {

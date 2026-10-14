@@ -45,6 +45,12 @@ describe('validateProjectName', () => {
         expect(validateProjectName('-leading')).not.toBeNull();
         expect(validateProjectName('a'.repeat(215))).not.toBeNull();
     });
+
+    test('rejects paths with a specific message', () => {
+        for (const name of ['.', '..', './my-app', 'apps/my-app', '../my-app', 'C:\\apps\\my-app']) {
+            expect(validateProjectName(name)).toBe('Project name must be a bare directory name, not a path.');
+        }
+    });
 });
 
 describe('validateHiveAccountName', () => {
@@ -211,6 +217,19 @@ describe('generateProjectFiles', () => {
         expect(sqlite.files['src/index.ts']).toContain('new SqliteAdapter()');
     });
 
+    test('derives a valid MongoDB database name from dotted project names', () => {
+        const mongo = generateProjectFiles({ ...baseOptions, name: 'my.app.v2', adapter: 'mongodb' });
+
+        expect(mongo.files['.env.example']).toContain('MONGODB_DATABASE=my_app_v2\n');
+        expect(mongo.files['src/index.ts']).toContain(`'my_app_v2'`);
+        expect(mongo.files['src/index.ts']).not.toContain(`?? 'my.app`);
+
+        const long = generateProjectFiles({ ...baseOptions, name: 'a'.repeat(100), adapter: 'mongodb' });
+        const database = /MONGODB_DATABASE=(.*)\n/.exec(long.files['.env.example'])![1];
+
+        expect(database.length).toBeLessThan(64);
+    });
+
     test('api flag switches env example and readme', () => {
         const withApi = generateProjectFiles({ ...baseOptions, api: true });
 
@@ -346,6 +365,15 @@ describe('CLI argument guardrails', () => {
 
         expect(result.status).toBe(0);
         expect(fs.existsSync(path.join(tmpDir, 'equals-app', 'package.json'))).toBe(true);
+    });
+
+    test('rejects a path as the project name with a specific message', () => {
+        const result = run(['new', './nested/app', '--yes']);
+
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain('must be a bare directory name, not a path');
+        expect(result.stderr).not.toContain('lowercase');
+        expect(fs.existsSync(path.join(tmpDir, 'nested'))).toBe(false);
     });
 
     test('rejects unknown flags instead of silently using defaults', () => {

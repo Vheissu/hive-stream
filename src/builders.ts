@@ -160,13 +160,13 @@ function buildAssetAmount(amount: string | number, symbol?: string): string {
     return Utils.formatAssetAmount(parsed.amount, parsed.symbol);
 }
 
-function normalizeEngineQuantity(quantity: string | number): string {
-    const normalized = String(quantity).trim();
-    if (!normalized) {
-        throw new Error('Quantity is required');
+function normalizeEngineQuantity(quantity: string | number, label: string = 'quantity'): string {
+    if (quantity === undefined || quantity === null || (typeof quantity === 'string' && quantity.trim() === '')) {
+        throw new Error(label === 'quantity' ? 'Quantity is required' : `${label[0].toUpperCase()}${label.slice(1)} is required`);
     }
 
-    return normalized;
+    // BigNumber formatting: no float noise (0.1 + 0.2) and no exponent (1e-7).
+    return Utils.formatEngineQuantity(quantity, label);
 }
 
 export class IncomingTransfersBuilder implements IncomingTransferFlowBuilder {
@@ -2024,7 +2024,7 @@ export class HiveEngineStakeBuilder implements EngineStakeBuilder {
     public from(account: string): this { this.state.from = account; return this; }
     public to(account: string): this { this.state.to = account; return this; }
     public symbol(symbol: string): this { this.state.symbol = symbol; return this; }
-    public quantity(quantity: string | number): this { this.state.quantity = String(quantity); return this; }
+    public quantity(quantity: string | number): this { this.state.quantity = normalizeEngineQuantity(quantity); return this; }
 
     public send(): any {
         if (!this.state.from || !this.state.symbol || !this.state.quantity) {
@@ -2041,7 +2041,7 @@ export class HiveEngineUnstakeBuilder implements EngineUnstakeBuilder {
 
     public from(account: string): this { this.state.from = account; return this; }
     public symbol(symbol: string): this { this.state.symbol = symbol; return this; }
-    public quantity(quantity: string | number): this { this.state.quantity = String(quantity); return this; }
+    public quantity(quantity: string | number): this { this.state.quantity = normalizeEngineQuantity(quantity); return this; }
 
     public send(): any {
         if (!this.state.from || !this.state.symbol || !this.state.quantity) {
@@ -2058,8 +2058,8 @@ export class HiveEngineMarketOrderBuilder implements EngineMarketOrderBuilder {
 
     public from(account: string): this { this.state.from = account; return this; }
     public symbol(symbol: string): this { this.state.symbol = symbol; return this; }
-    public quantity(quantity: string | number): this { this.state.quantity = String(quantity); return this; }
-    public price(price: string | number): this { this.state.price = String(price); return this; }
+    public quantity(quantity: string | number): this { this.state.quantity = normalizeEngineQuantity(quantity); return this; }
+    public price(price: string | number): this { this.state.price = normalizeEngineQuantity(price, 'price'); return this; }
 
     public send(): any {
         if (!this.state.from || !this.state.symbol || !this.state.quantity || !this.state.price) {
@@ -2097,7 +2097,7 @@ export class HiveEngineDelegateBuilder implements EngineDelegateBuilder {
     public from(account: string): this { this.state.from = account; return this; }
     public to(account: string): this { this.state.to = account; return this; }
     public symbol(symbol: string): this { this.state.symbol = symbol; return this; }
-    public quantity(quantity: string | number): this { this.state.quantity = String(quantity); return this; }
+    public quantity(quantity: string | number): this { this.state.quantity = normalizeEngineQuantity(quantity); return this; }
 
     public send(): any {
         if (!this.state.from || !this.state.to || !this.state.symbol || !this.state.quantity) {

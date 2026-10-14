@@ -53,6 +53,10 @@ export function validateProjectName(name: string): string | null {
         return 'Project name must be 214 characters or fewer.';
     }
 
+    if (name === '.' || name === '..' || /[\\/]/.test(name)) {
+        return 'Project name must be a bare directory name, not a path.';
+    }
+
     if (!NAME_PATTERN.test(name)) {
         return 'Project name must be lowercase and may only contain letters, numbers, dots, hyphens, and underscores.';
     }
@@ -178,7 +182,7 @@ function generateEnvExample(options: ScaffoldOptions, adapter: AdapterDefinition
 
     if (adapter.envLines.length > 0) {
         lines.push('');
-        lines.push(...adapter.envLines.map((line) => line.replace(/APP_NAME_PLACEHOLDER/g, envSafeName(options.name))));
+        lines.push(...adapter.envLines.map((line) => line.replace(/APP_NAME_PLACEHOLDER/g, databaseName(options.name))));
     }
 
     lines.push('');
@@ -198,8 +202,17 @@ function generateEnvExample(options: ScaffoldOptions, adapter: AdapterDefinition
     return lines.join('\n');
 }
 
-function envSafeName(name: string): string {
-    return name.replace(/[^a-z0-9_-]/g, '-');
+/**
+ * A database name derived from the project name that is valid for MongoDB
+ * (no dots, slashes, spaces or `$"*<>:|?`, under 64 bytes) and PostgreSQL.
+ */
+function databaseName(name: string): string {
+    const sanitized = name
+        .replace(/[^a-z0-9_-]/g, '_')
+        .slice(0, 63)
+        .replace(/^[-_]+|[-_]+$/g, '');
+
+    return sanitized || 'hive_stream_app';
 }
 
 function generateIndex(options: ScaffoldOptions, template: TemplateDefinition, adapter: AdapterDefinition): string {
@@ -213,14 +226,25 @@ function generateIndex(options: ScaffoldOptions, template: TemplateDefinition, a
     sections.push(`import { GreetingContract } from './contracts/greeting.contract';`);
     sections.push('');
     sections.push(`async function main() {`);
-    sections.push(`    const streamer = new Streamer({ env: true });`);
+    sections.push(`    const streamer = new Streamer({`);
+    sections.push(`        env: true,`);
+
+    if (template.refundRejectedTransfers) {
+        sections.push(`        // A bad bet is sent back instead of kept.`);
+        sections.push(`        refundRejectedTransfers: true`);
+    } else {
+        sections.push(`        // Uncomment to send back transfers whose contract action is rejected.`);
+        sections.push(`        // refundRejectedTransfers: true`);
+    }
+
+    sections.push(`    });`);
     sections.push(`    const HIVE_USERNAME = streamer.getConfig().USERNAME;`);
     sections.push('');
     sections.push(`    if (!HIVE_USERNAME) {`);
     sections.push(`        throw new Error('Set HIVE_USERNAME in .env before starting the app.');`);
     sections.push(`    }`);
     sections.push('');
-    sections.push(`    await streamer.registerAdapter(${adapter.construct.replace(/APP_NAME_PLACEHOLDER/g, envSafeName(options.name))});`);
+    sections.push(`    await streamer.registerAdapter(${adapter.construct.replace(/APP_NAME_PLACEHOLDER/g, databaseName(options.name))});`);
     sections.push('');
     sections.push(`    await streamer.registerContract(GreetingContract);`);
 

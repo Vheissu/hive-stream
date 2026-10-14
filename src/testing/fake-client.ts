@@ -118,6 +118,37 @@ export class FakeHiveClient {
         return this.broadcasts.filter((b) => b.type === 'operations').map((b) => b.data);
     }
 
+    /**
+     * Every operation of the given type the client was asked to broadcast,
+     * whether sent through its dedicated broadcast method (`transfer`,
+     * `custom_json`, `vote`) or inside a `sendOperations` batch, in order.
+     */
+    public operationsOfType(type: string): any[] {
+        const dedicated: Partial<Record<BroadcastType, string>> = {
+            transfer: 'transfer',
+            custom_json: 'custom_json',
+            vote: 'vote'
+        };
+        const found: any[] = [];
+
+        for (const broadcast of this.broadcasts) {
+            if (broadcast.type === 'operations') {
+                for (const operation of Array.isArray(broadcast.data) ? broadcast.data : []) {
+                    if (Array.isArray(operation) && operation[0] === type) {
+                        found.push(operation[1]);
+                    }
+                }
+                continue;
+            }
+
+            if (dedicated[broadcast.type] === type) {
+                found.push(broadcast.data);
+            }
+        }
+
+        return found;
+    }
+
     public reset(): void {
         this.broadcasts = [];
         this.trxCounter = 0;
