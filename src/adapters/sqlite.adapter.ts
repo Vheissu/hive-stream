@@ -1,7 +1,7 @@
 import { getLogger } from '../logger';
 import { TimeAction } from './../actions';
 import { ContractPayload, TransferMetadata, CustomJsonMetadata, ProcessedOperationRecord, operationRecordId } from './../types/hive-stream';
-import { AdapterBase } from './base.adapter';
+import { AdapterBase, ListOptions, RecordCounts } from './base.adapter';
 
 import { Knex, knex } from 'knex';
 import path from 'path';
@@ -250,10 +250,10 @@ export class SqliteAdapter extends AdapterBase {
         }
     }
 
-    public async getTransfers() {
+    public async getTransfers(options?: ListOptions) {
         try {
-            const rows = await this.db('transfers')
-                .select('id', 'blockId', 'blockNumber', 'sender', 'amount', 'contractName', 'contractAction', 'contractPayload');
+            const rows = await this.applyListOptions(this.db('transfers')
+                .select('id', 'blockId', 'blockNumber', 'sender', 'amount', 'contractName', 'contractAction', 'contractPayload'), options);
             
             if (rows.length) {
                 return rows.map(row => ({
@@ -269,10 +269,10 @@ export class SqliteAdapter extends AdapterBase {
         }
     }
 
-    public async getEvents() {
+    public async getEvents(options?: ListOptions) {
         try {
-            const rows = await this.db('events')
-                .select('id', 'date', 'contract', 'action', 'payload', 'data');
+            const rows = await this.applyListOptions(this.db('events')
+                .select('id', 'date', 'contract', 'action', 'payload', 'data'), options);
             
             if (rows.length) {
                 return rows.map(row => ({
@@ -391,10 +391,10 @@ export class SqliteAdapter extends AdapterBase {
         }
     }
 
-    public async getJson() {
+    public async getJson(options?: ListOptions) {
         try {
-            const rows = await this.db('customJson')
-                .select('id', 'blockId', 'blockNumber', 'sender', 'isSignedWithActiveKey', 'contractName', 'contractAction', 'contractPayload');
+            const rows = await this.applyListOptions(this.db('customJson')
+                .select('id', 'blockId', 'blockNumber', 'sender', 'isSignedWithActiveKey', 'contractName', 'contractAction', 'contractPayload'), options);
             
             if (rows.length) {
                 return rows.map(row => ({
@@ -636,6 +636,33 @@ export class SqliteAdapter extends AdapterBase {
             transactionAdapter.db = trx as unknown as Knex;
             return work(transactionAdapter);
         });
+    }
+
+
+    private applyListOptions(query: any, options?: ListOptions) {
+        if (options?.limit !== undefined) {
+            query = query.limit(options.limit);
+        }
+
+        if (options?.offset !== undefined) {
+            query = query.offset(options.offset);
+        }
+
+        return query;
+    }
+
+    public async getCounts(): Promise<RecordCounts> {
+        const [transfers, customJson, events] = await Promise.all([
+            this.db('transfers').count({ count: '*' }).first(),
+            this.db('customJson').count({ count: '*' }).first(),
+            this.db('events').count({ count: '*' }).first()
+        ]);
+
+        return {
+            transfers: Number(transfers?.count ?? 0),
+            customJson: Number(customJson?.count ?? 0),
+            events: Number(events?.count ?? 0)
+        };
     }
 
     public async hasProcessedOperation(key: string): Promise<boolean> {

@@ -1,6 +1,20 @@
+/**
+ * Keys for an additional app account. Transfers to it run contract actions,
+ * and broadcasts from it are signed with its own keys. A missing key falls
+ * back to the streamer's default key (for accounts that granted the app
+ * account authority).
+ */
+export interface AccountCredentials {
+    name: string;
+    activeKey?: string;
+    postingKey?: string;
+}
+
 export interface ConfigInterface {
     ACTIVE_KEY: string;
     POSTING_KEY: string;
+    /** Additional app accounts (the primary one is USERNAME). Env: HIVE_ACCOUNTS as a JSON array. */
+    ACCOUNTS: AccountCredentials[];
     JSON_ID: string;
     HIVE_ENGINE_API: string;
     HIVE_ENGINE_ID: string;
@@ -16,6 +30,8 @@ export interface ConfigInterface {
     API_NODES: string[];
     API_ENABLED: boolean;
     API_PORT: number;
+    /** Interface the built-in API binds to. Defaults to loopback; set `0.0.0.0` to expose it (put auth in front of it first). */
+    API_HOST: string;
     DEBUG_MODE: boolean;
     /** `irreversible` (default) only processes blocks at or below the last irreversible block; `head` follows the head block and handles forks. */
     STREAM_MODE: StreamMode;
@@ -36,6 +52,12 @@ export interface ConfigInterface {
     API_TIMEOUT_MS: number;
     /** How far back (in blocks) the streamer searches for a common ancestor after a fork. */
     MAX_FORK_DEPTH: number;
+    /**
+     * Send back transfers addressed to the app account whose contract action was
+     * rejected (invalid payload, guard, trigger, pause, veto). Off by default;
+     * turn it on for apps that take payments so a bad bet is never kept.
+     */
+    REFUND_REJECTED_TRANSFERS: boolean;
 }
 
 export type StreamMode = 'irreversible' | 'head';
@@ -62,6 +84,7 @@ export interface ConfigInput extends Partial<ConfigInterface> {
     env?: boolean | EnvConfigOptions;
     activeKey?: ConfigInterface['ACTIVE_KEY'];
     postingKey?: ConfigInterface['POSTING_KEY'];
+    accounts?: ConfigInterface['ACCOUNTS'];
     jsonId?: ConfigInterface['JSON_ID'];
     hiveEngineApi?: ConfigInterface['HIVE_ENGINE_API'];
     hiveEngineId?: ConfigInterface['HIVE_ENGINE_ID'];
@@ -79,6 +102,7 @@ export interface ConfigInput extends Partial<ConfigInterface> {
     apiNodes?: ConfigInterface['API_NODES'];
     apiEnabled?: ConfigInterface['API_ENABLED'];
     apiPort?: ConfigInterface['API_PORT'];
+    apiHost?: ConfigInterface['API_HOST'];
     debugMode?: ConfigInterface['DEBUG_MODE'];
     streamMode?: ConfigInterface['STREAM_MODE'];
     checkpointMode?: ConfigInterface['CHECKPOINT_MODE'];
@@ -92,6 +116,7 @@ export interface ConfigInput extends Partial<ConfigInterface> {
     retryMaxDelayMs?: ConfigInterface['RETRY_MAX_DELAY_MS'];
     apiTimeoutMs?: ConfigInterface['API_TIMEOUT_MS'];
     maxForkDepth?: ConfigInterface['MAX_FORK_DEPTH'];
+    refundRejectedTransfers?: ConfigInterface['REFUND_REJECTED_TRANSFERS'];
 }
 
 type ConfigAliasKey = keyof Omit<ConfigInput, keyof ConfigInterface | 'blockProvider' | 'client' | 'logger' | 'hooks' | 'env'>;
@@ -99,6 +124,7 @@ type ConfigAliasKey = keyof Omit<ConfigInput, keyof ConfigInterface | 'blockProv
 const CONFIG_KEYS: Array<keyof ConfigInterface> = [
     'ACTIVE_KEY',
     'POSTING_KEY',
+    'ACCOUNTS',
     'JSON_ID',
     'HIVE_ENGINE_API',
     'HIVE_ENGINE_ID',
@@ -114,6 +140,7 @@ const CONFIG_KEYS: Array<keyof ConfigInterface> = [
     'API_NODES',
     'API_ENABLED',
     'API_PORT',
+    'API_HOST',
     'DEBUG_MODE',
     'STREAM_MODE',
     'CHECKPOINT_MODE',
@@ -126,11 +153,13 @@ const CONFIG_KEYS: Array<keyof ConfigInterface> = [
     'RETRY_MAX_DELAY_MS',
     'API_TIMEOUT_MS',
     'MAX_FORK_DEPTH',
+    'REFUND_REJECTED_TRANSFERS',
 ];
 
 export const CONFIG_KEY_ALIASES: Record<ConfigAliasKey, keyof ConfigInterface> = {
     activeKey: 'ACTIVE_KEY',
     postingKey: 'POSTING_KEY',
+    accounts: 'ACCOUNTS',
     jsonId: 'JSON_ID',
     hiveEngineApi: 'HIVE_ENGINE_API',
     hiveEngineId: 'HIVE_ENGINE_ID',
@@ -148,6 +177,7 @@ export const CONFIG_KEY_ALIASES: Record<ConfigAliasKey, keyof ConfigInterface> =
     apiNodes: 'API_NODES',
     apiEnabled: 'API_ENABLED',
     apiPort: 'API_PORT',
+    apiHost: 'API_HOST',
     debugMode: 'DEBUG_MODE',
     streamMode: 'STREAM_MODE',
     checkpointMode: 'CHECKPOINT_MODE',
@@ -161,11 +191,13 @@ export const CONFIG_KEY_ALIASES: Record<ConfigAliasKey, keyof ConfigInterface> =
     retryMaxDelayMs: 'RETRY_MAX_DELAY_MS',
     apiTimeoutMs: 'API_TIMEOUT_MS',
     maxForkDepth: 'MAX_FORK_DEPTH',
+    refundRejectedTransfers: 'REFUND_REJECTED_TRANSFERS',
 };
 
 export const Config: ConfigInterface = {
     ACTIVE_KEY: '',
     POSTING_KEY: '',
+    ACCOUNTS: [],
 
     JSON_ID: DEFAULT_CONTRACT_JSON_ID,
 
@@ -189,6 +221,7 @@ export const Config: ConfigInterface = {
     API_NODES: ['https://api.hive.blog', 'https://api.openhive.network', 'https://rpc.ausbit.dev'],
     API_ENABLED: false,
     API_PORT: 5001,
+    API_HOST: '127.0.0.1',
 
     DEBUG_MODE: false,
 
@@ -203,11 +236,13 @@ export const Config: ConfigInterface = {
     RETRY_MAX_DELAY_MS: 30000,
     API_TIMEOUT_MS: 10000,
     MAX_FORK_DEPTH: 20,
+    REFUND_REJECTED_TRANSFERS: false,
 };
 
 const ENV_VALUE_ALIASES: Record<keyof ConfigInterface, string[]> = {
     ACTIVE_KEY: ['HIVE_ACTIVE_KEY', 'ACTIVE_KEY'],
     POSTING_KEY: ['HIVE_POSTING_KEY', 'POSTING_KEY'],
+    ACCOUNTS: ['HIVE_ACCOUNTS'],
     JSON_ID: ['JSON_ID'],
     HIVE_ENGINE_API: ['HIVE_ENGINE_API'],
     HIVE_ENGINE_ID: ['HIVE_ENGINE_ID'],
@@ -223,6 +258,7 @@ const ENV_VALUE_ALIASES: Record<keyof ConfigInterface, string[]> = {
     API_NODES: ['API_NODES'],
     API_ENABLED: ['API_ENABLED'],
     API_PORT: ['API_PORT'],
+    API_HOST: ['API_HOST'],
     DEBUG_MODE: ['DEBUG_MODE'],
     STREAM_MODE: ['STREAM_MODE'],
     CHECKPOINT_MODE: ['CHECKPOINT_MODE'],
@@ -235,15 +271,31 @@ const ENV_VALUE_ALIASES: Record<keyof ConfigInterface, string[]> = {
     RETRY_MAX_DELAY_MS: ['RETRY_MAX_DELAY_MS'],
     API_TIMEOUT_MS: ['API_TIMEOUT_MS'],
     MAX_FORK_DEPTH: ['MAX_FORK_DEPTH'],
+    REFUND_REJECTED_TRANSFERS: ['REFUND_REJECTED_TRANSFERS'],
 };
 
-function parseBoolean(value: string): boolean {
-    return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
+/**
+ * Env values that don't parse are passed through as-is so validateConfig()
+ * reports them, instead of silently becoming `false` or a default.
+ */
+function parseBoolean(value: string): boolean | string {
+    const normalized = value.trim().toLowerCase();
+
+    if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+        return true;
+    }
+
+    if (['0', 'false', 'no', 'off'].includes(normalized)) {
+        return false;
+    }
+
+    return value;
 }
 
-function parseNumber(value: string, fallback: number): number {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
+function parseNumber(value: string): number | string {
+    const trimmed = value.trim();
+    const parsed = Number(trimmed);
+    return trimmed !== '' && Number.isFinite(parsed) ? parsed : value;
 }
 
 function parseStringArray(value: string, fallback: string[]): string[] {
@@ -265,7 +317,11 @@ export function readEnvConfig(): Partial<ConfigInterface> {
     const envRecord = envConfig as Record<keyof ConfigInterface, ConfigInterface[keyof ConfigInterface]>;
 
     for (const key of CONFIG_KEYS) {
-        const envKeys = ENV_VALUE_ALIASES[key];
+        // Windows always sets USERNAME to the OS login, so a bare USERNAME is
+        // never treated as the Hive account there. Use HIVE_ACCOUNT instead.
+        const envKeys = key === 'USERNAME' && process.platform === 'win32'
+            ? ENV_VALUE_ALIASES[key].filter((envKey) => envKey !== 'USERNAME')
+            : ENV_VALUE_ALIASES[key];
         const value = envKeys
             .map((envKey) => process.env[envKey])
             .find((entry) => entry !== undefined && entry !== '');
@@ -288,18 +344,28 @@ export function readEnvConfig(): Partial<ConfigInterface> {
             case 'RETRY_MAX_DELAY_MS':
             case 'API_TIMEOUT_MS':
             case 'MAX_FORK_DEPTH':
-                envRecord[key] = parseNumber(value, Config[key]) as ConfigInterface[typeof key];
+                envRecord[key] = parseNumber(value) as ConfigInterface[typeof key];
                 break;
 
             case 'RESUME_FROM_STATE':
             case 'API_ENABLED':
             case 'DEBUG_MODE':
             case 'IDEMPOTENCY_ENABLED':
+            case 'REFUND_REJECTED_TRANSFERS':
                 envRecord[key] = parseBoolean(value) as ConfigInterface[typeof key];
                 break;
 
             case 'API_NODES':
                 envRecord[key] = parseStringArray(value, Config.API_NODES) as ConfigInterface[typeof key];
+                break;
+
+            case 'ACCOUNTS':
+                // JSON array of { name, activeKey?, postingKey? }; left as-is for validation when malformed.
+                try {
+                    envRecord[key] = JSON.parse(value) as ConfigInterface[typeof key];
+                } catch {
+                    envRecord[key] = value as unknown as ConfigInterface[typeof key];
+                }
                 break;
 
             case 'STREAM_MODE':
@@ -453,6 +519,7 @@ export function validateConfig(config: ConfigInterface): void {
     checkBoolean('API_ENABLED');
     checkBoolean('DEBUG_MODE');
     checkBoolean('IDEMPOTENCY_ENABLED');
+    checkBoolean('REFUND_REJECTED_TRANSFERS');
 
     checkEnum('STREAM_MODE', STREAM_MODES);
     checkEnum('CHECKPOINT_MODE', CHECKPOINT_MODES);
@@ -461,6 +528,7 @@ export function validateConfig(config: ConfigInterface): void {
     checkNonEmptyString('JSON_ID');
     checkNonEmptyString('PAYLOAD_IDENTIFIER');
     checkNonEmptyString('HIVE_ENGINE_ID');
+    checkNonEmptyString('API_HOST');
 
     if (!isHttpUrl(config.HIVE_ENGINE_API)) {
         problems.push(`HIVE_ENGINE_API must be an http(s) URL (received ${JSON.stringify(config.HIVE_ENGINE_API)})`);
@@ -480,6 +548,31 @@ export function validateConfig(config: ConfigInterface): void {
         if (config[key] !== undefined && config[key] !== null && typeof config[key] !== 'string') {
             problems.push(`${key} must be a string`);
         }
+    }
+
+    if (!Array.isArray(config.ACCOUNTS)) {
+        problems.push(`ACCOUNTS must be an array of { name, activeKey?, postingKey? } (received ${JSON.stringify(config.ACCOUNTS)})`);
+    } else {
+        const seen = new Set<string>();
+
+        config.ACCOUNTS.forEach((entry, index) => {
+            if (!entry || typeof entry !== 'object' || typeof entry.name !== 'string' || !entry.name.trim()) {
+                problems.push(`ACCOUNTS[${index}] must have a non-empty name`);
+                return;
+            }
+
+            if (seen.has(entry.name)) {
+                problems.push(`ACCOUNTS lists '${entry.name}' more than once`);
+            }
+
+            seen.add(entry.name);
+
+            for (const keyName of ['activeKey', 'postingKey'] as const) {
+                if (entry[keyName] !== undefined && typeof entry[keyName] !== 'string') {
+                    problems.push(`ACCOUNTS[${index}].${keyName} must be a string`);
+                }
+            }
+        });
     }
 
     if (problems.length > 0) {

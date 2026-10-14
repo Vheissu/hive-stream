@@ -2,6 +2,18 @@ import { TimeAction } from './../actions';
 import { ContractPayload, TransferMetadata, CustomJsonMetadata, EscrowOperationType, OperationMetadata, ProcessedOperationRecord } from './../types/hive-stream';
 import { SignedBlock } from '@hiveio/dhive';
 
+/** Paging for the adapter's list methods (`getTransfers`, `getJson`, `getEvents`). */
+export interface ListOptions {
+    limit?: number;
+    offset?: number;
+}
+
+export interface RecordCounts {
+    transfers: number;
+    customJson: number;
+    events: number;
+}
+
 export class AdapterBase {
     protected client: any = null;
     /**
@@ -123,8 +135,13 @@ export class AdapterBase {
         return true;
     }
 
-    public async getEvents(): Promise<any[]> {
+    public async getEvents(options?: ListOptions): Promise<any[]> {
         return [];
+    }
+
+    /** Row counts for the API's /stats endpoint. Return null if counting isn't supported. */
+    public async getCounts(): Promise<RecordCounts | null> {
+        return null;
     }
 
     public async getEventsByContract(contract: string): Promise<any[]> {

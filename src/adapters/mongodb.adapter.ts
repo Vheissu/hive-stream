@@ -1,7 +1,7 @@
 import { getLogger } from '../logger';
 import { TimeAction } from './../actions';
 import { ContractPayload, TransferMetadata, CustomJsonMetadata, ProcessedOperationRecord, operationRecordId } from './../types/hive-stream';
-import { AdapterBase } from './base.adapter';
+import { AdapterBase, ListOptions, RecordCounts } from './base.adapter';
 
 import * as os from 'os';
 import type { MongoClient, Db } from 'mongodb';
@@ -57,6 +57,8 @@ export class MongodbAdapter extends AdapterBase {
         await this.getDbInstance();
         await this.db.collection('processed_operations').createIndex({ key: 1 }, { unique: true });
         await this.db.collection('processed_operations').createIndex({ blockNumber: 1 });
+        await this.db.collection('transfers').createIndex({ id: 1 }, { unique: true });
+        await this.db.collection('customJson').createIndex({ id: 1 }, { unique: true });
         return true;
     }
 
@@ -153,7 +155,8 @@ export class MongodbAdapter extends AdapterBase {
             contractPayload: payload.payload
         };
 
-        await collection.insertOne(data);
+        // A replayed block must not store the operation twice.
+        await collection.updateOne({ id: data.id }, { $setOnInsert: data }, { upsert: true });
 
         return true;
     }
@@ -176,7 +179,8 @@ export class MongodbAdapter extends AdapterBase {
             contractPayload: payload.payload
         };
 
-        await collection.insertOne(data);
+        // A replayed block must not store the operation twice.
+        await collection.updateOne({ id: data.id }, { $setOnInsert: data }, { upsert: true });
 
         return true;
     }
@@ -237,6 +241,33 @@ export class MongodbAdapter extends AdapterBase {
         return data;
     }
 
+
+    private applyListOptions(cursor: any, options?: ListOptions) {
+        if (options?.offset !== undefined) {
+            cursor = cursor.skip(options.offset);
+        }
+
+        if (options?.limit !== undefined) {
+            cursor = cursor.limit(options.limit);
+        }
+
+        return cursor;
+    }
+
+    public async getCounts(): Promise<RecordCounts> {
+        if (!this.db) {
+            await this.getDbInstance();
+        }
+
+        const [transfers, customJson, events] = await Promise.all([
+            this.db.collection('transfers').countDocuments(),
+            this.db.collection('customJson').countDocuments(),
+            this.db.collection('events').countDocuments()
+        ]);
+
+        return { transfers, customJson, events };
+    }
+
     public async hasProcessedOperation(key: string): Promise<boolean> {
         if (!this.db) {
             await this.getDbInstance();
@@ -293,14 +324,14 @@ export class MongodbAdapter extends AdapterBase {
         }
     }
 
-    public async getEvents(): Promise<any[]> {
+    public async getEvents(options?: ListOptions): Promise<any[]> {
         try {
             if (!this.db) {
                 await this.getDbInstance();
             }
 
             const collection = this.db.collection('events');
-            const events = await collection.find({}).sort({ date: -1, _id: -1 }).toArray();
+            const events = await this.applyListOptions(collection.find({}).sort({ date: -1, _id: -1 }), options).toArray();
             
             return events.length ? events : [];
         } catch (error) {
@@ -348,14 +379,14 @@ export class MongodbAdapter extends AdapterBase {
         }
     }
 
-    public async getTransfers(): Promise<any[]> {
+    public async getTransfers(options?: ListOptions): Promise<any[]> {
         try {
             if (!this.db) {
                 await this.getDbInstance();
             }
 
             const collection = this.db.collection('transfers');
-            const transfers = await collection.find({}).sort({ blockNumber: -1, _id: -1 }).toArray();
+            const transfers = await this.applyListOptions(collection.find({}).sort({ blockNumber: -1, _id: -1 }), options).toArray();
             
             return transfers.length ? transfers : [];
         } catch (error) {
@@ -412,14 +443,14 @@ export class MongodbAdapter extends AdapterBase {
         }
     }
 
-    public async getJson(): Promise<any[]> {
+    public async getJson(options?: ListOptions): Promise<any[]> {
         try {
             if (!this.db) {
                 await this.getDbInstance();
             }
 
             const collection = this.db.collection('customJson');
-            const jsons = await collection.find({}).sort({ blockNumber: -1, _id: -1 }).toArray();
+            const jsons = await this.applyListOptions(collection.find({}).sort({ blockNumber: -1, _id: -1 }), options).toArray();
             
             return jsons.length ? jsons : [];
         } catch (error) {

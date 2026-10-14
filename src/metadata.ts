@@ -247,6 +247,20 @@ export const HIVE_STREAM_METADATA: Readonly<HiveStreamMetadata> = deepFreeze({
                 description: 'Port used by the built-in HTTP API server.'
             },
             {
+                key: 'API_HOST',
+                builderKey: 'apiHost',
+                type: 'string',
+                defaultValue: Config.API_HOST,
+                description: 'Interface the built-in HTTP API binds to. Loopback by default; the API has no authentication.'
+            },
+            {
+                key: 'REFUND_REJECTED_TRANSFERS',
+                builderKey: 'refundRejectedTransfers',
+                type: 'boolean',
+                defaultValue: Config.REFUND_REJECTED_TRANSFERS,
+                description: 'Send back transfers to the app account whose contract action was rejected (invalid payload, guard, pause, veto).'
+            },
+            {
                 key: 'DEBUG_MODE',
                 builderKey: 'debugMode',
                 type: 'boolean',
@@ -259,7 +273,7 @@ export const HIVE_STREAM_METADATA: Readonly<HiveStreamMetadata> = deepFreeze({
         {
             method: 'onTransfer',
             signature: 'onTransfer(account: string, callback)',
-            callbackSignature: '(op, blockNumber, blockId, prevBlockId, trxId, blockTime) => void',
+            callbackSignature: '(op, blockNumber, blockId, prevBlockId, trxId, blockTime, operationIndex) => void',
             description: 'Fires when transfer recipient matches account.',
             requiresStart: true,
             accountFilterBuiltIn: true

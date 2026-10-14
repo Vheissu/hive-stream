@@ -95,6 +95,13 @@ export interface ContractContext extends ContractLifecycleContext {
 export interface ContractActionGuards {
     /** Only these accounts may call the action. */
     allowedSenders?: string[];
+    /**
+     * Accounts a transfer must be addressed to before a transfer-triggered
+     * action runs. Defaults to the streamer username, so a payment between
+     * two other accounts never runs your handler. Pass `['*']` to accept
+     * transfers to any account (the handler must then check `ctx.transfer.to`).
+     */
+    allowedRecipients?: string[];
     /** These accounts may never call the action. */
     blockedSenders?: string[];
     /** Accepted asset symbols, e.g. ['HIVE', 'HBD']. */
@@ -232,6 +239,8 @@ export interface TransferEvent {
     };
     transaction: {
         id: string;
+        /** Position of the transfer inside its transaction; set when the event comes from the block loop. */
+        operationIndex?: number;
     };
 }
 

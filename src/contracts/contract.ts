@@ -38,7 +38,7 @@ export function validateGuards(label: string, guards: ContractActionGuards | und
         throw new Error(`${label} guards must be an object`);
     }
 
-    const known = new Set(['allowedSenders', 'blockedSenders', 'allowedAssets', 'minAmount', 'maxAmount', 'rateLimit', 'paused']);
+    const known = new Set(['allowedSenders', 'allowedRecipients', 'blockedSenders', 'allowedAssets', 'minAmount', 'maxAmount', 'rateLimit', 'paused']);
 
     for (const key of Object.keys(guards)) {
         if (!known.has(key)) {
@@ -48,6 +48,10 @@ export function validateGuards(label: string, guards: ContractActionGuards | und
 
     if (guards.allowedSenders !== undefined) {
         validateStringList(`${label} guards.allowedSenders`, guards.allowedSenders);
+    }
+
+    if (guards.allowedRecipients !== undefined) {
+        validateStringList(`${label} guards.allowedRecipients`, guards.allowedRecipients);
     }
 
     if (guards.blockedSenders !== undefined) {

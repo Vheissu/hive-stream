@@ -44,6 +44,36 @@ export type ContractCustomJsonOperation = [
     }
 ];
 
+export interface ContractEscrowTransferOptions extends ContractPayloadOptions {
+    from: string;
+    to: string;
+    agent: string;
+    /** Chosen by the buyer; unique among their open escrows. */
+    escrowId: number;
+    hiveAmount?: string;
+    hbdAmount?: string;
+    /** The agent's fee, in HIVE or HBD. */
+    fee: string;
+    ratificationDeadline: string | Date;
+    expiration: string | Date;
+}
+
+export type ContractEscrowTransferOperation = [
+    'escrow_transfer',
+    {
+        from: string;
+        to: string;
+        agent: string;
+        escrow_id: number;
+        hive_amount: string;
+        hbd_amount: string;
+        fee: string;
+        ratification_deadline: string;
+        escrow_expiration: string;
+        json_meta: string;
+    }
+];
+
 export type ContractTransferOperation = [
     'transfer',
     {
@@ -199,6 +229,29 @@ function normalizeTransferAmount(amount: string): string {
     return amount;
 }
 
+function normalizeEscrowAmount(amount: string | undefined, symbol: 'HIVE' | 'HBD'): string {
+    if (amount === undefined) {
+        return `0.000 ${symbol}`;
+    }
+
+    if (typeof amount !== 'string' || !new RegExp(`^\\d+\\.\\d{3} ${symbol}$`).test(amount)) {
+        throw new Error(`${symbol.toLowerCase()}Amount must be an asset string like '1.000 ${symbol}'`);
+    }
+
+    return amount;
+}
+
+/** Hive wants escrow timestamps as ISO strings without a timezone suffix, to the second. */
+function normalizeEscrowTime(value: string | Date, label: string): string {
+    const date = value instanceof Date ? value : new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        throw new Error(`${label} must be a valid date`);
+    }
+
+    return date.toISOString().replace(/\.\d{3}Z$/, '');
+}
+
 function serializeContractPayload<Payload, Meta>(
     call: ContractCallInput<Payload, Meta>,
     options: ContractPayloadOptions = {}
@@ -267,6 +320,60 @@ export function createContractTransferOperation<Payload = Record<string, unknown
             to: normalizeHiveAccountName(options.to, 'to'),
             amount: normalizeTransferAmount(options.amount),
             memo: serializeContractPayload(call, options)
+        }
+    ];
+}
+
+/**
+ * Builds the `escrow_transfer` a buyer signs to open an escrow whose
+ * `json_meta` carries a contract call, so the app (as agent) can run the
+ * named action when the escrow lands. The buyer signs it with their own
+ * active key, for example through Hive Keychain's `requestBroadcast`.
+ */
+export function createContractEscrowTransferOperation<Payload = Record<string, unknown>, Meta = Record<string, unknown>>(
+    call: ContractCallInput<Payload, Meta>,
+    options: ContractEscrowTransferOptions
+): ContractEscrowTransferOperation {
+    const from = normalizeHiveAccountName(options.from, 'from');
+    const to = normalizeHiveAccountName(options.to, 'to');
+    const agent = normalizeHiveAccountName(options.agent, 'agent');
+
+    if (from === to || from === agent || to === agent) {
+        throw new Error('from, to and agent must be three different accounts');
+    }
+
+    if (!Number.isInteger(options.escrowId) || options.escrowId < 0 || options.escrowId > 4294967295) {
+        throw new Error('escrowId must be an unsigned 32-bit integer');
+    }
+
+    const hiveAmount = normalizeEscrowAmount(options.hiveAmount, 'HIVE');
+    const hbdAmount = normalizeEscrowAmount(options.hbdAmount, 'HBD');
+
+    if (!/[1-9]/.test(hiveAmount.replace(' HIVE', '')) && !/[1-9]/.test(hbdAmount.replace(' HBD', ''))) {
+        throw new Error('an escrow needs a HIVE or HBD amount greater than zero');
+    }
+
+    const fee = normalizeTransferAmount(options.fee);
+    const ratificationDeadline = normalizeEscrowTime(options.ratificationDeadline, 'ratificationDeadline');
+    const expiration = normalizeEscrowTime(options.expiration, 'expiration');
+
+    if (expiration <= ratificationDeadline) {
+        throw new Error('expiration must be after ratificationDeadline');
+    }
+
+    return [
+        'escrow_transfer',
+        {
+            from,
+            to,
+            agent,
+            escrow_id: options.escrowId,
+            hive_amount: hiveAmount,
+            hbd_amount: hbdAmount,
+            fee,
+            ratification_deadline: ratificationDeadline,
+            escrow_expiration: expiration,
+            json_meta: serializeContractPayload(call, options)
         }
     ];
 }
@@ -388,7 +495,8 @@ export function validateContractCall<Payload = unknown>(
         });
     }
 
-    let payload = (call.payload ?? {}) as Payload;
+    const rawPayload = (call.payload ?? {}) as Payload;
+    let payload = rawPayload;
 
     if (actionDefinition.schema) {
         try {
@@ -420,7 +528,8 @@ export function validateContractCall<Payload = unknown>(
     }
 
     try {
-        assertJsonValue(payload, 'payload');
+        // The raw payload is what gets broadcast, so that is what must be JSON.
+        assertJsonValue(rawPayload, 'payload');
         if (call.meta !== undefined) {
             assertJsonValue(call.meta, 'meta');
         }
@@ -501,8 +610,14 @@ export class ContractCaller<Definition extends ContractCallDefinition> {
         options: ContractCallerCustomJsonOptions<Meta> = {}
     ): ContractCustomJsonOperation {
         const actionDefinition = this.definition.actions[action];
+
+        if (!actionDefinition) {
+            // Let validation report unknown_action instead of a TypeError below.
+            this.prepare(action, payload, { trigger: 'custom_json' });
+        }
+
         const authority = options.authority === undefined || options.authority === 'auto'
-            ? (actionDefinition.requiresActiveKey ? 'active' : 'posting')
+            ? (actionDefinition?.requiresActiveKey ? 'active' : 'posting')
             : options.authority;
         const prepared = this.prepare(action, payload, {
             trigger: 'custom_json',
@@ -556,7 +671,10 @@ export class ContractCaller<Definition extends ContractCallDefinition> {
             throw new ContractCallValidationError(this.definition.name, action, result.issues);
         }
 
-        return result.payload;
+        // Serialise what the caller passed, not the schema's parsed output:
+        // the contract re-parses it on-chain, and output from .transform() or
+        // .default() may not be valid input for the same schema.
+        return (payload ?? {}) as ContractActionPayload<Definition, ActionName>;
     }
 }
 

@@ -75,11 +75,15 @@ describe('SQLite utility contract integration', () => {
         dbPath = path.join(tempDir, 'utility-contracts.sqlite');
 
         streamer = new Streamer({
+            USERNAME: 'app.contract',
             JSON_ID: 'hivestream',
             PAYLOAD_IDENTIFIER: 'hive_stream'
         });
         adapter = new SqliteAdapter(dbPath);
         await streamer.registerAdapter(adapter);
+
+        // Claim payouts broadcast from the app account; keep them off the network.
+        jest.spyOn(streamer, 'transferHiveTokens').mockResolvedValue(true as any);
 
         await streamer.registerContract(createInsurancePoolContract({ name: 'insurancepool' }));
         await streamer.registerContract(createOracleBountyContract({ name: 'oraclebounty' }));
@@ -320,6 +324,7 @@ describe('SQLite utility contract integration', () => {
 
         expect(insuranceClaims[0].status).toBe('approved');
         expect(insuranceClaims[0].approved_amount).toBe('25.000');
+        expect(streamer.transferHiveTokens).toHaveBeenCalledWith('app.contract', 'bob', '25.000', 'HBD', 'Insurance claim payout: claim-live');
         expect(oracleRounds[0].median_value).toBe(101);
         expect(oracleRounds[0].status).toBe('finalized');
         expect(grantProject[0].matching_award).toBe('40');

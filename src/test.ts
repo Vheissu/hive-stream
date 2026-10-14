@@ -6,7 +6,10 @@ import { createDiceContract } from './contracts/dice.contract';
 import { createCoinflipContract } from './contracts/coinflip.contract';
 import { SqliteAdapter } from './adapters/sqlite.adapter';
 
+// env: true reads USERNAME, ACTIVE_KEY and POSTING_KEY from .env; the built-in
+// games use the username as their house account.
 const streamer = new Streamer({
+    env: true,
     JSON_ID: 'hivestream',
     PAYLOAD_IDENTIFIER: 'hive_stream'
 });

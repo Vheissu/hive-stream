@@ -105,6 +105,7 @@ describeIfPostgres('PostgreSQL contract parity', () => {
 
     const buildStreamer = async (adapter: SqliteAdapter | PostgreSQLAdapter) => {
         const streamer = new Streamer({
+            USERNAME: 'app.contract',
             JSON_ID: 'hivestream',
             PAYLOAD_IDENTIFIER: 'hive_stream'
         });

@@ -47,7 +47,7 @@ import {
     HiveCommunityOperationBuilder,
     IncomingTransfersBuilder
 } from './builders';
-import { ConfigInput, ConfigInterface, createConfig, normalizeConfigInput } from './config';
+import { ConfigInput, ConfigInterface, createConfig, normalizeConfigInput, AccountCredentials } from './config';
 import { BlockData, BlockProvider } from './providers/block-provider';
 import { HiveEngineClient } from './providers/hive-engine-client';
 import { HiveProvider, createClientOptions } from './providers/hive-provider';
@@ -132,6 +132,18 @@ interface ProcessingAction {
     pending: boolean;
 }
 
+/** Operations that need the active authority; everything else signs with posting. */
+const ACTIVE_AUTHORITY_OPERATIONS = new Set([
+    'transfer', 'transfer_to_vesting', 'withdraw_vesting', 'delegate_vesting_shares',
+    'transfer_to_savings', 'transfer_from_savings', 'cancel_transfer_from_savings',
+    'convert', 'collateralized_convert', 'limit_order_create', 'limit_order_create2',
+    'limit_order_cancel', 'escrow_transfer', 'escrow_approve', 'escrow_dispute',
+    'escrow_release', 'account_update', 'account_witness_vote', 'account_witness_proxy',
+    'set_withdraw_vesting_route', 'claim_account', 'create_claimed_account',
+    'create_proposal', 'update_proposal_votes', 'remove_proposal', 'recurrent_transfer',
+    'feed_publish', 'account_update2', 'claim_reward_balance'
+]);
+
 export class Streamer {
     private customJsonSubscriptions: SubscriptionCallback[] = [];
     private customJsonIdSubscriptions: CustomJsonIdSubscription[] = [];
@@ -139,6 +151,7 @@ export class Streamer {
     private commentSubscriptions: SubscriptionCallback[] = [];
     private postSubscriptions: SubscriptionCallback[] = [];
     private transferSubscriptions: TransferSubscription[] = [];
+    private accountKeys = new Map<string, { activeKey?: string; postingKey?: string }>();
     private escrowSubscriptions: EscrowSubscription[] = [];
     private voteSubscriptions: SubscriptionCallback[] = [];
     private delegateSubscriptions: SubscriptionCallback[] = [];
@@ -433,6 +446,7 @@ export class Streamer {
         this.username = this.config.USERNAME;
         this.postingKey = this.config.POSTING_KEY;
         this.activeKey = this.config.ACTIVE_KEY;
+        this.syncAccountKeys();
 
         this.hive = new HiveEngineClient(this.config.HIVE_ENGINE_API);
         this.hasInjectedClient = Boolean(userConfig.client);
@@ -542,6 +556,9 @@ export class Streamer {
 
         this.halted = true;
         this.disableAllProcessing = true;
+        // Not started any more: an operator fixes the cause and calls start()
+        // (or processPendingBlocks()) to resume at the failed block.
+        this.isStarted = false;
         this.lastError = { message: err.message, phase, blockNumber: meta.blockNumber, at: new Date() };
         this.clearRuntimeTimers();
 
@@ -667,7 +684,8 @@ export class Streamer {
         blockId: string,
         prevBlockId: string,
         trxId: string,
-        blockTime: Date
+        blockTime: Date,
+        operationIndex?: number
     ): TransferEvent {
         const rawAmount = String(op?.amount || '');
         let amount = '';
@@ -699,7 +717,8 @@ export class Streamer {
                 time: blockTime
             },
             transaction: {
-                id: trxId
+                id: trxId,
+                operationIndex
             }
         };
     }
@@ -728,31 +747,92 @@ export class Streamer {
         return resolved;
     }
 
-    private async dedupeHas(store: FlowDedupeStore, key: string): Promise<boolean> {
-        return Boolean(await store.has(key));
+    /**
+     * A flow must act on each incoming transfer once, so the key is the
+     * transaction id plus the operation's index: one transaction can carry
+     * several transfers to the app.
+     */
+    private flowDedupeKey(event: TransferEvent): string {
+        return `${event.transaction.id}:${event.transaction.operationIndex ?? 0}`;
     }
 
-    private async dedupeAdd(store: FlowDedupeStore, key: string): Promise<void> {
-        await store.add(key);
+    private async dedupeHas(store: FlowDedupeStore, event: TransferEvent): Promise<boolean> {
+        if (this.bypassLedger) {
+            return false;
+        }
+
+        return Boolean(await store.has(this.flowDedupeKey(event)));
     }
 
-    private normalizeDedupeStore(dedupeStore?: FlowDedupeStore | Set<string>): FlowDedupeStore {
-        const store = dedupeStore || new Set<string>();
+    private async dedupeAdd(store: FlowDedupeStore, event: TransferEvent): Promise<void> {
+        await store.add(this.flowDedupeKey(event));
+    }
 
-        if (store instanceof Set) {
+    /**
+     * Without an explicit store, a flow records what it has paid in the
+     * adapter's idempotency ledger (keys `flow:<name>:<trx>:<op>`), so a
+     * block that is processed again after a crash, halt, fork or replay
+     * doesn't send the money twice. The in-memory set is only used when
+     * the ledger is disabled or the adapter doesn't implement it.
+     */
+    private normalizeDedupeStore(dedupeStore: FlowDedupeStore | Set<string> | undefined, flowName: string): FlowDedupeStore {
+        if (!dedupeStore) {
+            const memory = new Set<string>();
+            const remember = (key: string) => {
+                memory.add(key);
+                if (memory.size > 10000) {
+                    const oldest = memory.values().next().value;
+                    memory.delete(oldest);
+                }
+            };
+            const ledgerAvailable = () => this.config.IDEMPOTENCY_ENABLED
+                && typeof this.adapter?.hasProcessedOperation === 'function'
+                && typeof this.adapter?.markOperationProcessed === 'function';
+            const ledgerKey = (key: string) => `flow:${flowName}:${key}`;
+
             return {
-                has: (key: string) => store.has(key),
+                has: async (key: string) => {
+                    if (ledgerAvailable()) {
+                        return this.adapter.hasProcessedOperation(ledgerKey(key));
+                    }
+
+                    return memory.has(key);
+                },
+                add: async (key: string) => {
+                    if (ledgerAvailable()) {
+                        const [transactionId, operationIndex] = key.split(':');
+
+                        await this.adapter.markOperationProcessed({
+                            key: ledgerKey(key),
+                            blockNumber: this.lastBlockNumber,
+                            transactionId,
+                            operationIndex: Number(operationIndex) || 0,
+                            contract: 'flow',
+                            action: flowName,
+                            status: 'success'
+                        });
+                        return;
+                    }
+
+                    remember(key);
+                }
+            };
+        }
+
+        if (dedupeStore instanceof Set) {
+            return {
+                has: (key: string) => dedupeStore.has(key),
                 add: (key: string) => {
-                    store.add(key);
-                    if (store.size > 10000) {
-                        const oldest = store.values().next().value;
-                        store.delete(oldest);
+                    dedupeStore.add(key);
+                    if (dedupeStore.size > 10000) {
+                        const oldest = dedupeStore.values().next().value;
+                        dedupeStore.delete(oldest);
                     }
                 }
             };
         }
 
-        return store;
+        return dedupeStore;
     }
 
     private isZeroAmountFlowError(error: unknown): boolean {
@@ -1162,6 +1242,92 @@ export class Streamer {
         return this.client;
     }
 
+    // ─── App accounts ────────────────────────────────────────────────────
+
+    /**
+     * Every account the app acts as: the username first, then `accounts`
+     * from config and `addAccount()`. Transfers to any of them run contract
+     * actions, and broadcasts from any of them are signed with its own keys.
+     */
+    public getAppAccounts(): string[] {
+        const names: string[] = [];
+
+        if (this.config.USERNAME) {
+            names.push(this.config.USERNAME);
+        }
+
+        for (const name of this.accountKeys.keys()) {
+            if (!names.includes(name)) {
+                names.push(name);
+            }
+        }
+
+        return names;
+    }
+
+    public isAppAccount(account: string | undefined | null): boolean {
+        return Boolean(account) && this.getAppAccounts().includes(account as string);
+    }
+
+    /** Registers (or updates the keys of) an additional app account at runtime. */
+    public addAccount(credentials: AccountCredentials): void {
+        if (!credentials || typeof credentials.name !== 'string' || !credentials.name.trim()) {
+            throw new Error('addAccount: a non-empty account name is required');
+        }
+
+        this.accountKeys.set(credentials.name, {
+            activeKey: credentials.activeKey,
+            postingKey: credentials.postingKey
+        });
+    }
+
+    public removeAccount(name: string): boolean {
+        return this.accountKeys.delete(name);
+    }
+
+    private syncAccountKeys(): void {
+        this.accountKeys.clear();
+
+        for (const entry of this.config.ACCOUNTS ?? []) {
+            this.accountKeys.set(entry.name, { activeKey: entry.activeKey, postingKey: entry.postingKey });
+        }
+    }
+
+    /**
+     * The config view used to sign a broadcast from `account`: that account's
+     * own keys when it was registered, otherwise the streamer's default keys
+     * (which also covers accounts that granted the app account authority).
+     */
+    private signingConfig(account?: string): ConfigInterface {
+        const entry = account ? this.accountKeys.get(account) : undefined;
+
+        if (!entry) {
+            return this.config;
+        }
+
+        return {
+            ...this.config,
+            ACTIVE_KEY: entry.activeKey ?? this.config.ACTIVE_KEY,
+            POSTING_KEY: entry.postingKey ?? this.config.POSTING_KEY
+        };
+    }
+
+    /** Which account an operation is signed by, and with which authority. */
+    private operationSigner(opType: string, data: any): { account?: string; authority: 'active' | 'posting' } {
+        if (opType === 'custom_json') {
+            if (Array.isArray(data?.required_auths) && data.required_auths.length > 0) {
+                return { account: data.required_auths[0], authority: 'active' };
+            }
+
+            return { account: data?.required_posting_auths?.[0], authority: 'posting' };
+        }
+
+        const account = data?.from ?? data?.who ?? data?.account ?? data?.owner ?? data?.creator ?? data?.voter
+            ?? data?.delegator ?? data?.publisher ?? data?.proposal_owner ?? data?.author ?? data?.follower;
+
+        return { account, authority: ACTIVE_AUTHORITY_OPERATIONS.has(opType) ? 'active' : 'posting' };
+    }
+
     public getConfig(): Readonly<ConfigInterface> {
         return this.config;
     }
@@ -1195,17 +1361,23 @@ export class Streamer {
 
         if (!exists) {
             this.validateActionContract(action);
+
+            // The scheduler compares against block time, so an action created
+            // without a start date is anchored to the chain's clock rather than
+            // the wall clock (they differ for replays and simulated chains).
+            if (!action.hasExplicitDate) {
+                action.date = new Date(this.blockTime ?? this.latestBlockchainTime ?? new Date());
+            }
+
             this.actions.push(action);
-            
+
             await this.saveActionsToDisk();
             
             if (this.config.DEBUG_MODE) {
                 getLogger().debug(`[Streamer] Registered time-based action: ${action.id} (${action.timeValue})`);
             }
         } else {
-            if (this.config.DEBUG_MODE) {
-                getLogger().warn(`[Streamer] Action with ID ${action.id} already exists, skipping registration`);
-            }
+            getLogger().warn(`[Streamer] Time action '${action.id}' is already registered (restored from storage or registered earlier); the new definition is ignored. Call removeAction('${action.id}') first to replace it.`);
         }
     }
 
@@ -1325,7 +1497,8 @@ export class Streamer {
         const action = this.actions.find(i => i.id === id);
 
         if (action) {
-            action.reset();
+            // The scheduler compares against block time, so the reset must too.
+            action.reset(this.blockTime ?? new Date());
             await this.saveActionsToDisk();
             
             if (this.config.DEBUG_MODE) {
@@ -1353,9 +1526,39 @@ export class Streamer {
             throw new Error(`Contract '${contract.name}' is already registered`);
         }
 
+        this.warnAboutGuards(contract);
+
         await this.initializeContract(contract);
         this.contracts.push(contract);
         this.contractCache.set(contract.name, contract);
+    }
+
+    /**
+     * Points out guard configurations that silently do less than they look
+     * like they do, at registration rather than at the first rejected bet.
+     */
+    private warnAboutGuards(contract: ContractDefinition): void {
+        const actions = Object.entries(contract.actions ?? {});
+        const usesTransfers = (definition: ContractActionDefinition<any>) => {
+            const triggers = Array.isArray(definition.trigger) ? definition.trigger : [definition.trigger ?? 'custom_json'];
+            return triggers.some((trigger) => trigger === 'transfer' || trigger === 'recurrent_transfer');
+        };
+
+        for (const [actionName, definition] of actions) {
+            if (!usesTransfers(definition)) {
+                continue;
+            }
+
+            const guards = this.resolveGuards(contract, definition);
+
+            if (!guards.allowedRecipients && this.getAppAccounts().length === 0) {
+                getLogger().warn(`[Streamer] ${contract.name}.${actionName} is triggered by transfers but no streamer username is configured and no guards.allowedRecipients is set; every transfer will be rejected`);
+            }
+
+            if ((guards.minAmount !== undefined || guards.maxAmount !== undefined) && !guards.allowedAssets) {
+                getLogger().warn(`[Streamer] ${contract.name}.${actionName} sets an amount guard without guards.allowedAssets; the limit applies to HIVE and HBD alike`);
+            }
+        }
     }
 
     public async unregisterContract(name: string): Promise<void> {
@@ -1394,6 +1597,7 @@ export class Streamer {
         this.username = this.config.USERNAME;
         this.postingKey = this.config.POSTING_KEY;
         this.activeKey = this.config.ACTIVE_KEY;
+        this.syncAccountKeys();
 
         if (shouldRecreateClient) {
             this.client = this.createHiveClient();
@@ -1583,7 +1787,7 @@ export class Streamer {
             await this.stopApiServer();
         }
 
-        this.apiServer = new Api(this, { port });
+        this.apiServer = new Api(this, { port, host: this.config.API_HOST });
         await this.apiServer.start();
         return this.apiServer;
     }
@@ -1967,10 +2171,16 @@ export class Streamer {
 
         this.lastStateSave = Date.now();
 
-        try {
+        // A checkpoint that can't be written follows ERROR_POLICY like any
+        // other storage write: skip reports it, retry retries it, halt stops.
+        let saved = false;
+
+        await this.runWithErrorPolicy(async () => {
             await this.saveStateToDisk();
-        } catch (error) {
-            await this.reportError(error, 'checkpoint', { blockNumber: this.lastBlockNumber });
+            saved = true;
+        }, 'checkpoint', { blockNumber: this.lastBlockNumber });
+
+        if (!saved) {
             return;
         }
 
@@ -2084,7 +2294,8 @@ export class Streamer {
                     block.previous,
                     transactionId,
                     blockTime,
-                    opIndex
+                    opIndex,
+                    i
                 ), 'operation', { blockNumber, transactionId, operationIndex: opIndex });
 
                 if (operationContext) {
@@ -2119,11 +2330,14 @@ export class Streamer {
                     return false;
                 }
             } catch (error) {
+                // Fail closed, like beforeContractAction: a crashing filter
+                // must not let an operation it might have blocked through.
                 await this.reportError(error, 'hook', {
                     blockNumber: ctx.blockNumber,
                     transactionId: ctx.transactionId,
                     operationIndex: ctx.operationIndex
                 });
+                return false;
             }
         }
 
@@ -2173,7 +2387,8 @@ export class Streamer {
         prevBlockId: string,
         trxId: string,
         blockTime: Date,
-        operationIndex?: number
+        operationIndex?: number,
+        transactionIndex?: number
     ): Promise<void> {
         const operationType = op[0];
         const operationData = op[1];
@@ -2186,7 +2401,7 @@ export class Streamer {
             blockTime
         };
         const errorMeta: ErrorMeta = { blockNumber, transactionId: trxId, operationIndex };
-        const ledgerKey = this.buildOperationLedgerKey(blockNumber, trxId, operationIndex);
+        const ledgerKey = this.buildOperationLedgerKey(blockNumber, trxId, operationIndex, transactionIndex);
         const notifyStandard = (subscriptions: SubscriptionCallback[]) => this.notify(
             subscriptions,
             (sub) => sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime),
@@ -2246,7 +2461,7 @@ export class Streamer {
 
             await this.notify(
                 this.transferSubscriptions.filter((sub) => sub.account === operationData?.to),
-                (sub) => sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime),
+                (sub) => sub.callback(operationData, blockNumber, blockId, prevBlockId, trxId, blockTime, operationIndex),
                 errorMeta
             );
         }
@@ -2314,17 +2529,9 @@ export class Streamer {
             if (id === this.config.HIVE_ENGINE_ID && this.customJsonHiveEngineSubscriptions.length > 0) {
                 const enginePayload = json || {};
                 const { contractName, contractAction, contractPayload } = enginePayload;
-                let hasVerificationErrors = false;
+                const verification = await this.verifyHiveEngineTransaction(trxId, errorMeta);
 
-                try {
-                    const txInfo = await this.hive.getTransactionInfo(trxId);
-                    const logs = txInfo && txInfo.logs ? Utils.jsonParse(txInfo.logs) : null;
-                    hasVerificationErrors = Boolean(txInfo && logs && typeof logs.errors !== 'undefined');
-                } catch (e) {
-                    getLogger().error(e);
-                }
-
-                if (!hasVerificationErrors) {
+                if (verification === 'valid') {
                     await this.notify(
                         this.customJsonHiveEngineSubscriptions,
                         (sub) => sub.callback(
@@ -2391,6 +2598,10 @@ export class Streamer {
 
                     await this.dispatchContractAction(payload, context, { ledgerKey });
                 }
+            } else {
+                await this.dispatchEscrowLifecycle(operationType, escrow, {
+                    blockNumber, blockId, prevBlockId, trxId, blockTime, operationIndex, operationType, operationData, ledgerKey
+                });
             }
 
             await notifyStandard(this.escrowSubscriptions.filter((sub) => sub.type === operationType));
@@ -2466,16 +2677,60 @@ export class Streamer {
     }
 
     /**
+     * Asks the Hive Engine sidechain whether it executed a transaction.
+     * Nothing is delivered to `onHiveEngine` subscribers until the sidechain
+     * has indexed the transaction without errors: an unfunded token transfer
+     * is a valid Hive operation and only fails on the sidechain, so an
+     * unknown or unreachable result must never count as a payment.
+     */
+    /** Base delay between Hive Engine lookups; tests set it to 0. */
+    private hiveEngineVerifyDelayMs = 1000;
+
+    private async verifyHiveEngineTransaction(trxId: string, meta: ErrorMeta): Promise<'valid' | 'failed' | 'unknown'> {
+        const attempts = 3;
+        let lastError: unknown = null;
+
+        for (let attempt = 1; attempt <= attempts; attempt++) {
+            try {
+                const txInfo = await this.hive.getTransactionInfo(trxId);
+
+                if (txInfo) {
+                    const logs = txInfo.logs ? Utils.jsonParse(txInfo.logs) : null;
+                    return logs && typeof logs.errors !== 'undefined' ? 'failed' : 'valid';
+                }
+            } catch (error) {
+                lastError = error;
+            }
+
+            if (attempt < attempts && this.hiveEngineVerifyDelayMs > 0) {
+                // The sidechain indexes a few seconds behind Hive.
+                await Utils.sleep(this.hiveEngineVerifyDelayMs * attempt);
+            }
+        }
+
+        await this.reportError(
+            lastError ?? new Error(`Hive Engine transaction ${trxId} was not found on the sidechain; its onHiveEngine subscribers were skipped`),
+            'subscription',
+            meta
+        );
+
+        return 'unknown';
+    }
+
+    /**
      * Ledger keys use the transaction id and operation index rather than
      * the block number, so a transaction that moves to a different block
      * after a fork is still recognised as already processed.
      */
-    private buildOperationLedgerKey(blockNumber: number, trxId: string, operationIndex?: number): string | undefined {
+    private buildOperationLedgerKey(blockNumber: number, trxId: string, operationIndex?: number, transactionIndex?: number): string | undefined {
         if (operationIndex === undefined || operationIndex === null) {
             return undefined;
         }
 
-        return trxId ? `op:${trxId}:${operationIndex}` : `op:${blockNumber}::${operationIndex}`;
+        // Without a transaction id (some HAF views omit it) the position in
+        // the block has to stand in, or two transactions' first operations
+        // would share a key.
+        return trxId ? `op:${trxId}:${operationIndex}` : `op:${blockNumber}:${transactionIndex ?? ''}:${operationIndex}`;
     }
 
     private buildTransferInfo(operationData: any): NonNullable<ContractContext['transfer']> {
@@ -2526,6 +2781,47 @@ export class Streamer {
             payload: payload.payload ?? {},
             meta: payload.meta ?? payload.metadata
         };
+    }
+
+    /**
+     * `escrow_approve`, `escrow_dispute` and `escrow_release` carry no JSON,
+     * so there is nothing to route them by. Instead they reach every
+     * registered action that declares that trigger, with the escrow details
+     * as the payload and `who` as the sender, so a contract can follow the
+     * escrows it created. Each action gets its own ledger key, because one
+     * operation may legitimately be handled by several contracts.
+     */
+    private async dispatchEscrowLifecycle(
+        operationType: EscrowOperationType,
+        escrow: ContractContext['escrow'],
+        meta: {
+            blockNumber: number; blockId: string; prevBlockId: string; trxId: string; blockTime: Date;
+            operationIndex?: number; operationType: string; operationData: any; ledgerKey?: string;
+        }
+    ): Promise<void> {
+        for (const contract of this.contracts) {
+            for (const [actionName, definition] of Object.entries(contract.actions ?? {})) {
+                if (!this.isActionTriggerAllowed(definition, operationType)) {
+                    continue;
+                }
+
+                const context = this.buildContractContext(operationType, meta.blockNumber, meta.blockId, meta.prevBlockId, meta.trxId, meta.blockTime, {
+                    sender: escrow?.who ?? meta.operationData?.who ?? meta.operationData?.from,
+                    escrow,
+                    operationIndex: meta.operationIndex,
+                    operation: {
+                        type: meta.operationType,
+                        data: meta.operationData
+                    }
+                });
+
+                await this.dispatchContractAction(
+                    { contract: contract.name, action: actionName, payload: { ...escrow } },
+                    context,
+                    { ledgerKey: meta.ledgerKey ? `${meta.ledgerKey}:${contract.name}.${actionName}` : undefined }
+                );
+            }
+        }
     }
 
     private isEscrowOperationType(operationType: string): operationType is EscrowOperationType {
@@ -2623,7 +2919,65 @@ export class Streamer {
             await this.recordLedger(ledgerKey, { contract, action } as ContractPayload, context, 'rejected');
         }
 
+        await this.refundRejectedTransfer(reason, message, context);
+
         return reason === 'duplicate' ? 'duplicate' : 'rejected';
+    }
+
+    /**
+     * With REFUND_REJECTED_TRANSFERS on, a transfer to the app account whose
+     * action was rejected is sent back, so a mistyped bet is never kept.
+     * Duplicates (already handled), transfers to other accounts (not the
+     * app's money) and the app's own transfers are left alone. The ledger
+     * row is written first, so a crash here keeps the money rather than
+     * refunding it twice on replay.
+     */
+    private describeInvalidPayload(payload: ContractPayload, issues: any[]): string {
+        const details = issues
+            .slice(0, 3)
+            .map((issue) => `${Array.isArray(issue?.path) && issue.path.length ? issue.path.join('.') + ': ' : ''}${issue?.message ?? 'invalid'}`)
+            .join('; ');
+
+        return `Invalid payload for ${payload.contract}.${payload.action}${details ? ` (${details})` : ''}`;
+    }
+
+    private async refundRejectedTransfer(reason: ActionRejectionReason | 'invalid_payload', message: string, context: ContractContext): Promise<void> {
+        if (!this.config.REFUND_REJECTED_TRANSFERS) {
+            return;
+        }
+
+        if (reason === 'duplicate' || reason === 'recipient_not_allowed') {
+            return;
+        }
+
+        if (context.trigger !== 'transfer' && context.trigger !== 'recurrent_transfer') {
+            return;
+        }
+
+        const transfer = context.transfer;
+        const account = transfer?.to;
+
+        if (!transfer || !this.isAppAccount(account) || !transfer.from || this.isAppAccount(transfer.from)) {
+            return;
+        }
+
+        const amount = new BigNumber(transfer.amount);
+
+        if (!amount.isFinite() || amount.isLessThanOrEqualTo(0) || !transfer.asset) {
+            return;
+        }
+
+        const memo = `[Refund] ${message}`.slice(0, 2000);
+
+        try {
+            await this.transferHiveTokens(account, transfer.from, transfer.amount, transfer.asset, memo);
+        } catch (error) {
+            await this.reportError(error, 'contract', {
+                blockNumber: context.block.number,
+                transactionId: context.transaction.id,
+                operationIndex: context.transaction.operationIndex
+            });
+        }
     }
 
     private resolveGuards(contract: ContractDefinition, actionDefinition: ContractActionDefinition<any>): ContractActionGuards {
@@ -2666,6 +3020,20 @@ export class Streamer {
         }
 
         const transfer = context.transfer;
+
+        if (transfer && (context.trigger === 'transfer' || context.trigger === 'recurrent_transfer')) {
+            // A transfer between two other accounts must never run a paid
+            // action. Without an explicit list only the app account counts.
+            const recipients = guards.allowedRecipients ?? this.getAppAccounts();
+            const acceptsAny = recipients.includes('*');
+
+            if (!acceptsAny && !recipients.includes(transfer.to)) {
+                const hint = recipients.length === 0
+                    ? ' (no streamer username is configured; set one or add guards.allowedRecipients)'
+                    : '';
+                return { reason: 'recipient_not_allowed', message: `Transfer to '${transfer.to ?? ''}' is not addressed to '${label}'${hint}` };
+            }
+        }
 
         if (transfer) {
             const asset = String(transfer.asset || '').toUpperCase();
@@ -2847,6 +3215,7 @@ export class Streamer {
                 });
 
                 await this.recordLedger(options.ledgerKey, payload, context, 'rejected');
+                await this.refundRejectedTransfer('invalid_payload', this.describeInvalidPayload(payload, issues), context);
 
                 return 'rejected';
             }
@@ -2889,6 +3258,32 @@ export class Streamer {
             if (outcome && typeof outcome === 'object' && 'payload' in (outcome as any)) {
                 hookContext.payload = (outcome as { payload: any }).payload;
             }
+        }
+
+        if (hookContext.payload !== actionPayload && actionDefinition.schema) {
+            const replaced = actionDefinition.schema.safeParse(hookContext.payload);
+
+            if (!replaced.success) {
+                const issues = (replaced.error as any)?.issues ?? [];
+
+                getLogger().warn(`[Streamer] Payload replaced by beforeContractAction is invalid for ${payload.contract}.${payload.action}`, { errors: issues });
+
+                await this.runHook('onInvalidPayload', {
+                    streamer: this,
+                    contract: payload.contract,
+                    action: payload.action,
+                    payload: hookContext.payload,
+                    issues,
+                    context
+                });
+
+                await this.recordLedger(options.ledgerKey, payload, context, 'rejected');
+                await this.refundRejectedTransfer('invalid_payload', this.describeInvalidPayload(payload, issues), context);
+
+                return 'rejected';
+            }
+
+            hookContext.payload = replaced.data;
         }
 
         actionPayload = hookContext.payload;
@@ -2964,7 +3359,13 @@ export class Streamer {
 
             const durationMs = Date.now() - startedAt;
 
-            await this.recordLedger(options.ledgerKey, payload, context, 'success');
+            // The handler has run. If the ledger write fails it is retried (or
+            // halts) on its own; the operation is never re-run to fix it.
+            await this.runWithErrorPolicy(
+                () => this.recordLedger(options.ledgerKey, payload, context, 'success'),
+                'adapter',
+                errorMeta
+            );
 
             await this.runContractHook(
                 contract.hooks?.afterAction
@@ -3156,7 +3557,7 @@ export class Streamer {
     public transferHiveTokens(from: string, to: string, amount: string, symbol: string, memo: string = '') {
         return Utils.transferHiveTokens(
             this.client,
-            this.config,
+            this.signingConfig(from),
             from,
             to,
             amount,
@@ -3168,7 +3569,7 @@ export class Streamer {
     public burnHiveTokens(from: string, amount: string, symbol: string, memo: string = '') {
         return Utils.burnHiveTokens(
             this.client,
-            this.config,
+            this.signingConfig(from),
             from,
             amount,
             symbol,
@@ -3223,15 +3624,15 @@ export class Streamer {
     public autoBurnIncomingTransfers(options: AutoBurnIncomingTransfersOptions = {}): FlowSubscriptionHandle {
         const basisPoints = this.resolveFlowBasisPoints(options, 'autoBurnIncomingTransfers', false);
         const account = this.resolveAccount(options.account);
-        const normalizedStore = this.normalizeDedupeStore(options.dedupeStore);
+        const normalizedStore = this.normalizeDedupeStore(options.dedupeStore, 'autoBurnIncomingTransfers');
         const allowedSymbols = options.allowedSymbols || ['HIVE', 'HBD'];
         const ignoreZeroAmount = options.ignoreZeroAmount !== false;
 
-        const callback = async (op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => {
-            const event = this.createTransferEvent(op, blockNumber, blockId, prevBlockId, trxId, blockTime);
+        const callback = async (op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date, operationIndex?: number) => {
+            const event = this.createTransferEvent(op, blockNumber, blockId, prevBlockId, trxId, blockTime, operationIndex);
 
             try {
-                if (await this.dedupeHas(normalizedStore, trxId)) {
+                if (await this.dedupeHas(normalizedStore, event)) {
                     return;
                 }
 
@@ -3239,7 +3640,7 @@ export class Streamer {
                 const amount = this.calculateSingleFlowAmount(op, basisPoints, allowedSymbols, 'burn');
                 const result = await this.burnHiveTokens(account, amount.amount, amount.asset, memo);
 
-                await this.dedupeAdd(normalizedStore, trxId);
+                await this.dedupeAdd(normalizedStore, event);
 
                 if (options.onBurned) {
                     await options.onBurned(result, event);
@@ -3274,17 +3675,17 @@ export class Streamer {
         }
 
         const account = this.resolveAccount(options.account);
-        const normalizedStore = this.normalizeDedupeStore(options.dedupeStore);
+        const normalizedStore = this.normalizeDedupeStore(options.dedupeStore, 'autoForwardIncomingTransfers');
         const allowedSymbols = options.allowedSymbols || ['HIVE', 'HBD'];
         const ignoreZeroAmount = options.ignoreZeroAmount !== false;
         const basisPoints = this.resolveFlowBasisPoints(options, 'autoForwardIncomingTransfers', true);
         const destination = options.to.trim();
 
-        const callback = async (op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => {
-            const event = this.createTransferEvent(op, blockNumber, blockId, prevBlockId, trxId, blockTime);
+        const callback = async (op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date, operationIndex?: number) => {
+            const event = this.createTransferEvent(op, blockNumber, blockId, prevBlockId, trxId, blockTime, operationIndex);
 
             try {
-                if (await this.dedupeHas(normalizedStore, trxId)) {
+                if (await this.dedupeHas(normalizedStore, event)) {
                     return;
                 }
 
@@ -3292,7 +3693,7 @@ export class Streamer {
                 const amount = this.calculateSingleFlowAmount(op, basisPoints, allowedSymbols, 'forward');
                 const result = await this.transferHiveTokens(account, destination, amount.amount, amount.asset, memo);
 
-                await this.dedupeAdd(normalizedStore, trxId);
+                await this.dedupeAdd(normalizedStore, event);
 
                 if (options.onForwarded) {
                     await options.onForwarded(result, event);
@@ -3323,16 +3724,16 @@ export class Streamer {
 
     public autoRefundIncomingTransfers(options: AutoRefundIncomingTransfersOptions = {}): FlowSubscriptionHandle {
         const account = this.resolveAccount(options.account);
-        const normalizedStore = this.normalizeDedupeStore(options.dedupeStore);
+        const normalizedStore = this.normalizeDedupeStore(options.dedupeStore, 'autoRefundIncomingTransfers');
         const allowedSymbols = options.allowedSymbols || ['HIVE', 'HBD'];
         const ignoreZeroAmount = options.ignoreZeroAmount !== false;
         const basisPoints = this.resolveFlowBasisPoints(options, 'autoRefundIncomingTransfers', true);
 
-        const callback = async (op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => {
-            const event = this.createTransferEvent(op, blockNumber, blockId, prevBlockId, trxId, blockTime);
+        const callback = async (op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date, operationIndex?: number) => {
+            const event = this.createTransferEvent(op, blockNumber, blockId, prevBlockId, trxId, blockTime, operationIndex);
 
             try {
-                if (await this.dedupeHas(normalizedStore, trxId)) {
+                if (await this.dedupeHas(normalizedStore, event)) {
                     return;
                 }
 
@@ -3340,7 +3741,7 @@ export class Streamer {
                 const amount = this.calculateSingleFlowAmount(op, basisPoints, allowedSymbols, 'refund');
                 const result = await this.transferHiveTokens(account, event.transfer.from, amount.amount, amount.asset, memo);
 
-                await this.dedupeAdd(normalizedStore, trxId);
+                await this.dedupeAdd(normalizedStore, event);
 
                 if (options.onRefunded) {
                     await options.onRefunded(result, event);
@@ -3419,22 +3820,22 @@ export class Streamer {
         }
 
         const account = this.resolveAccount(options.account);
-        const normalizedStore = this.normalizeDedupeStore(options.dedupeStore);
+        const normalizedStore = this.normalizeDedupeStore(options.dedupeStore, 'autoRouteIncomingTransfers');
         const allowedSymbols = options.allowedSymbols || ['HIVE', 'HBD'];
         const ignoreZeroAmount = options.ignoreZeroAmount !== false;
 
-        const callback = async (op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => {
-            const event = this.createTransferEvent(op, blockNumber, blockId, prevBlockId, trxId, blockTime);
+        const callback = async (op: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date, operationIndex?: number) => {
+            const event = this.createTransferEvent(op, blockNumber, blockId, prevBlockId, trxId, blockTime, operationIndex);
 
             try {
-                if (await this.dedupeHas(normalizedStore, trxId)) {
+                if (await this.dedupeHas(normalizedStore, event)) {
                     return;
                 }
 
                 const plan = this.buildPlannedIncomingTransferRoutes(event, options.routes, allowedSymbols, options.memo);
                 const results = await this.executePlannedFlowRoutes(account, plan.routes, ignoreZeroAmount);
 
-                await this.dedupeAdd(normalizedStore, trxId);
+                await this.dedupeAdd(normalizedStore, event);
 
                 if (options.onRouted) {
                     await options.onRouted(results, event, plan.routes);
@@ -3464,7 +3865,7 @@ export class Streamer {
     }
 
     public transferHiveTokensMultiple(from: string, accounts: string[] = [], amount: string = '0', symbol: string, memo: string = '') {
-        return Utils.transferHiveTokensMultiple(this.client, this.config, from, accounts, amount, symbol, memo);
+        return Utils.transferHiveTokensMultiple(this.client, this.signingConfig(from), from, accounts, amount, symbol, memo);
     }
 
     public broadcastOperations(operations: Array<[string, any]>, signingKeys?: string | string[]) {
@@ -3472,29 +3873,36 @@ export class Streamer {
             return Utils.broadcastOperations(this.client, operations, signingKeys);
         }
 
-        // Auto-detect key: use posting key for posting-level ops, active key for active-level ops
-        const activeOps = new Set([
-            'transfer', 'transfer_to_vesting', 'withdraw_vesting', 'delegate_vesting_shares',
-            'transfer_to_savings', 'transfer_from_savings', 'cancel_transfer_from_savings',
-            'convert', 'collateralized_convert', 'limit_order_create', 'limit_order_create2',
-            'limit_order_cancel', 'escrow_transfer', 'escrow_approve', 'escrow_dispute',
-            'escrow_release', 'account_update', 'account_witness_vote', 'account_witness_proxy',
-            'set_withdraw_vesting_route', 'claim_account', 'create_claimed_account',
-            'create_proposal', 'update_proposal_votes', 'remove_proposal', 'recurrent_transfer',
-            'feed_publish'
-        ]);
+        // Auto-detect keys: posting for posting-level ops, active for
+        // active-level ops (custom_json declares its authority explicitly:
+        // required_auths means active). Each operation is signed with the keys
+        // of the account it names, so one transaction can carry operations
+        // from several app accounts.
+        const keys: string[] = [];
+        let needsActive = false;
 
-        // custom_json declares its authority explicitly: required_auths means
-        // active (Hive Engine ops, active-key contract actions).
-        const needsActive = operations.some(([opType, data]) =>
-            activeOps.has(opType) ||
-            (opType === 'custom_json' && Array.isArray(data?.required_auths) && data.required_auths.length > 0)
-        );
-        const key = needsActive
-            ? (this.config.ACTIVE_KEY || this.config.POSTING_KEY)
-            : (this.config.POSTING_KEY || this.config.ACTIVE_KEY);
+        for (const [opType, data] of operations) {
+            const signer = this.operationSigner(opType, data);
+            const config = this.signingConfig(signer.account);
+            needsActive = needsActive || signer.authority === 'active';
 
-        return Utils.broadcastOperations(this.client, operations, key);
+            const key = signer.authority === 'active'
+                ? (config.ACTIVE_KEY || config.POSTING_KEY)
+                : (config.POSTING_KEY || config.ACTIVE_KEY);
+
+            if (key && !keys.includes(key)) {
+                keys.push(key);
+            }
+        }
+
+        if (keys.length === 0) {
+            const fallback = needsActive
+                ? (this.config.ACTIVE_KEY || this.config.POSTING_KEY)
+                : (this.config.POSTING_KEY || this.config.ACTIVE_KEY);
+            return Utils.broadcastOperations(this.client, operations, fallback);
+        }
+
+        return Utils.broadcastOperations(this.client, operations, keys.length === 1 ? keys[0] : keys);
     }
 
     public broadcastMultiSigOperations(operations: Array<[string, any]>, signingKeys: string[]) {
@@ -3518,7 +3926,7 @@ export class Streamer {
         },
         signingKeys?: string | string[]
     ) {
-        return Utils.updateAccountAuthorities(this.client, this.config, account, authorityUpdate, signingKeys);
+        return Utils.updateAccountAuthorities(this.client, this.signingConfig(account), account, authorityUpdate, signingKeys);
     }
 
     public escrowTransfer(options: {
@@ -3533,7 +3941,7 @@ export class Streamer {
         escrow_expiration: string | Date;
         json_meta?: string | Record<string, any>;
     }, signingKeys?: string | string[]) {
-        return Utils.escrowTransfer(this.client, this.config, options, signingKeys);
+        return Utils.escrowTransfer(this.client, this.signingConfig(options.from), options, signingKeys);
     }
 
     public escrowApprove(options: {
@@ -3544,7 +3952,7 @@ export class Streamer {
         escrow_id: number;
         approve: boolean;
     }, signingKeys?: string | string[]) {
-        return Utils.escrowApprove(this.client, this.config, options, signingKeys);
+        return Utils.escrowApprove(this.client, this.signingConfig(options.who), options, signingKeys);
     }
 
     public escrowDispute(options: {
@@ -3554,7 +3962,7 @@ export class Streamer {
         who: string;
         escrow_id: number;
     }, signingKeys?: string | string[]) {
-        return Utils.escrowDispute(this.client, this.config, options, signingKeys);
+        return Utils.escrowDispute(this.client, this.signingConfig(options.who), options, signingKeys);
     }
 
     public escrowRelease(options: {
@@ -3567,7 +3975,7 @@ export class Streamer {
         hive_amount?: string;
         hbd_amount?: string;
     }, signingKeys?: string | string[]) {
-        return Utils.escrowRelease(this.client, this.config, options, signingKeys);
+        return Utils.escrowRelease(this.client, this.signingConfig(options.who), options, signingKeys);
     }
 
     public recurrentTransfer(options: {
@@ -3578,7 +3986,7 @@ export class Streamer {
         recurrence: number;
         executions: number;
     }, signingKeys?: string | string[]) {
-        return Utils.recurrentTransfer(this.client, this.config, options, signingKeys);
+        return Utils.recurrentTransfer(this.client, this.signingConfig(options.from), options, signingKeys);
     }
 
     public createProposal(options: {
@@ -3590,7 +3998,7 @@ export class Streamer {
         subject: string;
         permlink: string;
     }, signingKeys?: string | string[]) {
-        return Utils.createProposal(this.client, this.config, options, signingKeys);
+        return Utils.createProposal(this.client, this.signingConfig(options.creator), options, signingKeys);
     }
 
     public updateProposalVotes(options: {
@@ -3598,34 +4006,34 @@ export class Streamer {
         proposal_ids: number[];
         approve: boolean;
     }, signingKeys?: string | string[]) {
-        return Utils.updateProposalVotes(this.client, this.config, options, signingKeys);
+        return Utils.updateProposalVotes(this.client, this.signingConfig(options.voter), options, signingKeys);
     }
 
     public removeProposals(options: {
         proposal_owner: string;
         proposal_ids: number[];
     }, signingKeys?: string | string[]) {
-        return Utils.removeProposals(this.client, this.config, options, signingKeys);
+        return Utils.removeProposals(this.client, this.signingConfig(options.proposal_owner), options, signingKeys);
     }
 
-    public transferHiveEngineTokens(from: string, to: string, symbol: string, quantity: string, memo: string = '') {
-        return Utils.transferHiveEngineTokens(this.client, this.config, from, to, quantity, symbol, memo);
+    public transferHiveEngineTokens(from: string, to: string, symbol: string, quantity: string | number, memo: string = '') {
+        return Utils.transferHiveEngineTokens(this.client, this.signingConfig(from), from, to, quantity, symbol, memo);
     }
 
-    public burnHiveEngineTokens(from: string, symbol: string, quantity: string, memo: string = '') {
-        return Utils.burnHiveEngineTokens(this.client, this.config, from, symbol, quantity, memo);
+    public burnHiveEngineTokens(from: string, symbol: string, quantity: string | number, memo: string = '') {
+        return Utils.burnHiveEngineTokens(this.client, this.signingConfig(from), from, symbol, quantity, memo);
     }
 
     public transferHiveEngineTokensMultiple(from: string, accounts: any[] = [], symbol: string, memo: string = '', amount: string = '0') {
-        return Utils.transferHiveEngineTokensMultiple(this.client, this.config, from, accounts, symbol, memo, amount);
+        return Utils.transferHiveEngineTokensMultiple(this.client, this.signingConfig(from), from, accounts, symbol, memo, amount);
     }
 
-    public issueHiveEngineTokens(from: string, to: string, symbol: string, quantity: string, memo: string = '') {
-        return Utils.issueHiveEngineTokens(this.client, this.config, from, to, symbol, quantity, memo);
+    public issueHiveEngineTokens(from: string, to: string, symbol: string, quantity: string | number, memo: string = '') {
+        return Utils.issueHiveEngineTokens(this.client, this.signingConfig(from), from, to, symbol, quantity, memo);
     }
 
     public issueHiveEngineTokensMultiple(from: string, accounts: any[] = [], symbol: string, memo: string = '', amount: string = '0') {
-        return Utils.issueHiveEngineTokensMultiple(this.client, this.config, from, accounts, symbol, memo, amount);
+        return Utils.issueHiveEngineTokensMultiple(this.client, this.signingConfig(from), from, accounts, symbol, memo, amount);
     }
 
     public upvote(votePercentage: string = '100.0', username: string, permlink: string) {
@@ -3815,8 +4223,9 @@ export class Streamer {
         return replayed;
     }
 
-    public verifyTransfer(transaction, from: string, to: string, amount: string) {
-        return Utils.verifyTransfer(transaction, from, to, amount);
+    /** Checks the transfer at `operationIndex` (default the first) of a fetched transaction. */
+    public verifyTransfer(transaction, from: string, to: string, amount: string, operationIndex: number = 0) {
+        return Utils.verifyTransfer(transaction, from, to, amount, operationIndex);
     }
 
     public onComment(callback: (data: any, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
@@ -3831,11 +4240,18 @@ export class Streamer {
         });
     }
 
-    public onTransfer(account: string, callback: (...args: any[]) => void | Promise<void>): void {
-        this.transferSubscriptions.push({
-            account,
-            callback
-        });
+    /**
+     * Transfers addressed to `account` (or any of several accounts). The
+     * callback receives the operation, block number, block id, previous block
+     * id, transaction id, block time and the operation's index in its transaction.
+     */
+    public onTransfer(account: string | string[], callback: (...args: any[]) => void | Promise<void>): void {
+        for (const name of Array.isArray(account) ? account : [account]) {
+            this.transferSubscriptions.push({
+                account: name,
+                callback
+            });
+        }
     }
 
     public onCustomJson(callback: (data: any, info: { sender: string; isSignedWithActiveKey: boolean }, blockNumber: number, blockId: string, prevBlockId: string, trxId: string, blockTime: Date) => void): void {
@@ -3895,63 +4311,63 @@ export class Streamer {
     // ─── Social Operations ──────────────────────────────────────────────
 
     public follow(follower: string, following: string) {
-        return Utils.follow(this.client, this.config, follower, following);
+        return Utils.follow(this.client, this.signingConfig(follower), follower, following);
     }
 
     public unfollow(follower: string, following: string) {
-        return Utils.unfollow(this.client, this.config, follower, following);
+        return Utils.unfollow(this.client, this.signingConfig(follower), follower, following);
     }
 
     public mute(follower: string, following: string) {
-        return Utils.mute(this.client, this.config, follower, following);
+        return Utils.mute(this.client, this.signingConfig(follower), follower, following);
     }
 
     public reblog(account: string, author: string, permlink: string) {
-        return Utils.reblog(this.client, this.config, account, author, permlink);
+        return Utils.reblog(this.client, this.signingConfig(account), account, author, permlink);
     }
 
     // ─── Staking Operations ─────────────────────────────────────────────
 
     public powerUp(from: string, to: string, amount: string) {
-        return Utils.powerUp(this.client, this.config, from, to, amount);
+        return Utils.powerUp(this.client, this.signingConfig(from), from, to, amount);
     }
 
     public powerDown(account: string, vestingShares: string) {
-        return Utils.powerDown(this.client, this.config, account, vestingShares);
+        return Utils.powerDown(this.client, this.signingConfig(account), account, vestingShares);
     }
 
     public cancelPowerDown(account: string) {
-        return Utils.cancelPowerDown(this.client, this.config, account);
+        return Utils.cancelPowerDown(this.client, this.signingConfig(account), account);
     }
 
     public delegateVestingShares(delegator: string, delegatee: string, vestingShares: string) {
-        return Utils.delegateVestingShares(this.client, this.config, delegator, delegatee, vestingShares);
+        return Utils.delegateVestingShares(this.client, this.signingConfig(delegator), delegator, delegatee, vestingShares);
     }
 
     public undelegateVestingShares(delegator: string, delegatee: string) {
-        return Utils.undelegateVestingShares(this.client, this.config, delegator, delegatee);
+        return Utils.undelegateVestingShares(this.client, this.signingConfig(delegator), delegator, delegatee);
     }
 
     // ─── Account Operations ─────────────────────────────────────────────
 
     public claimRewards(account: string, rewardHive: string, rewardHbd: string, rewardVests: string) {
-        return Utils.claimRewards(this.client, this.config, account, rewardHive, rewardHbd, rewardVests);
+        return Utils.claimRewards(this.client, this.signingConfig(account), account, rewardHive, rewardHbd, rewardVests);
     }
 
     public witnessVote(account: string, witness: string, approve: boolean = true) {
-        return Utils.witnessVote(this.client, this.config, account, witness, approve);
+        return Utils.witnessVote(this.client, this.signingConfig(account), account, witness, approve);
     }
 
     public setProxy(account: string, proxy: string) {
-        return Utils.setProxy(this.client, this.config, account, proxy);
+        return Utils.setProxy(this.client, this.signingConfig(account), account, proxy);
     }
 
     public clearProxy(account: string) {
-        return Utils.clearProxy(this.client, this.config, account);
+        return Utils.clearProxy(this.client, this.signingConfig(account), account);
     }
 
     public updateProfile(account: string, profile: Record<string, any>) {
-        return Utils.updateProfile(this.client, this.config, account, profile);
+        return Utils.updateProfile(this.client, this.signingConfig(account), account, profile);
     }
 
     public getAccount(username: string) {
@@ -3965,31 +4381,31 @@ export class Streamer {
     // ─── Savings Operations ─────────────────────────────────────────────
 
     public transferToSavings(from: string, to: string, amount: string, symbol: string, memo: string = '') {
-        return Utils.transferToSavings(this.client, this.config, from, to, amount, symbol, memo);
+        return Utils.transferToSavings(this.client, this.signingConfig(from), from, to, amount, symbol, memo);
     }
 
     public transferFromSavings(from: string, to: string, amount: string, symbol: string, requestId: number = 0, memo: string = '') {
-        return Utils.transferFromSavings(this.client, this.config, from, to, amount, symbol, requestId, memo);
+        return Utils.transferFromSavings(this.client, this.signingConfig(from), from, to, amount, symbol, requestId, memo);
     }
 
     public cancelTransferFromSavings(from: string, requestId: number) {
-        return Utils.cancelTransferFromSavings(this.client, this.config, from, requestId);
+        return Utils.cancelTransferFromSavings(this.client, this.signingConfig(from), from, requestId);
     }
 
     // ─── Convert Operations ─────────────────────────────────────────────
 
     public convert(owner: string, amount: string, requestId: number = 0) {
-        return Utils.convert(this.client, this.config, owner, amount, requestId);
+        return Utils.convert(this.client, this.signingConfig(owner), owner, amount, requestId);
     }
 
     public collateralizedConvert(owner: string, amount: string, requestId: number = 0) {
-        return Utils.collateralizedConvert(this.client, this.config, owner, amount, requestId);
+        return Utils.collateralizedConvert(this.client, this.signingConfig(owner), owner, amount, requestId);
     }
 
     // ─── Content Operations ─────────────────────────────────────────────
 
     public deleteComment(author: string, permlink: string) {
-        return Utils.deleteComment(this.client, this.config, author, permlink);
+        return Utils.deleteComment(this.client, this.signingConfig(author), author, permlink);
     }
 
     public commentOptions(author: string, permlink: string, options: {
@@ -3999,33 +4415,33 @@ export class Streamer {
         allow_curation_rewards?: boolean;
         extensions?: any[];
     }) {
-        return Utils.commentOptions(this.client, this.config, author, permlink, options);
+        return Utils.commentOptions(this.client, this.signingConfig(author), author, permlink, options);
     }
 
     // ─── Market Operations ──────────────────────────────────────────────
 
     public limitOrderCreate(owner: string, orderId: number, amountToSell: string, minToReceive: string, fillOrKill: boolean = false, expiration?: string | Date, signingKeys?: string | string[]) {
-        return Utils.limitOrderCreate(this.client, this.config, owner, orderId, amountToSell, minToReceive, fillOrKill, expiration);
+        return Utils.limitOrderCreate(this.client, this.signingConfig(owner), owner, orderId, amountToSell, minToReceive, fillOrKill, expiration);
     }
 
     public limitOrderCancel(owner: string, orderId: number, signingKeys?: string | string[]) {
-        return Utils.limitOrderCancel(this.client, this.config, owner, orderId);
+        return Utils.limitOrderCancel(this.client, this.signingConfig(owner), owner, orderId);
     }
 
     // ─── Vesting Route ──────────────────────────────────────────────────
 
     public setWithdrawVestingRoute(fromAccount: string, toAccount: string, percent: number, autoVest: boolean = false, signingKeys?: string | string[]) {
-        return Utils.setWithdrawVestingRoute(this.client, this.config, fromAccount, toAccount, percent, autoVest, signingKeys);
+        return Utils.setWithdrawVestingRoute(this.client, this.signingConfig(fromAccount), fromAccount, toAccount, percent, autoVest, signingKeys);
     }
 
     // ─── Account Creation ───────────────────────────────────────────────
 
     public claimAccount(creator: string, fee: string = '0.000 HIVE') {
-        return Utils.claimAccount(this.client, this.config, creator, fee);
+        return Utils.claimAccount(this.client, this.signingConfig(creator), creator, fee);
     }
 
     public feedPublish(publisher: string, baseAmount: string, quoteAmount: string = '1.000 HIVE') {
-        return Utils.feedPublish(this.client, this.config, publisher, baseAmount, quoteAmount);
+        return Utils.feedPublish(this.client, this.signingConfig(publisher), publisher, baseAmount, quoteAmount);
     }
 
     // ─── Batch Builder ────────────────────────────────────────────────
@@ -4041,11 +4457,11 @@ export class Streamer {
     }
 
     public grantPostingAuth(account: string, authAccount: string, signingKeys?: string | string[]) {
-        return Utils.grantPostingAuth(this.client, this.config, account, authAccount, signingKeys);
+        return Utils.grantPostingAuth(this.client, this.signingConfig(account), account, authAccount, signingKeys);
     }
 
     public revokePostingAuth(account: string, authAccount: string, signingKeys?: string | string[]) {
-        return Utils.revokePostingAuth(this.client, this.config, account, authAccount, signingKeys);
+        return Utils.revokePostingAuth(this.client, this.signingConfig(account), account, authAccount, signingKeys);
     }
 
     // ─── Additional Event Subscriptions ─────────────────────────────────
@@ -4088,42 +4504,42 @@ export class Streamer {
 
     // ─── Hive Engine Write Operations ───────────────────────────────────
 
-    public stakeEngineTokens(from: string, to: string, symbol: string, quantity: string) {
-        return Utils.stakeEngineTokens(this.client, this.config, from, to, symbol, quantity);
+    public stakeEngineTokens(from: string, to: string, symbol: string, quantity: string | number) {
+        return Utils.stakeEngineTokens(this.client, this.signingConfig(from), from, to, symbol, quantity);
     }
 
-    public unstakeEngineTokens(from: string, symbol: string, quantity: string) {
-        return Utils.unstakeEngineTokens(this.client, this.config, from, symbol, quantity);
+    public unstakeEngineTokens(from: string, symbol: string, quantity: string | number) {
+        return Utils.unstakeEngineTokens(this.client, this.signingConfig(from), from, symbol, quantity);
     }
 
-    public buyEngineTokens(from: string, symbol: string, quantity: string, price: string) {
-        return Utils.buyEngineTokens(this.client, this.config, from, symbol, quantity, price);
+    public buyEngineTokens(from: string, symbol: string, quantity: string | number, price: string | number) {
+        return Utils.buyEngineTokens(this.client, this.signingConfig(from), from, symbol, quantity, price);
     }
 
-    public sellEngineTokens(from: string, symbol: string, quantity: string, price: string) {
-        return Utils.sellEngineTokens(this.client, this.config, from, symbol, quantity, price);
+    public sellEngineTokens(from: string, symbol: string, quantity: string | number, price: string | number) {
+        return Utils.sellEngineTokens(this.client, this.signingConfig(from), from, symbol, quantity, price);
     }
 
     public cancelEngineOrder(from: string, type: 'buy' | 'sell', orderId: string) {
-        return Utils.cancelEngineOrder(this.client, this.config, from, type, orderId);
+        return Utils.cancelEngineOrder(this.client, this.signingConfig(from), from, type, orderId);
     }
 
-    public delegateEngineTokens(from: string, to: string, symbol: string, quantity: string) {
-        return Utils.delegateEngineTokens(this.client, this.config, from, to, symbol, quantity);
+    public delegateEngineTokens(from: string, to: string, symbol: string, quantity: string | number) {
+        return Utils.delegateEngineTokens(this.client, this.signingConfig(from), from, to, symbol, quantity);
     }
 
-    public undelegateEngineTokens(from: string, to: string, symbol: string, quantity: string) {
-        return Utils.undelegateEngineTokens(this.client, this.config, from, to, symbol, quantity);
+    public undelegateEngineTokens(from: string, to: string, symbol: string, quantity: string | number) {
+        return Utils.undelegateEngineTokens(this.client, this.signingConfig(from), from, to, symbol, quantity);
     }
 
     // ─── Community Operations ───────────────────────────────────────────
 
     public subscribeCommunity(account: string, community: string) {
-        return Utils.subscribeCommunity(this.client, this.config, account, community);
+        return Utils.subscribeCommunity(this.client, this.signingConfig(account), account, community);
     }
 
     public unsubscribeCommunity(account: string, community: string) {
-        return Utils.unsubscribeCommunity(this.client, this.config, account, community);
+        return Utils.unsubscribeCommunity(this.client, this.signingConfig(account), account, community);
     }
 
     /**

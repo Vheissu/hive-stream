@@ -74,6 +74,7 @@ describeIfMongo('MongoDB adapter parity', () => {
     test('runs the lotto contract against MongoDB and persists state across reconnects', async () => {
         const mongoDb = await createIsolatedMongoDatabase('hive_stream_mongo_lotto');
         const streamer = new Streamer({
+            USERNAME: 'beggars',
             JSON_ID: 'hivestream',
             PAYLOAD_IDENTIFIER: 'hive_stream'
         });
@@ -90,8 +91,10 @@ describeIfMongo('MongoDB adapter parity', () => {
                     ])
                 }
             } as any;
-            streamer.getTransaction = jest.fn().mockResolvedValue({}) as any;
-            streamer.verifyTransfer = jest.fn().mockResolvedValue(true) as any;
+            // The lotto re-reads each ticket transfer from the chain.
+            streamer.getTransaction = jest.fn().mockResolvedValue({
+                operations: [['transfer', { from: 'alice', to: 'beggars', amount: '10.000 HIVE' }]]
+            }) as any;
             streamer.transferHiveTokens = jest.fn().mockResolvedValue(true) as any;
             streamer.transferHiveTokensMultiple = jest.fn().mockResolvedValue(true) as any;
 

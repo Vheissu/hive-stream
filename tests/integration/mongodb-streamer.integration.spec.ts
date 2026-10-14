@@ -49,6 +49,7 @@ describeIfMongo('MongoDB streamer integration', () => {
     test('persists streamer operations and contract-emitted events in MongoDB', async () => {
         const mongoDb = await createIsolatedMongoDatabase('hive_stream_mongo');
         const streamer = new Streamer({
+            USERNAME: 'app.contract',
             JSON_ID: 'hivestream',
             PAYLOAD_IDENTIFIER: 'hive_stream'
         });
@@ -128,6 +129,7 @@ describeIfMongo('MongoDB streamer integration', () => {
     test('rejects SQL-backed contracts with a clear adapter capability error', async () => {
         const mongoDb = await createIsolatedMongoDatabase('hive_stream_mongo_contracts');
         const streamer = new Streamer({
+            USERNAME: 'app.contract',
             JSON_ID: 'hivestream',
             PAYLOAD_IDENTIFIER: 'hive_stream'
         });

@@ -94,6 +94,7 @@ describe('SQLite contract integration', () => {
         dbPath = path.join(tempDir, 'integration.sqlite');
 
         streamer = new Streamer({
+            USERNAME: 'app.contract',
             JSON_ID: 'hivestream',
             PAYLOAD_IDENTIFIER: 'hive_stream'
         });

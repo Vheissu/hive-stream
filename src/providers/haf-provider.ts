@@ -1,3 +1,4 @@
+import { getLogger } from '../logger';
 import type { Client as PgClient } from 'pg';
 import { requireOptionalDependency } from '../optional-dependency';
 import { BlockProvider, BlockData, DynamicGlobalProperties } from './block-provider';
@@ -146,10 +147,49 @@ export class HafProvider implements BlockProvider {
         }
 
         const row = result.rows[0];
+        const head = Number(row.head_block_number);
+        const irreversible = await this.getIrreversibleBlockNumber(head);
+
         return {
-            head_block_number: row.head_block_number,
+            head_block_number: head,
             time: row.time instanceof Date ? row.time.toISOString().replace('Z', '') : String(row.time),
+            ...(irreversible !== null ? { last_irreversible_block_num: irreversible } : {})
         };
+    }
+
+    private warnedAboutIrreversible = false;
+
+    /**
+     * HAF tracks the last irreversible block in `hafd.hive_state` (older
+     * installs: `hive.irreversible_data`). Without it the streamer would
+     * treat every block the view serves as irreversible, which is only
+     * safe when the view itself is filtered to irreversible blocks.
+     */
+    private async getIrreversibleBlockNumber(head: number): Promise<number | null> {
+        const queries = [
+            'SELECT consistent_block AS irreversible FROM hafd.hive_state LIMIT 1',
+            'SELECT consistent_block AS irreversible FROM hive.irreversible_data LIMIT 1'
+        ];
+
+        for (const sql of queries) {
+            try {
+                const result = await this.client.query(sql);
+                const value = Number(result.rows?.[0]?.irreversible);
+
+                if (Number.isFinite(value) && value >= 0) {
+                    return Math.min(value, head);
+                }
+            } catch (error) {
+                // Try the next known location.
+            }
+        }
+
+        if (!this.warnedAboutIrreversible) {
+            this.warnedAboutIrreversible = true;
+            getLogger().warn('[HafProvider] Could not read the last irreversible block from HAF; every block served by the view is treated as irreversible');
+        }
+
+        return null;
     }
 
     /**

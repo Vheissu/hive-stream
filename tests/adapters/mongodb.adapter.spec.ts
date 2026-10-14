@@ -141,14 +141,18 @@ describe('MongodbAdapter', () => {
 
             expect(result).toBe(true);
             expect(mockDb.collection).toHaveBeenCalledWith('transfers');
-            expect(mockCollection.insertOne).toHaveBeenCalledWith(expect.objectContaining({
+            expect(mockCollection.updateOne).toHaveBeenCalledWith(
+                { id: expect.any(String) },
+                { $setOnInsert: expect.objectContaining({
                 sender: 'alice',
                 amount: '1.000 HIVE',
                 contractName: 'token',
                 contractAction: 'transfer',
                 blockNumber: 10,
                 blockId: 'b-10',
-            }));
+            }) },
+                { upsert: true }
+            );
         });
 
         test('metadata overrides context values', async () => {
@@ -161,11 +165,15 @@ describe('MongodbAdapter', () => {
                 { sender: 'alice', amount: '1 HIVE', transactionId: 'trx-override', blockId: 'b-override', blockNumber: 99 } as any
             );
 
-            expect(mockCollection.insertOne).toHaveBeenCalledWith(expect.objectContaining({
-                id: 'trx-override',
-                blockId: 'b-override',
-                blockNumber: 99,
-            }));
+            expect(mockCollection.updateOne).toHaveBeenCalledWith(
+                { id: 'trx-override' },
+                { $setOnInsert: expect.objectContaining({
+                    id: 'trx-override',
+                    blockId: 'b-override',
+                    blockNumber: 99,
+                }) },
+                { upsert: true }
+            );
         });
     });
 
@@ -182,13 +190,17 @@ describe('MongodbAdapter', () => {
 
             expect(result).toBe(true);
             expect(mockDb.collection).toHaveBeenCalledWith('customJson');
-            expect(mockCollection.insertOne).toHaveBeenCalledWith(expect.objectContaining({
+            expect(mockCollection.updateOne).toHaveBeenCalledWith(
+                { id: expect.any(String) },
+                { $setOnInsert: expect.objectContaining({
                 sender: 'bob',
                 isSignedWithActiveKey: true,
                 contractName: 'nft',
                 contractAction: 'mint',
                 blockNumber: 20,
-            }));
+            }) },
+                { upsert: true }
+            );
         });
     });
 

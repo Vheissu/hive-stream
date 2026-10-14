@@ -7,6 +7,7 @@ import {
     createContractMemo,
     createContractPayload,
     createContractTransferOperation,
+    createContractEscrowTransferOperation,
     defineContractSpec,
     validateContractCall
 } from '../src/client';
@@ -233,5 +234,80 @@ describe('typed contract callers', () => {
             name: 'invalid',
             actions: { ' not-normalized ': {} }
         })).toThrow('surrounding whitespace');
+    });
+    test('serialises the caller payload, not the schema output, so transforms and defaults survive a server re-parse', () => {
+        const schema = z.object({
+            amount: z.string().transform((value) => Number(value)),
+            tag: z.string().default('none')
+        });
+        const spec = defineContractSpec({
+            name: 'shop',
+            actions: {
+                buy: { trigger: ['custom_json', 'transfer'], schema }
+            }
+        });
+        const caller = createContractCaller(spec);
+        const input = { amount: '1.5' } as any;
+
+        const operation = caller.customJson('alice', 'buy', input);
+        const sent = JSON.parse(operation[1].json).hive_stream.payload;
+
+        expect(sent).toEqual({ amount: '1.5' });
+        // What the server does with it: parse the sent payload with the same schema.
+        expect(schema.safeParse(sent).success).toBe(true);
+        expect(JSON.parse(caller.memo('buy', input)).hive_stream.payload).toEqual({ amount: '1.5' });
+        expect(caller.payload('buy', input).hive_stream.payload).toEqual({ amount: '1.5' });
+
+        // validate() still reports the parsed value.
+        const result = caller.validate('buy', input);
+        expect(result.success && result.payload).toEqual({ amount: 1.5, tag: 'none' });
+    });
+
+    test('customJson reports unknown actions as a validation error', () => {
+        const caller = createContractCaller(defineContractSpec({
+            name: 'greeting',
+            actions: { greet: { trigger: 'custom_json' } }
+        }));
+
+        let thrown: unknown;
+
+        try {
+            caller.customJson('alice', 'nope' as any, {} as any);
+        } catch (error) {
+            thrown = error;
+        }
+
+        expect(thrown).toBeInstanceOf(ContractCallValidationError);
+        expect((thrown as ContractCallValidationError).issues.map((issue) => issue.code)).toEqual(['unknown_action']);
+    });
+});
+
+describe('createContractEscrowTransferOperation', () => {
+    const call = { contract: 'market', action: 'openTrade', payload: { listingId: 'lamp-1' } };
+    const base = {
+        from: 'buyer', to: 'seller', agent: 'agent', escrowId: 1001,
+        hiveAmount: '25.000 HIVE', fee: '0.250 HIVE',
+        ratificationDeadline: new Date('2026-01-02T00:00:00.000Z'), expiration: new Date('2026-02-01T00:00:00.000Z')
+    };
+
+    test('builds an escrow_transfer whose json_meta carries the wrapped call', () => {
+        const [type, data] = createContractEscrowTransferOperation(call, base);
+
+        expect(type).toBe('escrow_transfer');
+        expect(data).toMatchObject({
+            from: 'buyer', to: 'seller', agent: 'agent', escrow_id: 1001,
+            hive_amount: '25.000 HIVE', hbd_amount: '0.000 HBD', fee: '0.250 HIVE',
+            ratification_deadline: '2026-01-02T00:00:00', escrow_expiration: '2026-02-01T00:00:00'
+        });
+        expect(JSON.parse(data.json_meta)).toEqual({ hive_stream: { contract: 'market', action: 'openTrade', payload: { listingId: 'lamp-1' } } });
+    });
+
+    test('rejects the mistakes the chain would reject', () => {
+        expect(() => createContractEscrowTransferOperation(call, { ...base, agent: 'buyer' })).toThrow('three different accounts');
+        expect(() => createContractEscrowTransferOperation(call, { ...base, hiveAmount: undefined })).toThrow('greater than zero');
+        expect(() => createContractEscrowTransferOperation(call, { ...base, hiveAmount: '25 HIVE' })).toThrow('hiveAmount');
+        expect(() => createContractEscrowTransferOperation(call, { ...base, escrowId: 1.5 })).toThrow('escrowId');
+        expect(() => createContractEscrowTransferOperation(call, { ...base, expiration: base.ratificationDeadline })).toThrow('after ratificationDeadline');
+        expect(() => createContractEscrowTransferOperation(call, { ...base, ratificationDeadline: 'yesterday' })).toThrow('valid date');
     });
 });

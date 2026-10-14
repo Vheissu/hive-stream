@@ -83,6 +83,7 @@ export type ActionRejectionReason =
     | 'active_key_required'
     | 'paused'
     | 'sender_not_allowed'
+    | 'recipient_not_allowed'
     | 'asset_not_allowed'
     | 'amount_too_low'
     | 'amount_too_high'

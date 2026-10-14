@@ -5,6 +5,21 @@ import type { Server } from 'http';
 
 interface ApiOptions {
     port?: number;
+    /** Interface to bind. Defaults to loopback so the unauthenticated API is never exposed by accident. */
+    host?: string;
+}
+
+const DEFAULT_PAGE_SIZE = 100;
+const MAX_PAGE_SIZE = 1000;
+
+/** Reads `?limit=` and `?offset=` with sane bounds so one request can't load a whole table. */
+function pageOptions(req: express.Request): { limit: number; offset: number } {
+    const rawLimit = Number.parseInt(String(req.query.limit ?? ''), 10);
+    const rawOffset = Number.parseInt(String(req.query.offset ?? ''), 10);
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, MAX_PAGE_SIZE) : DEFAULT_PAGE_SIZE;
+    const offset = Number.isFinite(rawOffset) && rawOffset > 0 ? rawOffset : 0;
+
+    return { limit, offset };
 }
 
 type RouteHandler = (req: express.Request, res: express.Response) => Promise<void> | void;
@@ -13,11 +28,13 @@ export class Api {
     public readonly app = express();
     public readonly streamer;
     public readonly port: number;
+    public readonly host: string;
     public server: Server | null = null;
 
     constructor(streamer, options: ApiOptions = {}) {
         this.streamer = streamer;
         this.port = options.port ?? 5001;
+        this.host = options.host ?? '127.0.0.1';
 
         this.app.use(cors());
         this.setupRoutes();
@@ -29,8 +46,8 @@ export class Api {
         }
 
         this.server = await new Promise<Server>((resolve, reject) => {
-            const server = this.app.listen(this.port, () => {
-                getLogger().debug(`Running server on port ${this.port}`);
+            const server = this.app.listen(this.port, this.host, () => {
+                getLogger().debug(`Running server on ${this.host}:${this.port}`);
                 resolve(server);
             });
 
@@ -91,7 +108,7 @@ export class Api {
         });
 
         this.route('/transfers', async (req, res) => {
-            const transfers = await this.streamer.getAdapter().getTransfers();
+            const transfers = await this.streamer.getAdapter().getTransfers(pageOptions(req));
 
             res.json(transfers);
         });
@@ -115,7 +132,7 @@ export class Api {
         });
 
         this.route('/json', async (req, res) => {
-            const jsons = await this.streamer.getAdapter().getJson();
+            const jsons = await this.streamer.getAdapter().getJson(pageOptions(req));
 
             res.json(jsons);
         });
@@ -139,7 +156,7 @@ export class Api {
         });
 
         this.route('/events', async (req, res) => {
-            const events = await this.streamer.getAdapter().getEvents();
+            const events = await this.streamer.getAdapter().getEvents(pageOptions(req));
 
             res.json(events);
         });
@@ -157,20 +174,30 @@ export class Api {
         });
 
         this.route('/stats', async (req, res) => {
-            const [transfers, customJson, events] = await Promise.all([
-                this.streamer.getAdapter().getTransfers(),
-                this.streamer.getAdapter().getJson(),
-                this.streamer.getAdapter().getEvents()
-            ]);
+            const adapter = this.streamer.getAdapter();
+            let counts = typeof adapter.getCounts === 'function' ? await adapter.getCounts() : null;
 
-            const stats = {
-                totalTransfers: transfers?.length || 0,
-                totalCustomJson: customJson?.length || 0,
-                totalEvents: events?.length || 0,
+            if (!counts) {
+                // Adapters without a count query fall back to loading the rows.
+                const [transfers, customJson, events] = await Promise.all([
+                    adapter.getTransfers(),
+                    adapter.getJson(),
+                    adapter.getEvents()
+                ]);
+
+                counts = {
+                    transfers: transfers?.length || 0,
+                    customJson: customJson?.length || 0,
+                    events: events?.length || 0
+                };
+            }
+
+            res.json({
+                totalTransfers: counts.transfers,
+                totalCustomJson: counts.customJson,
+                totalEvents: counts.events,
                 lastUpdated: new Date().toISOString()
-            };
-
-            res.json(stats);
+            });
         });
 
         this.route('/exchange/balances', async (req, res) => {

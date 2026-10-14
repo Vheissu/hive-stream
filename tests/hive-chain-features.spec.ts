@@ -332,12 +332,15 @@ describe('Hive chain features', () => {
             expect(nonMatching).not.toHaveBeenCalled();
         });
 
-        test('onHiveEngine still fires when tx verification lookup fails', async () => {
+        test('onHiveEngine is skipped and reported when the sidechain lookup keeps failing', async () => {
             const handler = jest.fn();
+            const onError = jest.fn();
             const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
             const getTransactionInfo = jest.spyOn(streamer['hive'], 'getTransactionInfo')
                 .mockRejectedValue(new Error('temporary hive engine outage'));
 
+            streamer['hiveEngineVerifyDelayMs'] = 0;
+            streamer.hook('onError', onError);
             streamer.onHiveEngine(handler);
 
             await streamer.processOperation([
@@ -347,38 +350,68 @@ describe('Hive chain features', () => {
                     json: JSON.stringify({
                         contractName: 'tokens',
                         contractAction: 'transfer',
-                        contractPayload: {
-                            symbol: 'TEST',
-                            to: 'target',
-                            quantity: '1.000',
-                            memo: 'memo'
-                        }
+                        contractPayload: { symbol: 'TEST', to: 'target', quantity: '1.000', memo: 'memo' }
                     }),
                     required_auths: ['alice'],
                     required_posting_auths: []
                 }
             ], 20, 'block-20', 'block-19', 'trx-20', new Date('2025-01-01T00:00:00.000Z'));
 
-            expect(getTransactionInfo).toHaveBeenCalledWith('trx-20');
-            expect(handler).toHaveBeenCalledWith(
-                'tokens',
-                'transfer',
-                {
-                    symbol: 'TEST',
-                    to: 'target',
-                    quantity: '1.000',
-                    memo: 'memo'
-                },
-                'alice',
-                expect.objectContaining({ id: 'ssc-mainnet-hive' }),
-                20,
-                'block-20',
-                'block-19',
-                'trx-20',
-                expect.any(Date)
-            );
+            // An unverified sidechain transfer must never be delivered as a payment.
+            expect(getTransactionInfo).toHaveBeenCalledTimes(3);
+            expect(handler).not.toHaveBeenCalled();
+            expect(onError).toHaveBeenCalledWith(expect.objectContaining({
+                phase: 'subscription',
+                error: expect.objectContaining({ message: 'temporary hive engine outage' })
+            }));
 
             consoleError.mockRestore();
+        });
+
+        test('onHiveEngine waits for the sidechain to index the transaction', async () => {
+            const handler = jest.fn();
+            const getTransactionInfo = jest.spyOn(streamer['hive'], 'getTransactionInfo')
+                .mockResolvedValueOnce(null)
+                .mockResolvedValueOnce({ logs: JSON.stringify({ events: [] }) } as any);
+
+            streamer['hiveEngineVerifyDelayMs'] = 0;
+            streamer.onHiveEngine(handler);
+
+            await streamer.processOperation([
+                'custom_json',
+                {
+                    id: 'ssc-mainnet-hive',
+                    json: JSON.stringify({ contractName: 'tokens', contractAction: 'transfer', contractPayload: { symbol: 'TEST' } }),
+                    required_auths: ['alice'],
+                    required_posting_auths: []
+                }
+            ], 21, 'block-21', 'block-20', 'trx-21', new Date('2025-01-01T00:00:00.000Z'));
+
+            expect(getTransactionInfo).toHaveBeenCalledTimes(2);
+            expect(handler).toHaveBeenCalledTimes(1);
+        });
+
+        test('onHiveEngine is skipped when the sidechain never indexes the transaction', async () => {
+            const handler = jest.fn();
+            const onError = jest.fn();
+            jest.spyOn(streamer['hive'], 'getTransactionInfo').mockResolvedValue(null);
+
+            streamer['hiveEngineVerifyDelayMs'] = 0;
+            streamer.hook('onError', onError);
+            streamer.onHiveEngine(handler);
+
+            await streamer.processOperation([
+                'custom_json',
+                {
+                    id: 'ssc-mainnet-hive',
+                    json: JSON.stringify({ contractName: 'tokens', contractAction: 'transfer', contractPayload: { symbol: 'TEST' } }),
+                    required_auths: ['alice'],
+                    required_posting_auths: []
+                }
+            ], 22, 'block-22', 'block-21', 'trx-22', new Date('2025-01-01T00:00:00.000Z'));
+
+            expect(handler).not.toHaveBeenCalled();
+            expect(onError).toHaveBeenCalledWith(expect.objectContaining({ phase: 'subscription' }));
         });
 
         test('onHiveEngine does not fire when tx verification reports contract errors', async () => {
