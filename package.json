@@ -47,7 +47,10 @@
         "CHANGELOG.md",
         "LICENSE"
     ],
-    "repository": "git@github.com:Vheissu/hive-stream.git",
+    "repository": {
+        "type": "git",
+        "url": "git+ssh://git@github.com/Vheissu/hive-stream.git"
+    },
     "homepage": "https://github.com/Vheissu/hive-stream#readme",
     "bugs": {
         "url": "https://github.com/Vheissu/hive-stream/issues"
