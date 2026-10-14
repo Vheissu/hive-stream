@@ -353,7 +353,12 @@ export function createContractEscrowTransferOperation<Payload = Record<string, u
         throw new Error('an escrow needs a HIVE or HBD amount greater than zero');
     }
 
-    const fee = normalizeTransferAmount(options.fee);
+    // Hive allows a zero agent fee, so the fee is validated as an amount, not a payment.
+    if (typeof options.fee !== 'string' || !/^\d+\.\d{3} (?:HIVE|HBD)$/.test(options.fee)) {
+        throw new Error(`fee must be a native asset string like '0.000 HIVE' or '0.250 HBD'`);
+    }
+
+    const fee = options.fee;
     const ratificationDeadline = normalizeEscrowTime(options.ratificationDeadline, 'ratificationDeadline');
     const expiration = normalizeEscrowTime(options.expiration, 'expiration');
 

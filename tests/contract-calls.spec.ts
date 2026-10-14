@@ -302,6 +302,12 @@ describe('createContractEscrowTransferOperation', () => {
         expect(JSON.parse(data.json_meta)).toEqual({ hive_stream: { contract: 'market', action: 'openTrade', payload: { listingId: 'lamp-1' } } });
     });
 
+    test('allows a zero agent fee, as Hive does', () => {
+        const [, data] = createContractEscrowTransferOperation(call, { ...base, fee: '0.000 HIVE' });
+        expect(data.fee).toBe('0.000 HIVE');
+        expect(() => createContractEscrowTransferOperation(call, { ...base, fee: '1 HIVE' })).toThrow('fee must be');
+    });
+
     test('rejects the mistakes the chain would reject', () => {
         expect(() => createContractEscrowTransferOperation(call, { ...base, agent: 'buyer' })).toThrow('three different accounts');
         expect(() => createContractEscrowTransferOperation(call, { ...base, hiveAmount: undefined })).toThrow('greater than zero');

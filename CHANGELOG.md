@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.1] - 2026-10-14
+
+### 🐛 Fixed
+- `createContractEscrowTransferOperation()` rejected a zero agent fee, which Hive allows. The fee must still be a three-decimal HIVE or HBD amount.
+
 ## [5.0.0] - 2026-10-14 - Safe by default
 
 A security and correctness release. Several defaults changed because the old ones could lose money; the [migration guide](docs/guide/migrating-to-5.md) ([online](https://vheissu.github.io/hive-stream/guide/migrating-to-5)) lists what to check.
