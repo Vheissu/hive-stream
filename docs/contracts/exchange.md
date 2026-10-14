@@ -82,6 +82,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 ### placeOrder
 
 - **Trigger:** `custom_json`
+- **Requires active key signature**
 
 **Payload**
 
@@ -102,6 +103,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 ### cancelOrder
 
 - **Trigger:** `custom_json`
+- **Requires active key signature**
 
 **Payload**
 
@@ -144,6 +146,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 ### transfer
 
 - **Trigger:** `custom_json`
+- **Requires active key signature**
 
 **Payload**
 

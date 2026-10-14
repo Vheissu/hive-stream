@@ -16,13 +16,16 @@ This contract keeps its state in SQL tables and needs a SQL-capable adapter (SQL
 
 ## Options
 
-| Option | Type | Required |
-| --- | --- | --- |
-| `name` | `string` | No |
+| Option | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | No |  |
+| `account` | `string` | No | Account that receives bounty rewards and refunds rejected ones. Refunds are signed with the app's active key, so this must be the app account. Defaults to the streamer username. |
 
 ## Actions
 
 ### createBounty
+
+Fund a new bounty by sending the reward to the app account; a duplicate bounty id or an invalid or past deadline is refunded.
 
 - **Trigger:** `transfer`, `recurrent_transfer`
 
@@ -82,6 +85,8 @@ Send as custom JSON (id: your configured `JSON_ID`):
 ```
 
 ### closeBounty
+
+Close an open bounty (sponsor or scheduled). Emits bounty_closed with the unawarded remainder once and zeroes it.
 
 - **Trigger:** `custom_json`, `time`
 

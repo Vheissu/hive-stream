@@ -12,6 +12,12 @@
           "name": "name",
           "type": "string",
           "required": false
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": false,
+          "description": "Account that holds bids in custody, refunds outbid bidders and pays\nsellers. Bids must be sent to it. Defaults to the streamer username."
         }
       ],
       "actions": [
@@ -106,6 +112,7 @@
               "required": false
             }
           ],
+          "description": "Bid by sending the full bid amount to the auction account. Outbid bidders are refunded automatically; bids that cannot be accepted are sent back.",
           "example": {
             "auctionId": "example-1"
           }
@@ -124,6 +131,7 @@
               "required": true
             }
           ],
+          "description": "Close an ended auction: pays the seller when the reserve is met, otherwise refunds the highest bidder. Calling it again retries any payout whose transfer failed.",
           "example": {
             "auctionId": "example-1"
           }
@@ -364,6 +372,12 @@
           "name": "name",
           "type": "string",
           "required": false
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": false,
+          "description": "Account that receives reservation payments and refunds rejected ones\n(wrong amount or asset, overlaps, inactive listings). Refunds are\nsigned with the app's active key, so this must be the app account.\nDefaults to the streamer username."
         }
       ],
       "actions": [
@@ -447,6 +461,7 @@
               "required": false
             }
           ],
+          "description": "Reserve a slot by paying the exact listing price; wrong amounts or assets, overlaps and inactive listings are refunded.",
           "example": {
             "listingId": "example-1",
             "reservationId": "example-1",
@@ -471,6 +486,7 @@
               "required": false
             }
           ],
+          "description": "Listing owner confirms a pending reservation.",
           "example": {
             "reservationId": "example-1"
           }
@@ -493,6 +509,7 @@
               "required": false
             }
           ],
+          "description": "Owner or booker (within the cancellation window) cancels a pending or confirmed reservation.",
           "example": {
             "reservationId": "example-1"
           }
@@ -516,6 +533,7 @@
               "required": false
             }
           ],
+          "description": "Mark a pending or confirmed reservation completed (owner or scheduled).",
           "example": {
             "reservationId": "example-1"
           }
@@ -533,6 +551,12 @@
           "name": "name",
           "type": "string",
           "required": false
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": false,
+          "description": "Account that receives bounty rewards and refunds rejected ones.\nRefunds are signed with the app's active key, so this must be the app\naccount. Defaults to the streamer username."
         }
       ],
       "actions": [
@@ -575,6 +599,7 @@
               "required": false
             }
           ],
+          "description": "Fund a new bounty by sending the reward to the app account; a duplicate bounty id or an invalid or past deadline is refunded.",
           "example": {
             "bountyId": "example-1",
             "title": "Example"
@@ -661,6 +686,7 @@
               "required": true
             }
           ],
+          "description": "Close an open bounty (sponsor or scheduled). Emits bounty_closed with the unawarded remainder once and zeroes it.",
           "example": {
             "bountyId": "example-1"
           }
@@ -730,7 +756,7 @@
           "name": "maxPerTx",
           "type": "string",
           "required": false,
-          "description": "Largest single deposit or withdrawal."
+          "description": "Largest single deposit or withdrawal. Larger withdrawals are rejected when requested or attested."
         },
         {
           "name": "dailyLimit",
@@ -748,7 +774,7 @@
           "name": "admins",
           "type": "string[]",
           "required": false,
-          "description": "Accounts allowed to pause/unpause and retry releases. Defaults to the custody account."
+          "description": "Accounts allowed to pause/unpause and retry failed releases and refunds. Defaults to the custody account."
         },
         {
           "name": "receipts",
@@ -845,7 +871,7 @@
               "required": false
             }
           ],
-          "description": "Register a withdrawal back to Hive for funds locked or burned on another chain.",
+          "description": "Register a withdrawal back to Hive for funds locked or burned on another chain. Until an operator attests it, the request is only a claim: the first operator attestation replaces a mismatched recipient, amount or asset.",
           "example": {
             "sourceChain": "eth",
             "sourceTxId": "0xabc123",
@@ -926,6 +952,24 @@
           "example": {
             "sourceChain": "eth",
             "sourceTxId": "0xabc123"
+          }
+        },
+        {
+          "name": "retryRefund",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": true,
+          "payload": [
+            {
+              "name": "depositId",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "Admin-only: re-send a deposit refund whose broadcast failed, after reconciling it.",
+          "example": {
+            "depositId": "example-1"
           }
         },
         {
@@ -1311,17 +1355,20 @@
         {
           "name": "account",
           "type": "string",
-          "required": false
+          "required": false,
+          "description": "House account that receives bets and pays winners. Defaults to the streamer username."
         },
         {
           "name": "tokenSymbol",
           "type": "string",
-          "required": false
+          "required": false,
+          "description": "Default accepted asset (HIVE). Winnings are always paid in the asset that was bet."
         },
         {
           "name": "validCurrencies",
           "type": "string[]",
-          "required": false
+          "required": false,
+          "description": "Accepted assets (HIVE and/or HBD). Defaults to `[tokenSymbol]`."
         },
         {
           "name": "minAmount",
@@ -1334,10 +1381,22 @@
           "required": false
         },
         {
+          "name": "houseEdge",
+          "type": "number",
+          "required": false,
+          "description": "House edge in percent (default 2). A win pays the stake x 2 x (100 - houseEdge) / 100, rounded down."
+        },
+        {
+          "name": "notifyLosses",
+          "type": "boolean",
+          "required": false,
+          "description": "Send a 0.001 notice transfer on losses (default false; results are always recorded as events)."
+        },
+        {
           "name": "fairness",
           "type": "FairnessManager | FairnessOptions | boolean",
           "required": false,
-          "description": "Provably-fair commit-reveal draws (recommended). When omitted the legacy\nRNG (block ids plus an uncommitted per-bet server seed) is used."
+          "description": "Provably-fair commit-reveal draws, on by default. Pass options or a\nshared FairnessManager to customise, or `false` for the legacy RNG\n(block ids plus an uncommitted server seed; not verifiable)."
         }
       ],
       "actions": [
@@ -1363,10 +1422,21 @@
               "required": false
             }
           ],
-          "description": "Bet on heads or tails by transferring to the house account; winners receive 2x.",
+          "description": "Bet on a provably-fair coin flip by transferring to the house account. `guess` must be \"heads\" or \"tails\" and `seed` (optional client seed) at most 64 characters; anything else is refunded. Winners receive 2x the stake less the house edge (2% by default).",
           "example": {
             "guess": "heads"
           }
+        },
+        {
+          "name": "rotateSeed",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": true,
+          "payload": [],
+          "description": "Reveal the current server seed and commit to a new one (house account only).",
+          "example": {}
         }
       ]
     },
@@ -1381,6 +1451,12 @@
           "name": "name",
           "type": "string",
           "required": false
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": false,
+          "description": "Account that receives contributions and pays milestone releases and\nrefunds. Payouts are signed with the app's active key, so this must be\nthe app account. Defaults to the streamer username."
         }
       ],
       "actions": [
@@ -1459,6 +1535,7 @@
               "required": true
             }
           ],
+          "description": "Contribute by sending the campaign asset to the app account; contributions to a missing, closed or expired campaign, or in the wrong asset, are refunded.",
           "example": {
             "campaignId": "example-1"
           }
@@ -1499,6 +1576,7 @@
               "required": true
             }
           ],
+          "description": "Creator releases a milestone's share of a funded campaign to the beneficiary from the app account; a failed broadcast can be retried by calling it again.",
           "example": {
             "campaignId": "example-1",
             "milestoneIndex": 0
@@ -1517,8 +1595,286 @@
               "required": true
             }
           ],
+          "description": "Refund your contributions to a failed campaign from the app account; a failed broadcast can be retried by calling it again.",
           "example": {
             "campaignId": "example-1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "dao",
+      "factory": "createDaoContract",
+      "category": "governance",
+      "description": "A DAO treasury with stake-weighted voting (Hive Power, Hive Engine stake or one per account), quorum, proposal deposits, an admin veto timelock and retryable payouts.",
+      "storage": "sql",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": false,
+          "description": "Treasury account: receives deposits and proposal deposits and sends\npayouts. Defaults to the streamer username."
+        },
+        {
+          "name": "votingPower",
+          "type": "'hive-power' | 'engine-token' | 'equal'",
+          "required": false,
+          "description": "How votes are weighted, snapshotted when the vote is cast:\n'hive-power' (the voter's own Hive Power; delegations in or out are\nignored), 'engine-token' (the voter's staked `tokenSymbol`) or 'equal'\n(one per account). Defaults to 'hive-power'."
+        },
+        {
+          "name": "tokenSymbol",
+          "type": "string",
+          "required": false,
+          "description": "Hive Engine token whose stake weights votes. Required for 'engine-token'."
+        },
+        {
+          "name": "proposalDeposit",
+          "type": "string",
+          "required": false,
+          "description": "Deposit a proposer sends with createProposal, in `depositAsset`.\nRefunded when the proposal reaches quorum and kept by the treasury\notherwise (spam protection). Defaults to '1.000'."
+        },
+        {
+          "name": "depositAsset",
+          "type": "string",
+          "required": false,
+          "description": "Asset of the proposal deposit. Defaults to 'HIVE'."
+        },
+        {
+          "name": "votingPeriodHours",
+          "type": "number",
+          "required": false,
+          "description": "How long a proposal is open for voting. Defaults to 72."
+        },
+        {
+          "name": "timelockHours",
+          "type": "number",
+          "required": false,
+          "description": "Delay between a proposal passing and its payouts, during which admins can veto. Defaults to 24."
+        },
+        {
+          "name": "quorum",
+          "type": "string",
+          "required": false,
+          "description": "Absolute quorum: the voting weight (for + against) a proposal needs,\nin HP for 'hive-power', tokens for 'engine-token' and voters for\n'equal'. Total Hive Power can't be summed per app, so quorum is an\namount, not a share of supply. Defaults to '1000'."
+        },
+        {
+          "name": "passThresholdBps",
+          "type": "number",
+          "required": false,
+          "description": "Share of the votes cast that must support a proposal, in basis points;\na proposal passes when its support is strictly above it (1-9999).\nDefaults to 5000 (simple majority)."
+        },
+        {
+          "name": "admins",
+          "type": "string[]",
+          "required": false,
+          "description": "Accounts that can veto during the timelock and change parameters. Defaults to the treasury account."
+        },
+        {
+          "name": "allowedAssets",
+          "type": "string[]",
+          "required": false,
+          "description": "Assets the treasury accepts and pays out. Defaults to ['HIVE', 'HBD']."
+        }
+      ],
+      "actions": [
+        {
+          "name": "deposit",
+          "triggers": [
+            "transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [],
+          "description": "Fund the treasury with a transfer to the treasury account. Assets the treasury does not accept are refunded.",
+          "example": {}
+        },
+        {
+          "name": "createProposal",
+          "triggers": [
+            "transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "proposalId",
+              "type": "unknown",
+              "required": false
+            },
+            {
+              "name": "title",
+              "type": "unknown",
+              "required": false
+            },
+            {
+              "name": "description",
+              "type": "unknown",
+              "required": false
+            },
+            {
+              "name": "payouts",
+              "type": "unknown",
+              "required": false
+            },
+            {
+              "name": "expiresAt",
+              "type": "unknown",
+              "required": false
+            }
+          ],
+          "description": "Open a proposal by sending the proposal deposit. Wrong deposits, invalid payloads and payouts above the available treasury balance are refunded.",
+          "example": {
+            "proposalId": "grant-42",
+            "title": "Fund the community meetup",
+            "description": "Venue and catering for the October meetup.",
+            "payouts": [
+              {
+                "to": "organizer",
+                "amount": "250.000",
+                "asset": "HIVE"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vote",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "proposalId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "support",
+              "type": "boolean",
+              "required": true
+            }
+          ],
+          "description": "Vote for or against an open proposal. Weight is snapshotted when the vote is cast; a later vote by the same account replaces it.",
+          "example": {
+            "proposalId": "example-1",
+            "support": true
+          }
+        },
+        {
+          "name": "tally",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "proposalId",
+              "type": "string",
+              "required": false
+            }
+          ],
+          "description": "Close proposals whose voting period has ended (anyone, or a scheduled time action): mark them passed or failed, refund or keep deposits and start the timelock.",
+          "example": {}
+        },
+        {
+          "name": "execute",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "proposalId",
+              "type": "string",
+              "required": false
+            }
+          ],
+          "description": "Pay out passed proposals whose timelock has elapsed (anyone, or a scheduled time action). Call it with a proposalId to retry failed payouts.",
+          "example": {}
+        },
+        {
+          "name": "vetoProposal",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": true,
+          "payload": [
+            {
+              "name": "proposalId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "reason",
+              "type": "string",
+              "required": false
+            }
+          ],
+          "description": "Admin-only: veto a passed proposal during its timelock.",
+          "example": {
+            "proposalId": "example-1"
+          }
+        },
+        {
+          "name": "cancelProposal",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "proposalId",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "Proposer-only: withdraw a proposal before anyone votes. The deposit stays with the treasury.",
+          "example": {
+            "proposalId": "example-1"
+          }
+        },
+        {
+          "name": "setParams",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": true,
+          "payload": [
+            {
+              "name": "quorum",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "passThresholdBps",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "votingPeriodHours",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "timelockHours",
+              "type": "number",
+              "required": false
+            },
+            {
+              "name": "proposalDeposit",
+              "type": "string",
+              "required": false
+            }
+          ],
+          "description": "Admin-only: change quorum, pass threshold, voting period, timelock or proposal deposit for new proposals.",
+          "example": {
+            "quorum": "2500",
+            "timelockHours": 48
           }
         }
       ]
@@ -1869,6 +2225,237 @@
       ]
     },
     {
+      "name": "escrowmarket",
+      "factory": "createEscrowMarketplaceContract",
+      "category": "commerce",
+      "description": "A peer-to-peer marketplace settled through Hive native escrow, with the app account as escrow agent: listings, auto-ratified trades, shipping and delivery tracking, and agent dispute resolution.",
+      "storage": "sql",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": false,
+          "description": "Escrow agent account. Buyers must name it as `agent`. Defaults to the streamer username."
+        },
+        {
+          "name": "agentFeeBps",
+          "type": "number",
+          "required": false,
+          "description": "Agent fee the buyer must include in the escrow, in basis points of the price (default 100 = 1%)."
+        },
+        {
+          "name": "ratificationHours",
+          "type": "number",
+          "required": false,
+          "description": "Longest allowed gap between the escrow and its ratification deadline, in hours (default 24)."
+        },
+        {
+          "name": "expirationDays",
+          "type": "number",
+          "required": false,
+          "description": "Minimum escrow lifetime (block time to expiration), in days (default 30)."
+        },
+        {
+          "name": "autoApprove",
+          "type": "boolean",
+          "required": false,
+          "description": "Approve valid escrows as the agent automatically (default true)."
+        },
+        {
+          "name": "allowedAssets",
+          "type": "string[]",
+          "required": false,
+          "description": "Assets listings may be priced in. Defaults to HIVE and HBD."
+        }
+      ],
+      "actions": [
+        {
+          "name": "createListing",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "listingId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "price",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "asset",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "description",
+              "type": "string",
+              "required": false
+            }
+          ],
+          "description": "List an item for sale at a fixed price in HIVE or HBD. The sender is the seller.",
+          "example": {
+            "listingId": "example-1",
+            "title": "Example",
+            "price": "1.000",
+            "asset": "HIVE"
+          }
+        },
+        {
+          "name": "cancelListing",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "listingId",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "Withdraw a listing (seller only, while no trade is open on it).",
+          "example": {
+            "listingId": "example-1"
+          }
+        },
+        {
+          "name": "openTrade",
+          "triggers": [
+            "escrow_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "listingId",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "Buy a listing: send escrow_transfer to the seller with this contract's account as agent, at least the price and the agent fee, and this call in json_meta. Invalid escrows are recorded as rejected and never ratified, so the chain returns the funds at the ratification deadline.",
+          "example": {
+            "listingId": "example-1"
+          }
+        },
+        {
+          "name": "approveTrade",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": true,
+          "payload": [
+            {
+              "name": "tradeId",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "Agent only: ratify a pending escrow as the agent (when autoApprove is off, or to retry a failed approval).",
+          "example": {
+            "tradeId": "example-1"
+          }
+        },
+        {
+          "name": "markShipped",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "tradeId",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "Seller marks a ratified trade as shipped.",
+          "example": {
+            "tradeId": "example-1"
+          }
+        },
+        {
+          "name": "confirmDelivery",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "tradeId",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "Buyer records delivery. Funds move only when the buyer also broadcasts escrow_release to the seller; the contract closes the trade when it sees that release on chain.",
+          "example": {
+            "tradeId": "example-1"
+          }
+        },
+        {
+          "name": "resolveDispute",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": true,
+          "payload": [
+            {
+              "name": "tradeId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "receiver",
+              "type": "\"buyer\" | \"seller\"",
+              "required": true,
+              "values": [
+                "buyer",
+                "seller"
+              ]
+            },
+            {
+              "name": "hiveAmount",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "hbdAmount",
+              "type": "string",
+              "required": false
+            }
+          ],
+          "description": "Agent only: release a disputed escrow to the buyer or seller (the full balance unless amounts are given).",
+          "example": {
+            "tradeId": "example-1",
+            "receiver": "buyer"
+          }
+        },
+        {
+          "name": "expireTrades",
+          "triggers": [
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": [],
+          "description": "Scheduled sweep: marks unratified escrows past their deadline, and ratified escrows past expiration, as expired.",
+          "example": {}
+        }
+      ]
+    },
+    {
       "name": "exchange",
       "factory": "createExchangeContract",
       "category": "finance",
@@ -1982,7 +2569,7 @@
           "triggers": [
             "custom_json"
           ],
-          "requiresActiveKey": false,
+          "requiresActiveKey": true,
           "payload": [
             {
               "name": "side",
@@ -2027,7 +2614,7 @@
           "triggers": [
             "custom_json"
           ],
-          "requiresActiveKey": false,
+          "requiresActiveKey": true,
           "payload": [
             {
               "name": "orderId",
@@ -2081,7 +2668,7 @@
           "triggers": [
             "custom_json"
           ],
-          "requiresActiveKey": false,
+          "requiresActiveKey": true,
           "payload": [
             {
               "name": "to",
@@ -2521,6 +3108,12 @@
           "name": "name",
           "type": "string",
           "required": false
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": false,
+          "description": "Account that receives commitments and refunds rejected ones. Refunds\nare signed with the app's active key, so this must be the app\naccount. Defaults to the streamer username."
         }
       ],
       "actions": [
@@ -2589,6 +3182,7 @@
               "required": true
             }
           ],
+          "description": "Commit funds by sending the group buy asset to the app account; commitments to a missing, closed or expired group buy, or in the wrong asset, are refunded.",
           "example": {
             "groupBuyId": "example-1"
           }
@@ -2624,6 +3218,7 @@
               "required": true
             }
           ],
+          "description": "Withdraw your commitments before the deadline (lowering the totals) or after the group buy failed.",
           "example": {
             "groupBuyId": "example-1"
           }
@@ -2645,22 +3240,26 @@
         {
           "name": "account",
           "type": "string",
-          "required": false
+          "required": false,
+          "description": "House account that receives bets and pays winners. Defaults to the streamer username."
         },
         {
           "name": "tokenSymbol",
           "type": "string",
-          "required": false
+          "required": false,
+          "description": "Default accepted asset (HIVE). Winnings are always paid in the asset that was bet."
         },
         {
           "name": "validCurrencies",
           "type": "string[]",
-          "required": false
+          "required": false,
+          "description": "Accepted assets (HIVE and/or HBD). Defaults to `[tokenSymbol]`."
         },
         {
           "name": "houseEdge",
           "type": "number",
-          "required": false
+          "required": false,
+          "description": "House edge in percent (default 1). A win pays the fair odds x (100 - houseEdge) / 100, rounded down."
         },
         {
           "name": "minBet",
@@ -2673,10 +3272,16 @@
           "required": false
         },
         {
+          "name": "notifyLosses",
+          "type": "boolean",
+          "required": false,
+          "description": "Send a 0.001 notice transfer on losses (default false; results are always recorded as events)."
+        },
+        {
           "name": "fairness",
           "type": "FairnessManager | FairnessOptions | boolean",
           "required": false,
-          "description": "Provably-fair commit-reveal draws (recommended). `true` uses defaults;\npass options or a shared FairnessManager to customise. When omitted the\nlegacy block-id RNG is used for backwards compatibility."
+          "description": "Provably-fair commit-reveal draws, on by default. Pass options or a\nshared FairnessManager to customise, or `false` for the legacy block-id\nRNG (not verifiable, and a block producer can bias it)."
         }
       ],
       "actions": [
@@ -2698,10 +3303,21 @@
               "required": false
             }
           ],
-          "description": "Bet by transferring to the house account; wins when the 1-100 roll is below your guess.",
+          "description": "Bet by transferring to the house account; you win when the provably-fair 1-100 roll is below your guess. `roll` must be a whole number from 2 to 96 (the win chance is roll - 1 percent) and `seed` (optional client seed) at most 64 characters; anything else is refunded.",
           "example": {
             "roll": 10
           }
+        },
+        {
+          "name": "rotateSeed",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": true,
+          "payload": [],
+          "description": "Reveal the current server seed and commit to a new one (house account only).",
+          "example": {}
         }
       ]
     },
@@ -2720,22 +3336,26 @@
         {
           "name": "account",
           "type": "string",
-          "required": false
+          "required": false,
+          "description": "House account that sells tickets and pays winners. Defaults to the streamer username."
         },
         {
           "name": "feeAccount",
           "type": "string",
-          "required": false
+          "required": false,
+          "description": "Receives the fee share of each pot. Defaults to the house account."
         },
         {
           "name": "tokenSymbol",
           "type": "string",
-          "required": false
+          "required": false,
+          "description": "Asset tickets are priced and paid out in (HIVE or HBD). Tickets paid in any other asset are refunded."
         },
         {
           "name": "validCurrencies",
           "type": "string[]",
-          "required": false
+          "required": false,
+          "description": "Accepted ticket assets. Defaults to `[tokenSymbol]`; a ticket must also be paid in `tokenSymbol`."
         },
         {
           "name": "validDrawTypes",
@@ -2778,10 +3398,16 @@
           "required": false
         },
         {
+          "name": "notifyLosses",
+          "type": "boolean",
+          "required": false,
+          "description": "Send a 0.001 notice transfer to entrants who did not win a draw (default false; results are always recorded on the draw)."
+        },
+        {
           "name": "fairness",
           "type": "FairnessManager | FairnessOptions | boolean",
           "required": false,
-          "description": "Provably-fair winner selection (recommended). The client seed is the\nsha256 of every entry's transaction id, so all entrants contribute\nentropy. When omitted the legacy block-id RNG is used."
+          "description": "Provably-fair winner selection, on by default. The client seed is the\nsha256 of every entry's transaction id, so all entrants contribute\nentropy. Pass `false` for the legacy block-id RNG (not verifiable)."
         }
       ],
       "actions": [
@@ -2802,7 +3428,7 @@
               ]
             }
           ],
-          "description": "Buy a ticket for the hourly or daily draw by transferring the ticket cost.",
+          "description": "Buy a ticket for the hourly or daily draw by transferring the ticket cost in the lotto's asset. `type` must be \"hourly\" or \"daily\" (or another configured draw type); invalid tickets are refunded and overpayments are refunded down to the ticket cost.",
           "example": {
             "type": "hourly"
           }
@@ -2822,6 +3448,17 @@
           ],
           "requiresActiveKey": false,
           "payload": null
+        },
+        {
+          "name": "rotateSeed",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": true,
+          "payload": [],
+          "description": "Reveal the current server seed and commit to a new one (house account only).",
+          "example": {}
         }
       ]
     },
@@ -2882,7 +3519,7 @@
           "triggers": [
             "custom_json"
           ],
-          "requiresActiveKey": false,
+          "requiresActiveKey": true,
           "payload": null
         },
         {
@@ -2890,7 +3527,7 @@
           "triggers": [
             "custom_json"
           ],
-          "requiresActiveKey": false,
+          "requiresActiveKey": true,
           "payload": null
         },
         {
@@ -2898,7 +3535,7 @@
           "triggers": [
             "custom_json"
           ],
-          "requiresActiveKey": false,
+          "requiresActiveKey": true,
           "payload": null
         },
         {
@@ -3009,7 +3646,7 @@
           "triggers": [
             "custom_json"
           ],
-          "requiresActiveKey": false,
+          "requiresActiveKey": true,
           "payload": [
             {
               "name": "symbol",
@@ -3043,7 +3680,7 @@
           "triggers": [
             "custom_json"
           ],
-          "requiresActiveKey": false,
+          "requiresActiveKey": true,
           "payload": [
             {
               "name": "symbol",
@@ -3125,6 +3762,12 @@
           "name": "name",
           "type": "string",
           "required": false
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": false,
+          "description": "Account that receives premiums and reserve funding and pays approved\nclaims. Payouts are signed with the app's active key, so this must be\nthe app account. Defaults to the streamer username."
         }
       ],
       "actions": [
@@ -3274,6 +3917,25 @@
               "required": false
             }
           ],
+          "description": "Pool owner approves a pending claim (up to the requested amount and the coverage cap) and pays it from the app account.",
+          "example": {
+            "claimId": "example-1"
+          }
+        },
+        {
+          "name": "retryClaimPayout",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "claimId",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "Re-send a claim payout whose broadcast failed (pool owner, claimant or app account).",
           "example": {
             "claimId": "example-1"
           }
@@ -3421,6 +4083,12 @@
           "name": "name",
           "type": "string",
           "required": false
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": false,
+          "description": "Account that receives contributions and sends refunds (unfilled\nportions, and every contribution when a sale misses its soft cap).\nContributions must be sent to it. Defaults to the streamer username."
         }
       ],
       "actions": [
@@ -3477,11 +4145,17 @@
               "required": false
             },
             {
+              "name": "softCap",
+              "type": "number",
+              "required": false
+            },
+            {
               "name": "metadata",
               "type": "record",
               "required": false
             }
           ],
+          "description": "Open a token sale. Optional softCap is the minimum units that must sell; below it the sale fails and contributions are refunded.",
           "example": {
             "saleId": "example-1",
             "title": "Example",
@@ -3506,6 +4180,7 @@
               "required": true
             }
           ],
+          "description": "Buy sale units by sending payment to the launchpad account. Whole units are filled up to what remains; any unfilled portion is refunded.",
           "example": {
             "saleId": "example-1"
           }
@@ -3524,6 +4199,7 @@
               "required": true
             }
           ],
+          "description": "Finalize a closed or sold-out sale. A sale below its soft cap fails and every contribution is refunded; calling it again retries failed refunds.",
           "example": {
             "saleId": "example-1"
           }
@@ -3771,7 +4447,7 @@
           "triggers": [
             "custom_json"
           ],
-          "requiresActiveKey": false,
+          "requiresActiveKey": true,
           "payload": [
             {
               "name": "proposalId",
@@ -3805,7 +4481,7 @@
           "triggers": [
             "custom_json"
           ],
-          "requiresActiveKey": false,
+          "requiresActiveKey": true,
           "payload": [
             {
               "name": "proposalId",
@@ -3954,6 +4630,7 @@
               "required": true
             }
           ],
+          "description": "Compute the round median and credit in-tolerance reporters from the feed budget. Each round finalizes once.",
           "example": {
             "feedId": "example-1",
             "roundId": "example-1"
@@ -3966,6 +4643,192 @@
           ],
           "requiresActiveKey": false,
           "payload": null
+        }
+      ]
+    },
+    {
+      "name": "p2pswap",
+      "factory": "createP2PSwapContract",
+      "category": "finance",
+      "description": "A peer-to-peer swap desk for HIVE, HBD and Hive Engine tokens: HIVE/HBD swaps settle through Hive escrow with the app as agent, token swaps through the app account with retryable payouts.",
+      "storage": "sql",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": false,
+          "description": "The app account: escrow agent for HIVE/HBD swaps and the account that\nholds both legs of a swap involving a Hive Engine token. Defaults to the\nstreamer username."
+        },
+        {
+          "name": "feeBps",
+          "type": "number",
+          "required": false,
+          "description": "Fee in basis points (max 2000, default 0). Custodial swaps deduct it\nfrom the maker's proceeds; escrow swaps require the taker's escrow to\ncarry at least this agent fee in the buy-side asset."
+        },
+        {
+          "name": "allowedAssets",
+          "type": "string[]",
+          "required": false,
+          "description": "HIVE/HBD assets offers may sell or buy. Defaults to ['HIVE', 'HBD']."
+        },
+        {
+          "name": "allowedTokens",
+          "type": "string[]",
+          "required": false,
+          "description": "Hive Engine symbols offers may sell or buy. Defaults to [] (any symbol)."
+        },
+        {
+          "name": "offerTtlHours",
+          "type": "number",
+          "required": false,
+          "description": "Default and maximum offer lifetime in hours. Defaults to 72."
+        }
+      ],
+      "actions": [
+        {
+          "name": "createOffer",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "offerId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "sell",
+              "type": "object",
+              "required": true
+            },
+            {
+              "name": "buy",
+              "type": "object",
+              "required": true
+            },
+            {
+              "name": "expiresAt",
+              "type": "string",
+              "required": false
+            }
+          ],
+          "description": "Post an all-or-nothing offer to swap sell for buy. HIVE<->HBD offers settle through Hive escrow; offers with a Hive Engine token settle through the app account.",
+          "example": {
+            "offerId": "offer-1",
+            "sell": {
+              "asset": "HIVE",
+              "amount": "100.000"
+            },
+            "buy": {
+              "asset": "HBD",
+              "amount": "25.000"
+            }
+          }
+        },
+        {
+          "name": "fundOffer",
+          "triggers": [
+            "transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "offerId",
+              "type": "string",
+              "required": false
+            }
+          ],
+          "description": "Maker deposits the sell side of a custodial offer (a HIVE/HBD transfer here, or a Hive Engine transfer with the same memo). Mismatched deposits are refunded.",
+          "example": {
+            "offerId": "offer-1"
+          }
+        },
+        {
+          "name": "takeOffer",
+          "triggers": [
+            "transfer",
+            "escrow_transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "offerId",
+              "type": "string",
+              "required": false
+            }
+          ],
+          "description": "Take an offer. Escrow offers: an escrow_transfer of the buy side to the maker with the app as agent. Custodial offers: pay the buy side to the app (transfer or Hive Engine transfer). Mismatched payments are refunded or the escrow rejected.",
+          "example": {
+            "offerId": "offer-1"
+          }
+        },
+        {
+          "name": "settle",
+          "triggers": [
+            "transfer"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "offerId",
+              "type": "string",
+              "required": false
+            }
+          ],
+          "description": "Maker pays the sell side of a taken escrow offer straight to the taker; the app then approves the taker's escrow as agent.",
+          "example": {
+            "offerId": "offer-1"
+          }
+        },
+        {
+          "name": "cancelOffer",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": false,
+          "payload": [
+            {
+              "name": "offerId",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "Maker cancels an untaken offer; a funded custodial offer is refunded.",
+          "example": {
+            "offerId": "offer-1"
+          }
+        },
+        {
+          "name": "expireOffers",
+          "triggers": [
+            "time"
+          ],
+          "requiresActiveKey": false,
+          "payload": [],
+          "description": "Scheduled: expire untaken offers (refunding deposits) and return escrows whose maker did not pay in time.",
+          "example": {}
+        },
+        {
+          "name": "retryPayouts",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": true,
+          "payload": [
+            {
+              "name": "payoutId",
+              "type": "string",
+              "required": false
+            }
+          ],
+          "description": "App account only: re-broadcast failed payouts, refunds and escrow approvals (all, or one payoutId) after checking the account history.",
+          "example": {}
         }
       ]
     },
@@ -4397,6 +5260,7 @@
               "required": true
             }
           ],
+          "description": "Resolve an open market after it closes (creator only). A market whose winning option has no stakes is voided so stakers can reclaim them.",
           "example": {
             "marketId": "example-1",
             "winningOption": 1
@@ -4415,6 +5279,7 @@
               "required": true
             }
           ],
+          "description": "Request your share of the pool for a resolved market, or your stakes back for a voided one.",
           "example": {
             "marketId": "example-1"
           }
@@ -4565,6 +5430,7 @@
               "required": false
             }
           ],
+          "description": "Execute an approved proposal once its timelock has expired: by a queue approver, or by a scheduled time action (no sender needed).",
           "example": {
             "proposalId": "example-1"
           }
@@ -5180,17 +6046,20 @@
         {
           "name": "account",
           "type": "string",
-          "required": false
+          "required": false,
+          "description": "House account that receives bets and pays winners. Defaults to the streamer username."
         },
         {
           "name": "tokenSymbol",
           "type": "string",
-          "required": false
+          "required": false,
+          "description": "Default accepted asset (HIVE). Winnings are always paid in the asset that was bet."
         },
         {
           "name": "validCurrencies",
           "type": "string[]",
-          "required": false
+          "required": false,
+          "description": "Accepted assets (HIVE and/or HBD). Defaults to `[tokenSymbol]`."
         },
         {
           "name": "minAmount",
@@ -5203,10 +6072,16 @@
           "required": false
         },
         {
+          "name": "notifyLosses",
+          "type": "boolean",
+          "required": false,
+          "description": "Send a 0.001 notice transfer on losses (default false; results are always recorded as events)."
+        },
+        {
           "name": "fairness",
           "type": "FairnessManager | FairnessOptions | boolean",
           "required": false,
-          "description": "Provably-fair commit-reveal draws (recommended). When omitted the legacy\nRNG (block ids plus an uncommitted per-bet server seed) is used."
+          "description": "Provably-fair commit-reveal draws, on by default. Pass options or a\nshared FairnessManager to customise, or `false` for the legacy RNG\n(block ids plus an uncommitted server seed; not verifiable)."
         }
       ],
       "actions": [
@@ -5241,11 +6116,22 @@
               "required": false
             }
           ],
-          "description": "Place a single-zero roulette bet by transferring to the house account.",
+          "description": "Place a provably-fair single-zero roulette bet by transferring to the house account. `betType`/`value`: straight 0-36 (pays 36x), color red/black, parity odd/even, range low/high (2x), dozen or column 1-3 (3x). `seed` (optional client seed) at most 64 characters. Invalid bets are refunded.",
           "example": {
             "betType": "straight",
             "value": 17
           }
+        },
+        {
+          "name": "rotateSeed",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": true,
+          "payload": [],
+          "description": "Reveal the current server seed and commit to a new one (house account only).",
+          "example": {}
         }
       ]
     },
@@ -5264,17 +6150,20 @@
         {
           "name": "account",
           "type": "string",
-          "required": false
+          "required": false,
+          "description": "House account that receives bets and pays winners. Defaults to the streamer username."
         },
         {
           "name": "tokenSymbol",
           "type": "string",
-          "required": false
+          "required": false,
+          "description": "Default accepted asset (HIVE). Winnings are always paid in the asset that was bet."
         },
         {
           "name": "validCurrencies",
           "type": "string[]",
-          "required": false
+          "required": false,
+          "description": "Accepted assets (HIVE and/or HBD). Defaults to `[tokenSymbol]`."
         },
         {
           "name": "minAmount",
@@ -5287,10 +6176,22 @@
           "required": false
         },
         {
+          "name": "houseEdge",
+          "type": "number",
+          "required": false,
+          "description": "House edge in percent (default 2). A win pays the stake x 2 x (100 - houseEdge) / 100, rounded down; ties are refunded."
+        },
+        {
+          "name": "notifyLosses",
+          "type": "boolean",
+          "required": false,
+          "description": "Send a 0.001 notice transfer on losses (default false; results are always recorded as events)."
+        },
+        {
           "name": "fairness",
           "type": "FairnessManager | FairnessOptions | boolean",
           "required": false,
-          "description": "Provably-fair commit-reveal draws (recommended). When omitted the legacy\nRNG (block ids plus an uncommitted per-bet server seed) is used."
+          "description": "Provably-fair commit-reveal draws, on by default. Pass options or a\nshared FairnessManager to customise, or `false` for the legacy RNG\n(block ids plus an uncommitted server seed; not verifiable)."
         }
       ],
       "actions": [
@@ -5317,10 +6218,21 @@
               "required": false
             }
           ],
-          "description": "Play rock-paper-scissors against the house by transferring a wager; ties are refunded.",
+          "description": "Play provably-fair rock-paper-scissors against the house by transferring a wager. `move` must be \"rock\", \"paper\" or \"scissors\" and `seed` (optional client seed) at most 64 characters; anything else is refunded. Wins pay 2x the stake less the house edge (2% by default); ties are refunded.",
           "example": {
             "move": "rock"
           }
+        },
+        {
+          "name": "rotateSeed",
+          "triggers": [
+            "custom_json",
+            "time"
+          ],
+          "requiresActiveKey": true,
+          "payload": [],
+          "description": "Reveal the current server seed and commit to a new one (house account only).",
+          "example": {}
         }
       ]
     },
@@ -5481,7 +6393,7 @@
           "name": "accrual",
           "type": "'time' | 'block'",
           "required": false,
-          "description": "'time' accrues `rewardRate` per second of block time; 'block' accrues per block."
+          "description": "'time' accrues `rewardRate` per second of block time; 'block' accrues\nper block. Either way accrual stops at the pool's `endsAt`."
         }
       ],
       "actions": [
@@ -5610,7 +6522,7 @@
               "required": true
             }
           ],
-          "description": "Release your matured unbonding entries.",
+          "description": "Release your matured unbonding entries, including any whose earlier transfer failed.",
           "example": {
             "poolId": "example-1"
           }
@@ -5628,7 +6540,7 @@
               "required": true
             }
           ],
-          "description": "Pay out accrued rewards (rounded down to the asset precision; the remainder stays pending).",
+          "description": "Pay out accrued rewards (rounded down to the asset precision; the remainder stays pending). Re-sends earlier claims whose transfer failed.",
           "example": {
             "poolId": "example-1"
           }
@@ -5664,7 +6576,7 @@
           ],
           "requiresActiveKey": false,
           "payload": [],
-          "description": "Scheduled release of every matured unbonding entry.",
+          "description": "Scheduled release of every matured unbonding entry, retrying failed transfers.",
           "example": {}
         }
       ]
@@ -6253,7 +7165,7 @@
           "name": "organizers",
           "type": "string[]",
           "required": false,
-          "description": "When set, only these accounts can create tournaments."
+          "description": "When set, only these accounts can create tournaments, and a\ntournament's oracle defaults to its (trusted) organizer.\n\nWhen unset, anyone can create a tournament. An organizer who could\nalso score it could enter an alt account, score it first and take the\nwhole pot, so open tournaments are scored by the app account (or one of\n`oracles`) only: the oracle defaults to the app account and a\ntournament's `oracle` must be the app account or one of `oracles`."
         }
       ],
       "actions": [
@@ -6473,6 +7385,24 @@
             }
           ],
           "description": "Organizer-only: cancel and refund every entry.",
+          "example": {
+            "tournamentId": "example-1"
+          }
+        },
+        {
+          "name": "retryPayouts",
+          "triggers": [
+            "custom_json"
+          ],
+          "requiresActiveKey": true,
+          "payload": [
+            {
+              "name": "tournamentId",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "description": "App account or organizer: re-send prizes or refunds whose transfer failed.",
           "example": {
             "tournamentId": "example-1"
           }

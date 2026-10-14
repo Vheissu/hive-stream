@@ -67,6 +67,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 ### approveProposal
 
 - **Trigger:** `custom_json`
+- **Requires active key signature**
 
 **Payload**
 
@@ -99,6 +100,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 ### markExecuted
 
 - **Trigger:** `custom_json`
+- **Requires active key signature**
 
 **Payload**
 

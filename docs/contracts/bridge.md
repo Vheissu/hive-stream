@@ -27,10 +27,10 @@ This contract keeps its state in SQL tables and needs a SQL-capable adapter (SQL
 | `addressPattern` | `RegExp \| Record<string, RegExp>` | No | Validates destination addresses, globally or per chain. |
 | `feeBps` | `number` | No | Fee charged on both directions, in basis points (max 2000). |
 | `minAmount` | `string` | No |  |
-| `maxPerTx` | `string` | No | Largest single deposit or withdrawal. |
+| `maxPerTx` | `string` | No | Largest single deposit or withdrawal. Larger withdrawals are rejected when requested or attested. |
 | `dailyLimit` | `string` | No | Rolling 24h cap per asset and direction across all users. |
 | `accountDailyLimit` | `string` | No | Rolling 24h cap on deposits per Hive account and asset. |
-| `admins` | `string[]` | No | Accounts allowed to pause/unpause and retry releases. Defaults to the custody account. |
+| `admins` | `string[]` | No | Accounts allowed to pause/unpause and retry failed releases and refunds. Defaults to the custody account. |
 | `receipts` | `boolean \| { id?: string }` | No | Publish the contract's decision on each deposit on-chain. When enabled, the custody account broadcasts a custom_json (posting authority) as soon as a deposit is accepted or refunded, so operators can act on the contract's verdict instead of re-implementing its checks. Accepted receipts include the rolling 24h totals used for the daily limits. `true` uses the custom_json id `<contract name>-receipts`. Off by default. |
 
 ## Actions
@@ -77,7 +77,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 
 ### requestWithdrawal
 
-Register a withdrawal back to Hive for funds locked or burned on another chain.
+Register a withdrawal back to Hive for funds locked or burned on another chain. Until an operator attests it, the request is only a claim: the first operator attestation replaces a mismatched recipient, amount or asset.
 
 - **Trigger:** `custom_json`
 
@@ -139,6 +139,25 @@ Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
 {"hive_stream":{"contract":"bridge","action":"executeWithdrawal","payload":{"sourceChain":"eth","sourceTxId":"0xabc123"}}}
+```
+
+### retryRefund
+
+Admin-only: re-send a deposit refund whose broadcast failed, after reconciling it.
+
+- **Trigger:** `custom_json`
+- **Requires active key signature**
+
+**Payload**
+
+| Field | Type | Required |
+| --- | --- | --- |
+| `depositId` | `string` | Yes |
+
+Send as custom JSON (id: your configured `JSON_ID`):
+
+```json
+{"hive_stream":{"contract":"bridge","action":"retryRefund","payload":{"depositId":"example-1"}}}
 ```
 
 ### processQueue

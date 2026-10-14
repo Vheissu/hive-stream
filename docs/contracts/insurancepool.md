@@ -16,9 +16,10 @@ This contract keeps its state in SQL tables and needs a SQL-capable adapter (SQL
 
 ## Options
 
-| Option | Type | Required |
-| --- | --- | --- |
-| `name` | `string` | No |
+| Option | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | No |  |
+| `account` | `string` | No | Account that receives premiums and reserve funding and pays approved claims. Payouts are signed with the app's active key, so this must be the app account. Defaults to the streamer username. |
 
 ## Actions
 
@@ -97,6 +98,8 @@ Send as custom JSON (id: your configured `JSON_ID`):
 
 ### approveClaim
 
+Pool owner approves a pending claim (up to the requested amount and the coverage cap) and pays it from the app account.
+
 - **Trigger:** `custom_json`
 
 **Payload**
@@ -111,6 +114,24 @@ Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
 {"hive_stream":{"contract":"insurancepool","action":"approveClaim","payload":{"claimId":"example-1"}}}
+```
+
+### retryClaimPayout
+
+Re-send a claim payout whose broadcast failed (pool owner, claimant or app account).
+
+- **Trigger:** `custom_json`
+
+**Payload**
+
+| Field | Type | Required |
+| --- | --- | --- |
+| `claimId` | `string` | Yes |
+
+Send as custom JSON (id: your configured `JSON_ID`):
+
+```json
+{"hive_stream":{"contract":"insurancepool","action":"retryClaimPayout","payload":{"claimId":"example-1"}}}
 ```
 
 ### expirePolicies

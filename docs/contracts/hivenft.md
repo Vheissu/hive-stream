@@ -82,6 +82,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 ### transferNFT
 
 - **Trigger:** `custom_json`
+- **Requires active key signature**
 
 **Payload**
 
@@ -96,6 +97,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 ### burnNFT
 
 - **Trigger:** `custom_json`
+- **Requires active key signature**
 
 **Payload**
 
@@ -110,6 +112,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 ### listNFT
 
 - **Trigger:** `custom_json`
+- **Requires active key signature**
 
 **Payload**
 

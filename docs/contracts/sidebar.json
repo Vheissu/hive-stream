@@ -40,12 +40,20 @@
     "link": "/contracts/crowdfund"
   },
   {
+    "text": "dao",
+    "link": "/contracts/dao"
+  },
+  {
     "text": "dcabots",
     "link": "/contracts/dcabots"
   },
   {
     "text": "domains",
     "link": "/contracts/domains"
+  },
+  {
+    "text": "escrowmarket",
+    "link": "/contracts/escrowmarket"
   },
   {
     "text": "exchange",
@@ -106,6 +114,10 @@
   {
     "text": "oraclebounty",
     "link": "/contracts/oraclebounty"
+  },
+  {
+    "text": "p2pswap",
+    "link": "/contracts/p2pswap"
   },
   {
     "text": "payroll",

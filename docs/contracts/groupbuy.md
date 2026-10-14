@@ -16,9 +16,10 @@ This contract keeps its state in SQL tables and needs a SQL-capable adapter (SQL
 
 ## Options
 
-| Option | Type | Required |
-| --- | --- | --- |
-| `name` | `string` | No |
+| Option | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | No |  |
+| `account` | `string` | No | Account that receives commitments and refunds rejected ones. Refunds are signed with the app's active key, so this must be the app account. Defaults to the streamer username. |
 
 ## Actions
 
@@ -45,6 +46,8 @@ Send as custom JSON (id: your configured `JSON_ID`):
 ```
 
 ### commit
+
+Commit funds by sending the group buy asset to the app account; commitments to a missing, closed or expired group buy, or in the wrong asset, are refunded.
 
 - **Trigger:** `transfer`, `recurrent_transfer`
 
@@ -77,6 +80,8 @@ Send as custom JSON (id: your configured `JSON_ID`):
 ```
 
 ### withdrawCommitment
+
+Withdraw your commitments before the deadline (lowering the totals) or after the group buy failed.
 
 - **Trigger:** `custom_json`
 

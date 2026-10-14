@@ -16,9 +16,10 @@ This contract keeps its state in SQL tables and needs a SQL-capable adapter (SQL
 
 ## Options
 
-| Option | Type | Required |
-| --- | --- | --- |
-| `name` | `string` | No |
+| Option | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | No |  |
+| `account` | `string` | No | Account that holds bids in custody, refunds outbid bidders and pays sellers. Bids must be sent to it. Defaults to the streamer username. |
 
 ## Actions
 
@@ -50,6 +51,8 @@ Send as custom JSON (id: your configured `JSON_ID`):
 
 ### placeBid
 
+Bid by sending the full bid amount to the auction account. Outbid bidders are refunded automatically; bids that cannot be accepted are sent back.
+
 - **Trigger:** `transfer`, `recurrent_transfer`
 
 **Payload**
@@ -66,6 +69,8 @@ Send as a transfer memo:
 ```
 
 ### settleAuction
+
+Close an ended auction: pays the seller when the reserve is met, otherwise refunds the highest bidder. Calling it again retries any payout whose transfer failed.
 
 - **Trigger:** `custom_json`, `time`
 

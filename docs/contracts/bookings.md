@@ -16,9 +16,10 @@ This contract keeps its state in SQL tables and needs a SQL-capable adapter (SQL
 
 ## Options
 
-| Option | Type | Required |
-| --- | --- | --- |
-| `name` | `string` | No |
+| Option | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | No |  |
+| `account` | `string` | No | Account that receives reservation payments and refunds rejected ones (wrong amount or asset, overlaps, inactive listings). Refunds are signed with the app's active key, so this must be the app account. Defaults to the streamer username. |
 
 ## Actions
 
@@ -46,6 +47,8 @@ Send as custom JSON (id: your configured `JSON_ID`):
 
 ### reserve
 
+Reserve a slot by paying the exact listing price; wrong amounts or assets, overlaps and inactive listings are refunded.
+
 - **Trigger:** `transfer`, `recurrent_transfer`
 
 **Payload**
@@ -65,6 +68,8 @@ Send as a transfer memo:
 
 ### confirmReservation
 
+Listing owner confirms a pending reservation.
+
 - **Trigger:** `custom_json`
 
 **Payload**
@@ -82,6 +87,8 @@ Send as custom JSON (id: your configured `JSON_ID`):
 
 ### cancelReservation
 
+Owner or booker (within the cancellation window) cancels a pending or confirmed reservation.
+
 - **Trigger:** `custom_json`
 
 **Payload**
@@ -98,6 +105,8 @@ Send as custom JSON (id: your configured `JSON_ID`):
 ```
 
 ### completeReservation
+
+Mark a pending or confirmed reservation completed (owner or scheduled).
 
 - **Trigger:** `custom_json`, `time`
 

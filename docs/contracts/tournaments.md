@@ -23,7 +23,7 @@ This contract keeps its state in SQL tables and needs a SQL-capable adapter (SQL
 | `feeBps` | `number` | No | House fee taken from the prize pool, in basis points (max 3000). |
 | `feeAccount` | `string` | No | Where the house fee is sent. Defaults to keeping it in `account`. |
 | `oracles` | `string[]` | No | Accounts allowed to submit scores for any tournament, in addition to each tournament's oracle. |
-| `organizers` | `string[]` | No | When set, only these accounts can create tournaments. |
+| `organizers` | `string[]` | No | When set, only these accounts can create tournaments, and a tournament's oracle defaults to its (trusted) organizer.  When unset, anyone can create a tournament. An organizer who could also score it could enter an alt account, score it first and take the whole pot, so open tournaments are scored by the app account (or one of `oracles`) only: the oracle defaults to the app account and a tournament's `oracle` must be the app account or one of `oracles`. |
 
 ## Actions
 
@@ -162,4 +162,23 @@ Send as custom JSON (id: your configured `JSON_ID`):
 
 ```json
 {"hive_stream":{"contract":"tournaments","action":"cancelTournament","payload":{"tournamentId":"example-1"}}}
+```
+
+### retryPayouts
+
+App account or organizer: re-send prizes or refunds whose transfer failed.
+
+- **Trigger:** `custom_json`
+- **Requires active key signature**
+
+**Payload**
+
+| Field | Type | Required |
+| --- | --- | --- |
+| `tournamentId` | `string` | Yes |
+
+Send as custom JSON (id: your configured `JSON_ID`):
+
+```json
+{"hive_stream":{"contract":"tournaments","action":"retryPayouts","payload":{"tournamentId":"example-1"}}}
 ```

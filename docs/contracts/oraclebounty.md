@@ -80,6 +80,8 @@ Send as custom JSON (id: your configured `JSON_ID`):
 
 ### finalizeRound
 
+Compute the round median and credit in-tolerance reporters from the feed budget. Each round finalizes once.
+
 - **Trigger:** `custom_json`, `time`
 
 **Payload**

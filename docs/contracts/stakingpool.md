@@ -21,7 +21,7 @@ This contract keeps its state in SQL tables and needs a SQL-capable adapter (SQL
 | `name` | `string` | No |  |
 | `account` | `string` | No | Custody account that receives stakes and reward funding and pays them out. Defaults to the streamer username. |
 | `admins` | `string[]` | No | Accounts allowed to create pools and change reward rates. Defaults to the custody account. |
-| `accrual` | `'time' \| 'block'` | No | 'time' accrues `rewardRate` per second of block time; 'block' accrues per block. |
+| `accrual` | `'time' \| 'block'` | No | 'time' accrues `rewardRate` per second of block time; 'block' accrues per block. Either way accrual stops at the pool's `endsAt`. |
 
 ## Actions
 
@@ -107,7 +107,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 
 ### withdraw
 
-Release your matured unbonding entries.
+Release your matured unbonding entries, including any whose earlier transfer failed.
 
 - **Trigger:** `custom_json`
 
@@ -125,7 +125,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 
 ### claim
 
-Pay out accrued rewards (rounded down to the asset precision; the remainder stays pending).
+Pay out accrued rewards (rounded down to the asset precision; the remainder stays pending). Re-sends earlier claims whose transfer failed.
 
 - **Trigger:** `custom_json`
 
@@ -163,7 +163,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 
 ### releaseMatured
 
-Scheduled release of every matured unbonding entry.
+Scheduled release of every matured unbonding entry, retrying failed transfers.
 
 - **Trigger:** `time`
 

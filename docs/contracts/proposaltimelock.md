@@ -82,6 +82,8 @@ Send as custom JSON (id: your configured `JSON_ID`):
 
 ### executeProposal
 
+Execute an approved proposal once its timelock has expired: by a queue approver, or by a scheduled time action (no sender needed).
+
 - **Trigger:** `custom_json`, `time`
 
 **Payload**

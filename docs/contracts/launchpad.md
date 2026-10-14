@@ -16,13 +16,16 @@ This contract keeps its state in SQL tables and needs a SQL-capable adapter (SQL
 
 ## Options
 
-| Option | Type | Required |
-| --- | --- | --- |
-| `name` | `string` | No |
+| Option | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | No |  |
+| `account` | `string` | No | Account that receives contributions and sends refunds (unfilled portions, and every contribution when a sale misses its soft cap). Contributions must be sent to it. Defaults to the streamer username. |
 
 ## Actions
 
 ### createSale
+
+Open a token sale. Optional softCap is the minimum units that must sell; below it the sale fails and contributions are refunded.
 
 - **Trigger:** `custom_json`
 
@@ -39,6 +42,7 @@ This contract keeps its state in SQL tables and needs a SQL-capable adapter (SQL
 | `closesAt` | `string` | Yes |
 | `minUnitsPerBuyer` | `number` | No |
 | `maxUnitsPerBuyer` | `number` | No |
+| `softCap` | `number` | No |
 | `metadata` | `record` | No |
 
 Send as custom JSON (id: your configured `JSON_ID`):
@@ -48,6 +52,8 @@ Send as custom JSON (id: your configured `JSON_ID`):
 ```
 
 ### contribute
+
+Buy sale units by sending payment to the launchpad account. Whole units are filled up to what remains; any unfilled portion is refunded.
 
 - **Trigger:** `transfer`, `recurrent_transfer`
 
@@ -64,6 +70,8 @@ Send as a transfer memo:
 ```
 
 ### finalizeSale
+
+Finalize a closed or sold-out sale. A sale below its soft cap fails and every contribution is refunded; calling it again retries failed refunds.
 
 - **Trigger:** `custom_json`, `time`
 

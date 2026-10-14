@@ -95,3 +95,6 @@ export { createLimboContract } from './contracts/limbo.contract';
 export type { LimboContractOptions } from './contracts/limbo.contract';
 export { createBadgesContract } from './contracts/badges.contract';
 export type { BadgesContractOptions, BadgeRule } from './contracts/badges.contract';
+export { createDaoContract, type DaoContractOptions, type DaoVotingPower } from './contracts/dao.contract';
+export { createEscrowMarketplaceContract, type EscrowMarketplaceContractOptions } from './contracts/escrowmarket.contract';
+export { createP2PSwapContract, type P2PSwapContractOptions } from './contracts/p2pswap.contract';

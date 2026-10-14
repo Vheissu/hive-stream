@@ -45,6 +45,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 ### issueTokens
 
 - **Trigger:** `custom_json`
+- **Requires active key signature**
 
 **Payload**
 
@@ -64,6 +65,7 @@ Send as custom JSON (id: your configured `JSON_ID`):
 ### transferTokens
 
 - **Trigger:** `custom_json`
+- **Requires active key signature**
 
 **Payload**
 

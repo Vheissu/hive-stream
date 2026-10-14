@@ -16,9 +16,10 @@ This contract keeps its state in SQL tables and needs a SQL-capable adapter (SQL
 
 ## Options
 
-| Option | Type | Required |
-| --- | --- | --- |
-| `name` | `string` | No |
+| Option | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | No |  |
+| `account` | `string` | No | Account that receives contributions and pays milestone releases and refunds. Payouts are signed with the app's active key, so this must be the app account. Defaults to the streamer username. |
 
 ## Actions
 
@@ -47,6 +48,8 @@ Send as custom JSON (id: your configured `JSON_ID`):
 ```
 
 ### contribute
+
+Contribute by sending the campaign asset to the app account; contributions to a missing, closed or expired campaign, or in the wrong asset, are refunded.
 
 - **Trigger:** `transfer`, `recurrent_transfer`
 
@@ -80,6 +83,8 @@ Send as custom JSON (id: your configured `JSON_ID`):
 
 ### releaseMilestone
 
+Creator releases a milestone's share of a funded campaign to the beneficiary from the app account; a failed broadcast can be retried by calling it again.
+
 - **Trigger:** `custom_json`
 
 **Payload**
@@ -96,6 +101,8 @@ Send as custom JSON (id: your configured `JSON_ID`):
 ```
 
 ### refundContribution
+
+Refund your contributions to a failed campaign from the app account; a failed broadcast can be retried by calling it again.
 
 - **Trigger:** `custom_json`
 

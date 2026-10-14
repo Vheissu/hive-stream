@@ -62,6 +62,8 @@ Send as a transfer memo:
 
 ### resolveMarket
 
+Resolve an open market after it closes (creator only). A market whose winning option has no stakes is voided so stakers can reclaim them.
+
 - **Trigger:** `custom_json`, `time`
 
 **Payload**
@@ -78,6 +80,8 @@ Send as custom JSON (id: your configured `JSON_ID`):
 ```
 
 ### claimWinnings
+
+Request your share of the pool for a resolved market, or your stakes back for a voided one.
 
 - **Trigger:** `custom_json`
 
