@@ -10,8 +10,9 @@ Subscriptions and contracts are separate paths: a subscription fires for every m
 
 ```ts
 // Transfers to a specific account
-streamer.onTransfer('myaccount', (op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
+streamer.onTransfer('myaccount', (op, blockNumber, blockId, prevBlockId, trxId, blockTime, operationIndex) => {
     // op.from, op.to, op.amount ("1.000 HIVE"), op.memo
+    // trxId + operationIndex identify the transfer: one transaction can carry several
 });
 
 // All custom JSON operations
@@ -22,7 +23,7 @@ streamer.onCustomJson((op, { sender, isSignedWithActiveKey }, blockNumber, block
 streamer.onCustomJsonId('your-custom-json-id', (op, { sender, isSignedWithActiveKey }, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
 });
 
-// Hive Engine operations (verified against the sidechain before firing)
+// Hive Engine operations, delivered only after the sidechain confirms it executed them
 streamer.onHiveEngine((contractName, contractAction, contractPayload, sender, op, blockNumber, blockId, prevBlockId, trxId, blockTime) => {
 });
 
@@ -38,7 +39,7 @@ streamer.onComment((op, ...meta) => {});
 | `onTransfer(account, cb)` | Transfers where `op.to === account` |
 | `onCustomJson(cb)` | Every custom JSON operation |
 | `onCustomJsonId(id, cb)` | Custom JSON with a matching id |
-| `onHiveEngine(cb)` | Hive Engine sidechain operations |
+| `onHiveEngine(cb)` | Hive Engine sidechain operations. The sidechain is asked whether it executed the transaction (retried while it catches up); a transaction it rejected, or one it hasn't indexed after three attempts, is not delivered and is reported to `onError` with phase `subscription`. A token transfer the sender can't fund is a valid Hive operation that only fails on the sidechain, so never credit a payment from the raw `custom_json` |
 | `onPost(cb)` / `onComment(cb)` | Root posts / replies |
 | `onVote(cb)` | Vote operations |
 | `onFollow(cb)` / `onReblog(cb)` | Follow and reblog custom JSON |

@@ -17,10 +17,10 @@ Upgrading an existing app from 3.x? Read [Migrating to 4.0](./migrating-to-4) fi
 ## Installation
 
 ```shell
-npm install hive-stream
+npm install hive-stream zod
 ```
 
-Node.js 22 or later is required. SQLite support is included; the MongoDB and PostgreSQL drivers are optional peer dependencies, so install `mongodb` or `pg` only if you use those adapters (or the HAF provider, which needs `pg`). Both module systems work and share one implementation:
+`zod` is what you write payload schemas with; Hive Stream depends on it too, so installing it yourself keeps one copy in your project. Node.js 22 or later is required. SQLite support is included; the MongoDB and PostgreSQL drivers are optional peer dependencies, so install `mongodb` or `pg` only if you use those adapters (or the HAF provider, which needs `pg`). Both module systems work and share one implementation:
 
 ```ts
 import { Streamer } from 'hive-stream';        // ESM / TypeScript
@@ -36,7 +36,7 @@ const { Streamer } = require('hive-stream');   // CommonJS
 ```ts
 import { Streamer } from 'hive-stream';
 
-// env: true reads USERNAME, ACTIVE_KEY and POSTING_KEY from the environment (and .env)
+// env: true reads HIVE_ACCOUNT, HIVE_ACTIVE_KEY and HIVE_POSTING_KEY from the environment (and .env)
 const streamer = new Streamer({ env: true });
 
 // React to incoming transfers
@@ -112,6 +112,6 @@ Everything runs offline: simulated blocks, captured broadcasts, in-memory storag
 - [Hooks & Guards](./hooks): metrics, allow-lists, bet limits and kill switches
 - [Calling Contracts Safely](./contract-calls): shared schemas and operation builders
 - [Streaming & Subscriptions](./streaming): every event you can react to
-- [Built-in Contracts](/contracts/): 45 ready-to-register contracts
+- [Built-in Contracts](/contracts/): 48 ready-to-register contracts
 - [Transfer Flows](./flows): split, forward, burn and refund payments
 - [Running in Production](./production): persistence, error policy, health checks, PM2

@@ -22,9 +22,11 @@ export default defineConfig({
                     text: 'Introduction',
                     items: [
                         { text: 'Getting Started', link: '/guide/getting-started' },
+                        { text: 'Hive Basics', link: '/guide/hive-basics' },
                         { text: 'Recipes', link: '/guide/recipes' },
                         { text: 'Scaffolding with the CLI', link: '/guide/cli' },
                         { text: 'Configuration', link: '/guide/configuration' },
+                        { text: 'Migrating to 5.0', link: '/guide/migrating-to-5' },
                         { text: 'Migrating to 4.0', link: '/guide/migrating-to-4' }
                     ]
                 },
@@ -44,6 +46,7 @@ export default defineConfig({
                     text: 'Payments & Operations',
                     items: [
                         { text: 'Transfer Flows', link: '/guide/flows' },
+                        { text: 'Escrow', link: '/guide/escrow' },
                         { text: 'Broadcasting Operations', link: '/guide/operations' },
                         { text: 'Querying the Chain', link: '/guide/queries' }
                     ]
@@ -52,7 +55,9 @@ export default defineConfig({
                     text: 'Quality & Production',
                     items: [
                         { text: 'Testing Your App', link: '/guide/testing' },
-                        { text: 'Running in Production', link: '/guide/production' }
+                        { text: 'Running in Production', link: '/guide/production' },
+                        { text: 'Security', link: '/guide/security' },
+                        { text: 'Troubleshooting', link: '/guide/troubleshooting' }
                     ]
                 },
                 {

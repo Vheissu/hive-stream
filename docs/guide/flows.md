@@ -64,6 +64,12 @@ streamer.flows
 
 Single-step builders compile to the matching one-liner; multi-step builders compile to the router.
 
+## Each transfer is paid out once
+
+A flow keys every incoming transfer by transaction id and operation index, so a transaction carrying two transfers to your account is handled twice (once per transfer), and the same transfer is never handled twice. What a flow has paid is recorded in the adapter's idempotency ledger (keys `flow:<name>:<trx>:<op>`), so a block that is processed again after a crash, a halt, a fork rewind or `replayBlocks()` does not send the money again. `replayBlocks(from, to, { force: true })` deliberately runs flows again.
+
+Pass your own `dedupeStore` (`{ has(key), add(key) }`) to keep that record somewhere else. If the ledger is disabled (`idempotency: false`) and no store is given, the flow falls back to an in-memory set that is lost on restart.
+
 ## Previewing the math
 
 `.plan()` computes the exact rounded outcome without broadcasting anything:

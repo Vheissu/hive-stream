@@ -53,11 +53,12 @@ Each action declares what invokes it:
 | `custom_json` | Custom JSON with your `jsonId` and a wrapped payload |
 | `transfer` | A transfer whose memo carries a wrapped payload |
 | `recurrent_transfer` | A recurrent transfer with a wrapped memo |
-| `escrow_transfer` / `escrow_approve` / `escrow_dispute` / `escrow_release` | Escrow lifecycle operations |
+| `escrow_transfer` | An escrow whose `json_meta` carries a wrapped payload. `ctx.escrow` has the parties, amounts and deadlines |
+| `escrow_approve` / `escrow_dispute` / `escrow_release` | These carry no JSON, so they reach *every* action that declares the trigger, with the escrow details as the payload and `who` as `ctx.sender`. A contract tracks the escrows it opened by filtering on `payload.escrowId` |
 | `time` | [Time-based actions](./time-actions) — scheduled execution |
 
-::: warning Transfers dispatch on any wrapped memo
-Contract dispatch fires on any transfer carrying a wrapped memo — not only transfers to your app account. This is what makes non-custodial peer-to-peer flows possible (direct NFT sales, ticket resale). If your action should only accept payments to your account, check `ctx.transfer.to` in the handler.
+::: tip Only transfers to your account run paid actions
+A transfer-triggered action runs only when the transfer was sent to the streamer username (or an account listed in the action's `allowedRecipients` guard). A wrapped memo on a payment between two other accounts is rejected with reason `recipient_not_allowed`, so nobody can run your payout handler by paying their own alt. Non-custodial flows where the buyer pays a third party directly (the built-in `buyNFTDirect` and `buyTicketDirect`) opt in with `guards: { allowedRecipients: ['*'] }` and verify `ctx.transfer.to` themselves. See [Hooks & Guards](./hooks#guards).
 :::
 
 ## The context object
@@ -81,6 +82,8 @@ ctx.operation      // { type, data } — the raw operation
 ## Validation
 
 Attach a [Zod](https://zod.dev) schema to any action. Invalid payloads are rejected with a warning before your handler runs, so handler code can trust its input. The `onInvalidPayload` hook receives the Zod issues if you want to log them or tell the user.
+
+A rejected transfer is kept unless you say otherwise. For an app that takes payments, set `refundRejectedTransfers: true` so a bet with a typo in it goes straight back to the sender with the reason in the memo. See [Hooks & Guards](./hooks#guards).
 
 Put schemas that are also needed by a frontend or CLI in a [shared contract spec](./contract-calls). This keeps client-side checks and server dispatch on the same definition.
 
@@ -121,18 +124,19 @@ Handlers broadcast through the streamer:
 
 ```ts
 payout: action(async (payload, ctx) => {
-    await ctx.streamer.transferHiveTokens(
-        ctx.config.USERNAME,
-        ctx.sender,
-        '2.000',
-        'HIVE',
-        'Winner!'
-    );
-}, { trigger: 'transfer' })
+    // ctx.transfer is the payment that triggered this action; the streamer has
+    // already checked that it was addressed to ctx.config.USERNAME.
+    if (ctx.transfer.asset !== 'HIVE' || new BigNumber(ctx.transfer.amount).isLessThan('1')) {
+        await ctx.streamer.transferHiveTokens(ctx.config.USERNAME, ctx.sender, ctx.transfer.amount, ctx.transfer.asset, '[Refund] Send at least 1 HIVE');
+        return;
+    }
+
+    await ctx.streamer.transferHiveTokens(ctx.config.USERNAME, ctx.sender, '2.000', 'HIVE', 'Winner!');
+}, { trigger: 'transfer', guards: { allowedAssets: ['HIVE'], minAmount: '1.000' } })
 ```
 
-This requires an `activeKey` in config. In tests, these broadcasts are captured, not sent — see [Testing Your App](./testing).
+This requires an `activeKey` in config. The guards make the in-handler check redundant for transfers (they reject first), but keeping it means the handler is safe even if someone registers the contract with different guards. In tests, these broadcasts are captured, not sent — see [Testing Your App](./testing).
 
 ## Built-in contracts
 
-Forty ready-made contracts ship with the library — games, marketplaces, subscriptions, payroll, and more. Browse the [contract reference](/contracts/), or read their source in `src/contracts/` as worked examples.
+Forty-eight ready-made contracts ship with the library — games, escrow marketplaces, swap desks, DAOs, subscriptions, payroll, and more. Browse the [contract reference](/contracts/), or read their source in `src/contracts/` as worked examples.

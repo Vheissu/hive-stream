@@ -94,7 +94,32 @@ ts.outgoingTransfers;                  // transfers your handlers attempted
 ts.broadcasts;                         // every captured broadcast, typed by kind
 await ts.getEvents();                  // contract events recorded via the adapter
 await ts.adapter.query('SELECT ...');  // contract tables, directly
+
+ts.contractPayload('mygame', 'play', { bet: 1 });   // the wrapped object
+ts.contractMemo('mygame', 'play', { bet: 1 });      // the same, as a memo string
+hive(1.5);  hbd(0.5);                               // '1.500 HIVE', '0.500 HBD'
+ts.client.transfers;  ts.client.customJsons;  ts.client.operations;   // everything broadcast, by kind
 ```
+
+The default username is `testaccount`; pass `username` to `createTestStreamer()` to match your contracts' house account, since transfers only reach a contract when they are addressed to it.
+
+## Forks
+
+`head` mode can be exercised too. `ts.provider.forkAt(blockNumber, operations)` replaces a block (and everything after it) with a new branch, so the next `processPendingBlocks()` rewinds and fires `onFork`:
+
+```ts
+const ts = await createTestStreamer({ username: 'myapp', streamMode: 'head' });
+const forks = jest.fn();
+ts.streamer.hook('onFork', forks);
+
+await ts.transfer('alice', 'myapp', '1.000 HIVE', 'on the branch that will be orphaned');
+ts.provider.forkAt(ts.headBlockNumber);     // same height, different block id
+await ts.streamer.processPendingBlocks();
+
+expect(forks).toHaveBeenCalledTimes(1);
+```
+
+`createTestStreamer({ irreversibleLag: 2 })` makes the simulated last irreversible block trail the head, which is how to test that `irreversible` mode waits.
 
 ## Stubbing chain reads
 
@@ -109,6 +134,8 @@ ts.client.setAccount('alice', { balance: '100.000 HIVE' });
 ## Jest patterns
 
 ```ts
+import { createTestStreamer, hive, TestStreamer } from 'hive-stream/testing';
+
 describe('my contract', () => {
     let ts: TestStreamer;
 

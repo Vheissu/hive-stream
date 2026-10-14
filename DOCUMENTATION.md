@@ -21,7 +21,15 @@ This document focuses on the contract system and how to build robust contracts w
 - Config is validated when the streamer is built.
 - Node 22 or later, zod 4, and optional `mongodb`/`pg` peer dependencies.
 
-Upgrading from 3.x: read [Migrating to 4.0](https://vheissu.github.io/hive-stream/guide/migrating-to-4).
+### What 5.0 changed
+
+- Transfer-triggered actions only run for transfers addressed to the streamer username (or the action's `allowedRecipients` guard; `['*']` for non-custodial actions).
+- `refundRejectedTransfers: true` sends rejected payments back to the sender with the reason in the memo.
+- The HTTP API binds to loopback (`apiHost`), pages its list routes and has no authentication.
+- `onHiveEngine` delivers only transactions the sidechain confirmed; transfer flows record their payouts in the idempotency ledger, keyed per operation.
+- Bad environment values throw `ConfigValidationError`; use `HIVE_ACCOUNT` rather than `USERNAME`.
+
+Upgrading: read [Migrating to 5.0](https://vheissu.github.io/hive-stream/guide/migrating-to-5), and from 3.x [Migrating to 4.0](https://vheissu.github.io/hive-stream/guide/migrating-to-4) first.
 
 ---
 
@@ -354,12 +362,12 @@ Guards: `allowedSenders`, `blockedSenders`, `allowedAssets`, `minAmount`, `maxAm
 
 ## Provably Fair Randomness
 
-The legacy RNG in dice, coinflip, roulette, rps and lotto seeds from block and transaction ids. A block producer or a player can influence those. Pass `fairness` to use commit-reveal seeds instead:
+The legacy RNG in dice, coinflip, roulette, rps and lotto seeds from block and transaction ids. A block producer or a player can influence those, so every built-in game uses commit-reveal seeds by default (`fairness: false` opts out). Pass an object or a shared manager to tune it:
 
 ```ts
 import { createDiceContract, createFairness } from 'hive-stream';
 
-await streamer.registerContract(createDiceContract({ account: 'myhouse', fairness: true }));
+await streamer.registerContract(createDiceContract({ account: 'myhouse' }));   // fairness on by default
 
 // or share one manager, rotate every 1000 bets and publish commitments
 const fairness = createFairness({ rotateAfter: 1000, onRotate: async ({ commitment }) => publish(commitment) });
@@ -577,7 +585,7 @@ export const TipJar = defineContract({
 
 ### Example Snippets
 
-Use-case recipes (dice with fairness, tournaments, tipping with hooks, a bridge and a browser frontend) live in `examples/recipes/` and are explained in the [Recipes guide](https://vheissu.github.io/hive-stream/guide/recipes). A test type-checks every file under `examples/`.
+Use-case recipes (dice with fairness, tournaments, tipping with hooks, a bridge, an escrow marketplace, a swap desk, a DAO, several app accounts and a browser frontend) live in `examples/recipes/` and are explained in the [Recipes guide](https://vheissu.github.io/hive-stream/guide/recipes). A test type-checks every file under `examples/`.
 
 Quick-start snippets live in `examples/contracts/`:
 

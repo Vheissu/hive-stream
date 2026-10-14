@@ -27,8 +27,12 @@ await streamer.query.getAccountNotifications('alice');
 Blockchain helpers convert raw values into useful ones:
 
 ```ts
-Utils.getReputationScore(account.reputation);   // e.g. 72.4
-// VESTS ↔ HP conversion and profile metadata parsing are also exported
+import { Utils } from 'hive-stream';
+
+Utils.calculateReputation(account.reputation);          // e.g. 72
+Utils.vestToHP(vests, totalVestingFund, totalVestingShares);
+Utils.hpToVest(hp, totalVestingFund, totalVestingShares);
+Utils.parseProfileMetadata(account.posting_json_metadata); // { name, about, profileImage, ... }
 ```
 
 ## Content and social graph
@@ -75,10 +79,17 @@ await streamer.getAccountTransfers('alice');
 
 ## Hive Engine
 
-The `streamer.engine` namespace queries the Hive Engine sidechain — token balances, and more:
+The `streamer.engine` namespace queries the Hive Engine sidechain:
 
 ```ts
-await streamer.query.getTokenBalances('alice');
+await streamer.engine.getTokenBalances('alice');
+await streamer.engine.getTokenBalance('alice', 'BEE');
+await streamer.engine.getToken('BEE');
+await streamer.engine.getTokens({}, 100, 0);
+await streamer.engine.getMarketBuyBook('BEE');
+await streamer.engine.getMarketSellBook('BEE');
+await streamer.engine.getMarketHistory('BEE');
+await streamer.engine.getMarketMetrics({ symbol: 'BEE' });
 ```
 
 ## Exchange rates
@@ -90,5 +101,6 @@ import { HiveRates } from 'hive-stream';
 
 const rates = new HiveRates();
 await rates.fetchRates();
-rates.fiatToHiveRate('USD');
+rates.getRate('USD', 'HIVE');   // HIVE price in USD, or null when unknown
+rates.getRate('EUR', 'HBD');
 ```

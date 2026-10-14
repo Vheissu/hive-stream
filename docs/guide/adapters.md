@@ -80,4 +80,8 @@ export class MyAdapter extends AdapterBase {
 }
 ```
 
-Optional overrides let you capture more: `processBlock`, `processOperation`, `processTransfer`, `processCustomJson`, `processEscrow`, the `find`/`insert`/`replace` document helpers, `query` for SQL support (set `capabilities.sql = true`), and `addEvent`/`getEvents` for contract event logs. The three shipped adapters in `src/adapters/` are the reference implementations.
+Optional overrides let you capture more: `processBlock`, `processOperation`, `processTransfer`, `processCustomJson`, `processEscrow`, the `find`/`insert`/`replace` document helpers, `query` and `runInTransaction` for SQL support (set `capabilities.sql = true`), `addEvent`/`getEvents` for contract event logs, and `getCounts` for the API's `/stats` route. The list methods (`getTransfers`, `getJson`, `getEvents`) take `{ limit, offset }`. The three shipped adapters in `src/adapters/` are the reference implementations.
+
+::: warning Persist the idempotency ledger
+`AdapterBase` keeps the ledger (`hasProcessedOperation`, `markOperationProcessed`, `pruneProcessedOperations`) in memory. That is enough for tests, but a custom adapter that doesn't override the three methods with real storage loses exactly-once protection on every restart: the block being processed when the process died runs its contract actions again. Store the records in your database, keyed by `key`, before relying on the adapter for money.
+:::

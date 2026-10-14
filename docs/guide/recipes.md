@@ -50,6 +50,30 @@ If a receipt broadcast fails, the deposit decision still stands. The failure is 
 
 Withdrawals run the other way. A user burns or locks on the other chain and calls `requestWithdrawal`. Operators then attest with `attestWithdrawal`, and custody releases the funds at the threshold. If a release broadcast fails, it's marked `release_failed` and waits for an admin: it's never retried blindly.
 
+## A peer-to-peer escrow marketplace
+
+Buyers lock funds in a native Hive escrow with the app as *agent*; the seller ships, the buyer releases, and the app only steps in to resolve disputes. The app never holds the money. Built on the `escrowmarket` contract and the escrow lifecycle triggers.
+
+<<< @/../examples/recipes/escrow-marketplace.ts
+
+## A peer-to-peer swap desk
+
+HIVE, HBD and Hive Engine tokens traded between users. HIVE/HBD pairs settle through Hive escrow with the app as agent, which approves the taker's escrow only once the maker has paid; token legs are held by the app only until the other side pays. Built on the `p2pswap` contract.
+
+<<< @/../examples/recipes/p2p-swap.ts
+
+## A DAO with a treasury
+
+Stake-weighted proposals (Hive Power, a Hive Engine token, or one account one vote), a quorum, a timelock, admin veto, and payouts that retry until they land. Built on the `dao` contract.
+
+<<< @/../examples/recipes/dao.ts
+
+## One app, several accounts
+
+A platform that acts as a public-facing account, a treasury and an escrow agent at once: each signs with its own keys, transfers to any of them run contract actions, and a rejected payment goes back from the account that received it.
+
+<<< @/../examples/recipes/multi-account.ts
+
 ## A browser frontend
 
 `hive-stream/client` has no Node dependencies. This builds a dice bet for Hive Keychain and checks a settled bet against the revealed seed:

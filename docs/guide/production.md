@@ -12,7 +12,7 @@ const streamer = new Streamer({ env: true, resumeFromState: true });  // default
 
 If your app was down for an hour, catch-up processes the backlog in batches — tune `catchUpBatchSize` (blocks per cycle) and `catchUpDelayMs` (pause between batches, `0` for fastest).
 
-To force a specific start block instead, set `resumeFromState: false` and `lastBlockNumber`.
+To start from a specific block instead, set `resumeFromState: false` and `lastBlockNumber` to the block *before* it: `lastBlockNumber` is the last block already processed, so streaming begins at `lastBlockNumber + 1`.
 
 If the per-block write is too much for your storage, `checkpointMode: 'interval'` saves at most every `checkpointIntervalMs`. More blocks are replayed after a crash, but the idempotency ledger still keeps contract actions from running twice. `stop()` always writes a final checkpoint.
 
@@ -31,7 +31,11 @@ This makes the following safe:
 
 **The remaining window.** The ledger is written after your handler returns. If the process dies after the handler has broadcast a transfer but before the ledger write, the action runs again on restart. The window is milliseconds, but for a payout service it matters. Close it inside the handler: record the side effect keyed by `ctx.transaction.id` and `ctx.transaction.operationIndex` in the same database transaction as your state change, and check it before broadcasting. Subscriptions (`onTransfer` and friends) are not covered by the ledger and are at-least-once: after a crash they may see the last block again.
 
+Rejected actions are recorded too, so `onActionRejected` (and a refund issued there or by `refundRejectedTransfers`) fires once per transfer. [Transfer flows](./flows#each-transfer-is-paid-out-once) record their payouts in the same ledger.
+
 Ledger rows older than `idempotencyRetentionBlocks` (about 7 days) are pruned automatically. Disable the ledger with `idempotency: false` only if your handlers are idempotent on their own.
+
+**Run one streamer per set of app accounts.** The ledger protects against the same process reprocessing a block, not against two processes handling the same chain at once: two instances pointed at one account will each pay out. One process can act as several accounts (`accounts` in config); two processes must not share one. Rate-limit counters are in memory per process. If you need redundancy, keep a standby that is not started, and promote it (same database) when the primary goes away.
 
 ## Error policy
 
@@ -45,7 +49,7 @@ Ledger rows older than `idempotencyRetentionBlocks` (about 7 days) are pruned au
 
 Subscription callbacks and hooks never halt the stream; their errors are always isolated and reported.
 
-After a halt, `getStatus().lastError` has the phase, block number and message. Fix the cause and call `start()` again (or `processPendingBlocks()`); processing restarts at the failed block. Under `retry`, the operation's subscriptions can fire more than once.
+After a halt, `getHealth()` reports `halted` with `isStarted: false`, and `getStatus().lastError` has the phase, block number and message. Fix the cause and call `start()` again (or `processPendingBlocks()`); processing resumes at the failed block, and actions that already succeeded in it are skipped by the ledger. Under `retry`, the operation's subscriptions can fire more than once. A checkpoint that cannot be written follows the same policy: `skip` reports it and continues, `halt` stops.
 
 Failures fetching blocks (a node down, a timeout) never halt. The streamer fails over between `apiNodes` (each request times out after `apiTimeoutMs`) and backs off exponentially up to `retryMaxDelayMs`, reporting each failure to `onError` with phase `block`.
 
@@ -106,6 +110,8 @@ streamer.getHealth();
 - `stopped` — not started (returns 503)
 
 `/status` serves the lighter `getStatus()` payload. Enable the API with `apiEnabled: true` or `startApiServer(port)`.
+
+The API has no authentication and also serves your stored transfers, custom JSON and events (`/transfers`, `/json`, `/events`, paged with `?limit=` up to 1000 and `?offset=`; `/stats` for counts), so it binds to loopback (`apiHost: '127.0.0.1'`) by default. Probe it from the same host, or put a reverse proxy with authentication in front of it before setting `apiHost: '0.0.0.0'`.
 
 ## Replaying blocks
 

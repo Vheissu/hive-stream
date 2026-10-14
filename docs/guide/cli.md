@@ -18,20 +18,21 @@ npx hive-stream new my-app --template minimal --yes --install
 
 | Command | Description |
 | --- | --- |
-| `hive-stream new <name>` | Scaffold a new app |
+| `hive-stream new <name>` | Scaffold a new app (`create` is an alias). The name is a bare directory name, not a path |
 | `hive-stream list` | Show all templates and adapters |
-| `hive-stream help` | Usage information |
+| `hive-stream help` / `--help` | Usage information |
+| `hive-stream --version` | The installed version |
 
 ## Flags
 
 | Flag | Description |
 | --- | --- |
-| `--template <name>` | Which template to scaffold |
-| `--adapter <name>` | Storage adapter: `sqlite`, `mongodb`, `postgresql` |
-| `--username <account>` | Your Hive account name |
-| `--api` | Enable the built-in REST API |
+| `--template <name>`, `-t` | Which template to scaffold |
+| `--adapter <name>`, `-a` | Storage adapter: `sqlite`, `mongodb`, `postgresql` |
+| `--username <account>`, `-u` | Your Hive account name |
+| `--api` | Enable the built-in REST API (it binds to loopback; see [Production](./production#health-checks)) |
 | `--install` | Run `npm install` after scaffolding |
-| `--yes` | Accept defaults, no prompts |
+| `--yes`, `-y` | Accept defaults, no prompts |
 
 Unknown flags, extra arguments, invalid Hive account names, and unsupported template/storage combinations fail before the target directory is changed. Long value flags accept either `--template game` or `--template=game`.
 
@@ -40,7 +41,7 @@ Unknown flags, extra arguments, invalid Hive account names, and unsupported temp
 | Template | What you get |
 | --- | --- |
 | `minimal` | A bare streamer with one example contract |
-| `game` | Dice, coinflip, roulette, and rock-paper-scissors |
+| `game` | Dice, coinflip, roulette, rock-paper-scissors and limbo, all with provably fair seeds, and `refundRejectedTransfers` on so a bad bet is sent back |
 | `exchange` | Order book with deposits, withdrawals, and matching |
 | `social` | Fan clubs, subscriptions, and tips |
 | `blog` | Paywall, tips, and post streaming |

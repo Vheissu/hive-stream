@@ -1,6 +1,6 @@
 # Provably Fair Randomness
 
-Games that take real money need randomness that neither the house nor the players can steer, and that players can check afterwards. Hive Stream ships a commit-reveal scheme for this. The built-in games use it when you pass `fairness`, and your own contracts can use it too.
+Games that take real money need randomness that neither the house nor the players can steer, and that players can check afterwards. Hive Stream ships a commit-reveal scheme for this. The built-in games use it by default, and your own contracts can use it too.
 
 ## Why block ids are not enough
 
@@ -33,12 +33,14 @@ What each party can and cannot do:
 The operator knows the server seed, so the operator must not also play. Keep the seed secret until rotation, and rotate regularly (for example with `rotateAfter`). Publish each commitment somewhere players can see it before they bet: an event, your UI, or an on-chain `custom_json` from `onRotate`.
 :::
 
-## Enabling it on the built-in games
+## The built-in games
+
+`dice`, `coinflip`, `roulette`, `rps`, `lotto` and `limbo` all use commit-reveal seeds unless you opt out with `fairness: false` (the legacy block-id mode described above, kept for compatibility). Pass an object to tune rotation and entropy:
 
 ```ts
 import { createDiceContract, createLimboContract } from 'hive-stream';
 
-await streamer.registerContract(createDiceContract({ account: 'myhouse', fairness: true }));
+await streamer.registerContract(createDiceContract({ account: 'myhouse' }));            // fairness on
 
 await streamer.registerContract(createLimboContract({
     account: 'myhouse',

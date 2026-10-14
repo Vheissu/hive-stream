@@ -51,13 +51,15 @@ Handlers are awaited in registration order. Unknown hook names throw at registra
 | `onCaughtUp` | The streamer reached the target block after being behind | No |
 | `onCheckpoint` | The cursor was persisted | No |
 
-`onActionRejected` reasons: `contract_not_found`, `action_not_found`, `trigger_not_allowed`, `active_key_required`, `paused`, `sender_not_allowed`, `asset_not_allowed`, `amount_too_low`, `amount_too_high`, `rate_limited`, `vetoed`, `duplicate`.
+`onActionRejected` reasons: `contract_not_found`, `action_not_found`, `trigger_not_allowed`, `active_key_required`, `paused`, `sender_not_allowed`, `recipient_not_allowed`, `asset_not_allowed`, `amount_too_low`, `amount_too_high`, `rate_limited`, `vetoed`, `duplicate`.
 
 `onError` phases: `block` (fetching), `operation` and `adapter` (storage writes), `contract`, `action` (time actions), `subscription`, `hook`, `checkpoint`, `fork`.
 
 ### When hooks throw
 
-A hook that throws is logged and reported to `onError` with phase `hook`; processing continues. `beforeContractAction` is the exception: if it throws, the action is vetoed. A guard that crashes must not let a payout through.
+A hook that throws is logged and reported to `onError` with phase `hook`; processing continues. The two filtering hooks fail closed: if `beforeOperation` throws, the operation is skipped, and if `beforeContractAction` throws, the action is vetoed. A blocklist or guard that crashes must not let a payout through.
+
+A payload returned from `beforeContractAction` as `{ payload }` is validated against the action's schema like the original, and rejected through `onInvalidPayload` if it doesn't fit.
 
 ### Examples
 
@@ -127,6 +129,7 @@ defineContract({
 | --- | --- |
 | `allowedSenders` | The sender is not in the list |
 | `blockedSenders` | The sender is in the list |
+| `allowedRecipients` | A transfer is not addressed to an account in the list. Defaults to the streamer username; `['*']` accepts any recipient |
 | `allowedAssets` | The transfer asset is not in the list (case-insensitive) |
 | `minAmount` / `maxAmount` | The transfer amount is outside the range (inclusive) |
 | `rateLimit` | The sender already made `max` calls within `windowSeconds` of blockchain time |
@@ -136,10 +139,12 @@ Action guards override contract guards field by field. Guards are validated in `
 
 Things to know:
 
+- **Transfers must be addressed to you.** A transfer-triggered action only runs when the transfer was sent to the streamer username (or an account in `allowedRecipients`). Without this, anyone could run your paid handler by sending a wrapped memo to their own alt account. Set `allowedRecipients` when the house account differs from the streamer username, and `['*']` for non-custodial actions where the payment goes to a third party (the built-in `buyNFTDirect` and `buyTicketDirect` do this and verify the seller themselves). With no username configured and no `allowedRecipients`, every transfer is rejected and a warning is logged at registration.
 - Amount and asset guards only apply to triggers that carry an amount (`transfer`, `recurrent_transfer`). A `custom_json` call to the same action passes them. If an action must be paid for, restrict its `trigger` to `transfer`.
+- `minAmount` / `maxAmount` compare the number regardless of asset: `maxAmount: 10` allows 10 HIVE and 10 HBD alike. Pair them with `allowedAssets`; the streamer warns at registration if you don't.
 - Sender guards and rate limits don't apply to `time` triggers, which have no sender.
 - Rate-limit counters live in memory and use block timestamps, so they are deterministic during replays but reset when the process restarts.
-- A rejected transfer is not refunded automatically. Use `onActionRejected` if you want to refund, or pair the contract with `flows.autoRefundIncomingTransfers()`.
+- **Refunding rejected transfers.** By default a rejected transfer is kept. Set `refundRejectedTransfers: true` in the streamer config and every transfer to the app account whose action was rejected (invalid payload, guard, pause, veto, unknown action) is sent back to the sender with a `[Refund] <reason>` memo. Rejections are recorded in the idempotency ledger first, so a replayed block never refunds twice. Transfers addressed to other accounts and the app's own transfers are never refunded. If you turn this on, don't also refund in `onActionRejected`.
 
 ## Pausing at runtime
 

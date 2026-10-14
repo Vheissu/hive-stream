@@ -5,7 +5,76 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [4.0.0 - Unreleased] - Reliability, hooks and configuration
+## [5.0.0] - 2026-10-14 - Safe by default
+
+A security and correctness release. Several defaults changed because the old ones could lose money; the [migration guide](docs/guide/migrating-to-5.md) ([online](https://vheissu.github.io/hive-stream/guide/migrating-to-5)) lists what to check.
+
+### ⚠️ Breaking changes
+- **Transfer-triggered contract actions only run for transfers addressed to the app.** A wrapped memo on a transfer between two other accounts used to run your handler (`ctx.transfer.to` was never checked); it is now rejected with reason `recipient_not_allowed`. The accepted recipients default to the streamer username; the new `allowedRecipients` guard widens them (`['*']` accepts any recipient for non-custodial flows). Without a username and without the guard every transfer is rejected, with a warning at registration. The built-in `buyNFTDirect` and `buyTicketDirect` actions opt in and verify the seller themselves.
+- **The built-in HTTP API binds to loopback.** It has no authentication, so `apiHost` now defaults to `127.0.0.1`; set `apiHost: '0.0.0.0'` (or `API_HOST`) behind an authenticating proxy to expose it. `/transfers`, `/json` and `/events` are paged (`?limit=` default 100, max 1000; `?offset=`), and `/stats` counts rows instead of loading the tables.
+- **`onHiveEngine` no longer delivers unverified transactions.** A transaction the sidechain hasn't indexed yet is retried three times; one it rejected, or that is still unknown, is skipped and reported to `onError` (phase `subscription`). Previously an unknown or unreachable result counted as success.
+- **Transfer flows (`autoRefund`/`autoForward`/`autoBurn`/`autoSplit`/`autoRoute`) key each transfer by transaction id and operation index** (a transaction with two transfers to the app is handled twice, as it should be) and record what they paid in the adapter's idempotency ledger, so a block processed again after a crash, halt, fork or replay never pays twice. A custom `dedupeStore` is still honoured.
+- **A throwing `beforeOperation` hook now skips the operation** (fail closed, like `beforeContractAction`) instead of letting it through.
+- **Unparseable environment values are a `ConfigValidationError`** (`IDEMPOTENCY_ENABLED=ture`, `ERROR_MAX_RETRIES=5x`) instead of silently becoming `false` or a default. On Windows a bare `USERNAME` variable is never read as the Hive account (the OS sets it); use `HIVE_ACCOUNT`.
+- `Streamer.onTransfer` callbacks receive the operation index as a seventh argument, and `TransferEvent.transaction.operationIndex` is set.
+
+### ✨ Added
+- **Several app accounts.** `accounts: [{ name, activeKey?, postingKey? }]` (env `HIVE_ACCOUNTS` as JSON) registers extra accounts the app acts as. Transfers to any of them run contract actions (`allowedRecipients` defaults to the whole list), every write method signs with the keys of the account it acts as (a batch is signed with every key it needs), `refundRejectedTransfers` refunds from the receiving account, `onTransfer()` accepts an array of accounts, and `getAppAccounts()` / `isAppAccount()` / `addAccount()` / `removeAccount()` manage the list at runtime. An account listed without keys signs with the primary keys, for accounts that granted the app account authority.
+- **`refundRejectedTransfers`** (`REFUND_REJECTED_TRANSFERS`, default `false`): send a transfer to the app account whose contract action was rejected (invalid payload, guard, pause, veto, unknown action) back to the sender with a `[Refund] <reason>` memo. Rejections are written to the ledger first, so a replay never refunds twice. The `game` scaffold template turns it on.
+- **`allowedRecipients` guard** and `recipient_not_allowed` rejection reason.
+- **Escrow lifecycle triggers work.** Actions declaring `escrow_approve`, `escrow_dispute` or `escrow_release` were accepted but never ran, because those operations carry no JSON to route by. They now reach every action that declares the trigger, with the escrow details as the payload and `who` as the sender, each with its own ledger key.
+- **`apiHost`** config option (`API_HOST`).
+- **`createContractEscrowTransferOperation()`** in `hive-stream/client` builds the `escrow_transfer` a buyer signs to open an escrow carrying a contract call, with the same validation as the transfer builder. A new [Escrow guide](docs/guide/escrow.md) covers the four operations, triggers, broadcasting and testing.
+- `start()` works after a halt: the streamer leaves `isStarted` so an operator can fix the cause and restart from the failed block (previously `start()` returned at once and the stream stayed halted). Checkpoint failures follow `errorPolicy` like other storage writes.
+- Adapters: `getTransfers`/`getJson`/`getEvents` accept `{ limit, offset }`, and `getCounts()` returns row counts. MongoDB creates unique indexes on `transfers.id` and `customJson.id` and upserts, so a replayed block never stores an operation twice.
+- A CI workflow runs the build and the test suite on Node 22 and 24 for every push and pull request.
+
+### Contracts
+
+Three new contracts for the apps people ask about most, all exercising native Hive features:
+
+- **Escrow marketplace** (`createEscrowMarketplaceContract`, `escrowmarket`): listings paid through native Hive escrow with the app as *agent*. The buyer's `escrow_transfer` carries the contract call in `json_meta`; the agent approves (`autoApprove`), the seller ships, the buyer releases on chain, and the agent only steps in to resolve disputes (`resolveDispute`, active key). Options `agentFeeBps`, `ratificationHours`, `expirationDays`, `allowedAssets`. The app never holds the funds.
+- **Peer-to-peer swap desk** (`createP2PSwapContract`, `p2pswap`): HIVE/HBD pairs settle through Hive escrow with the app as agent. The taker locks the buy side in escrow; the app approves it only after it sees the maker pay the taker, then the taker releases to the maker (or the app does, on a dispute). If the maker never pays, the escrow goes back to the taker. Pairs involving Hive Engine tokens are custodial for one leg only: the maker deposits tokens with the app, the taker pays, and the app pays both sides out with pending/paid/failed states and a `retryPayouts` action. Offers expire (`offerTtlHours`); every mismatched payment is refunded.
+- **DAO** (`createDaoContract`, `dao`): proposals funded by a deposit, votes weighted by Hive Power, a staked Hive Engine token or one account one vote, an absolute `quorum`, `passThresholdBps`, a timelock with admin veto, and treasury payouts that retry until they land. The treasury balance is derived from the contract's own ledger.
+
+Audit fixes to the existing contracts (every money-moving built-in was reviewed):
+
+- **Games are provably fair by default.** `fairness: true` is now the default for dice, coinflip, roulette, rps and lotto (limbo already was); `fairness: false` keeps the legacy block-id mode.
+- **Games verify the transfer they were triggered by.** The bet must be addressed to the house account, from the sender, in an accepted asset; the chain re-read checks the operation at its own index (`Utils.verifyTransfer` takes an `operationIndex`), so a transaction carrying one real bet and N copies to an alt no longer gets N+1 rolls, and a bet that isn't the first operation in its transaction settles correctly.
+- **Coinflip and RPS have a house edge** (`houseEdge`, percent, default 2); they paid fair 2x odds before. Dice's `houseEdge` is now a percentage too (default 1), the same convention as coinflip and rps, instead of a fraction.
+- **Loss notices are opt-in** (`notifyLosses`, default `false`) on dice, coinflip, roulette, rps and lotto; the 0.001 "you lost" transfers made minimum bets net positive for the player.
+- **Invalid bets are refunded** with a `[Refund] …` memo (dice roll out of range, unknown coin side or rps move, bad roulette bet, unknown lotto draw, seed over 64 characters) instead of the payload being rejected and the money kept.
+- **HBD bets** are checked against the house's `hbd_balance` and paid out in the bet's asset (dice always paid in HIVE).
+- **No double payouts:** a settlement record is written to the ledger before the first outgoing transfer, so a retry or replay of the same bet never draws again, and the stake is only refunded from an error path if nothing was sent.
+- **Lotto** uses BigNumber for every amount, refunds tickets paid in the wrong asset, and scopes its MongoDB documents by contract name (existing documents need `updateMany({}, { $set: { contract: 'hivelotto' } })`).
+
+- **Active key now required** for value-moving custom JSON: exchange `transfer`/`placeOrder`/`cancelOrder`, token `issueTokens`/`transferTokens`, nft `transferNFT`/`listNFT`/`burnNFT`, multisig treasury `approveProposal`/`markExecuted`.
+- **Auction house holds bids.** New `account` option (default the streamer username). Outbid bidders are refunded automatically, the seller is paid only on settle or buy-now, a bid that can't be accepted (closed, late, too low, wrong asset, the seller's own) is refunded instead of kept, and the reserve-not-met case refunds the high bidder. Payouts are pending until broadcast and retried by a later `settleAuction`.
+- **Launchpad** gains `account` and an optional `softCap` per sale (below it, `finalizeSale` refunds every allocation). A contribution fills as many whole units as it can and refunds the rest; one that can't fill anything is refunded in full.
+- **Prediction market:** `resolveMarket` runs once (`status === 'open'`), stakes are summed with BigNumber instead of SQL `SUM` (which failed on PostgreSQL), and a market whose winning option nobody backed becomes `void` so every staker can reclaim their stakes.
+- **NFT:** `buyNFT` verifies the payment from the triggering transfer (recipient, sender, amount) and the chain re-read checks the right operation in multi-operation transactions; no royalty when the seller is the creator; royalties round down so payouts add up to the price exactly; `buyNFTDirect` (non-custodial) declares `allowedRecipients: ['*']`.
+- **Exchange:** deposits must be addressed to the exchange account (`account` adds the recipient guard); a withdrawal whose broadcast was attempted is never credited back (it is marked `unconfirmed` for review).
+- **Token:** quantities with more decimals than the token's precision are rejected.
+- **Insurance pool, crowdfund, booking** gain an `account` option. Claims, milestone releases and refunds are paid from the app account (they used to be signed from the pool owner or campaign creator, which the app has no key for), rounded down, and marked paid only after the broadcast succeeds; failed ones are retried by `retryClaimPayout`, `releaseMilestone` or `refundContribution`.
+- **Booking:** prices are compared with BigNumber (`10.000` now matches `10`); a payment that can't be honoured is refunded (`booking_refunded`); state transitions are checked (confirm from pending only, cancel/complete from pending or confirmed).
+- **Bounty board / group buy / oracle bounty / savings:** `closeBounty`, `finalizeRound` and `closeGoal` run once; `closeBounty` zeroes `remaining_reward`; withdrawing a group-buy commitment before the deadline lowers the totals so the organiser isn't paid refunded money; contributions and commitments are keyed by operation, not transaction.
+- **Proposal timelock:** `executeProposal` works when time-triggered and waits quietly until the delay has passed; executed or cancelled proposals can't be cancelled again.
+- **Bridge:** an operator attestation replaces an unattested withdrawal request whose recipient or amount doesn't match (`withdrawal_request_replaced`), so a front-run request can't lock a user's funds; withdrawals above `maxPerTx` or the daily limit are rejected at request time; a failed deposit refund is `refund_failed` and retried by `retryRefund`.
+- **Tournament:** with `organizers` unset the oracle defaults to the app account (a payload `oracle` must be the app account or one of `oracles`), prizes and refunds have pending/paid/failed states with `retryPayouts`, and a failed fee transfer emits `tournament_fee_transfer_failed`.
+- **Staking pool:** block-based accrual stops at `ends_at`; failed claims and unbonding releases are retried by the next `claim`, `withdraw` or `releaseMatured`.
+
+### 🐛 Fixed
+- Under `errorPolicy: 'retry'`, a failed idempotency-ledger write after a successful handler re-ran the whole operation, so a storage blip right after a payout could pay twice. The ledger write is now retried on its own and the handler is never re-run.
+- A payload replaced by `beforeContractAction` is validated against the action schema like the original.
+- `resetAction()` anchored the next run to the wall clock; it now uses block time like the scheduler.
+- Registering a time action whose id already exists logs a warning at all times, not only in debug mode.
+- The fallback ledger key for blocks without transaction ids (some HAF views) includes the transaction index, so two transactions' first operations no longer share a key.
+- Guards: registering a contract with `minAmount`/`maxAmount` but no `allowedAssets` logs a warning (the limit applies to HIVE and HBD alike).
+- Docs: the queries guide referenced methods that don't exist (`getReputationScore`, `query.getTokenBalances`, `fiatToHiveRate` with one argument); the batch example wasn't valid code; the env-var docs recommended `USERNAME`.
+- The dev harness (`npm start`) didn't load `.env`, so the built-in games couldn't resolve a house account.
+- Stray SQLite databases and scratch notes were removed from the repository.
+
+## [4.0.0] - 2026-09-26 - Reliability, hooks and configuration
 
 This release makes the streamer safe to run money-handling apps on: nothing is processed until it is irreversible, the cursor is saved after every block, and contract actions are recorded so a replay never runs them twice.
 
@@ -110,9 +179,11 @@ Upgrading? Read the [migration guide](docs/guide/migrating-to-4.md) ([online](ht
   - Files: `src/catalog/`, `scripts/lib/`, `scripts/generate-contract-catalog.ts`, `tests/contract-catalog.spec.ts`
 - **Contract reference pages** now come from the same introspection as the catalog, list factory options and categories, and escape `|` in table cells (enum and union types no longer break tables)
 
-## [Unreleased - DX & Production]
+### Developer experience and production
 
-### ✨ Added
+Also part of 4.0.0: the testing kit, the browser client, ESM, the docs site and the production plumbing.
+
+#### Added
 - **Contract call client (`hive-stream/client`)** - Share lightweight action specs and build calls without hand-written wire JSON
   - `defineContractSpec()` and `createContractCaller()` provide typed action names, Zod validation, trigger checks, and automatic posting/active authority selection
   - Pure helpers build payload wrappers, transfer memos, `custom_json` operations, and native HIVE/HBD transfer operations without networking, keys, or database dependencies
@@ -134,7 +205,7 @@ Upgrading? Read the [migration guide](docs/guide/migrating-to-4.md) ([online](ht
   - Thin `.mjs` wrappers over the single CJS implementation: named imports work, and there is exactly one copy of every class at runtime (no dual-package hazard; `instanceof` is always safe)
   - Subpath export `hive-stream/testing`; types verified under `nodenext` and `bundler` resolution
   - Files: `scripts/generate-esm-wrappers.js`, `package.json`
-- **Documentation site** - VitePress site with 12 guides and auto-generated reference pages for all 40 built-in contracts
+- **Documentation site** - VitePress site with 18 guides and auto-generated reference pages for all 45 built-in contracts
   - Contract pages are generated from source (`npm run docs:gen`), so triggers and payload schemas never drift
   - Deploys to GitHub Pages via `.github/workflows/docs.yml`; run locally with `npm run docs:dev`
   - Files: `docs/`, `scripts/generate-contract-docs.ts`
@@ -145,9 +216,9 @@ Upgrading? Read the [migration guide](docs/guide/migrating-to-4.md) ([online](ht
   - Pluggable structured logging: `logger` config option / `setLogger()`; all library output routes through it (console by default)
   - `init()` + `processPendingBlocks()` for timer-free block processing (tests, replays, serverless)
   - Files: `src/logger.ts`, `src/streamer.ts`, `src/api.ts`, `tests/production-ops.spec.ts`
-- **Package metadata** - npm keywords, homepage, bugs URL, and an `engines` field (Node 18+)
+- **Package metadata** - npm keywords, homepage, bugs URL, and an `engines` field (Node 22+)
 
-### 🐛 Fixed
+#### Fixed
 - **Hive Engine RPC dependency** - Replaced the abandoned `sscjs` client and its vulnerable Axios dependency chain with a small built-in JSON-RPC client that reports HTTP, RPC, and timeout failures directly
 - **Tooling metadata** - Corrected `onCustomJsonId` argument order and documented the contract call client surface
 - **Contract setup validation** - `defineContract()` and `registerContract()` now reject missing handlers, invalid schemas, unsupported triggers, empty trigger lists, and malformed hooks immediately
@@ -157,7 +228,7 @@ Upgrading? Read the [migration guide](docs/guide/migrating-to-4.md) ([online](ht
 - **SQLite adapter** - replaced deprecated `createTableIfNotExists` calls (knex warning spam on startup)
 - **Injected dhive clients** - `setConfig()` no longer replaces a client supplied via the new `client` config option
 
-### 🔧 Changed
+#### Changed
 - **Dependencies** - Upgraded UUID to its patched 11.x release and refreshed compatible transitive dependencies
 - **Live write tests** - every suite that broadcasts now requires `RUN_LIVE_TESTS=1` in addition to credentials, so `npm test` never spends Resource Credits by accident
 - **Legacy `/health` API route** - replaced the static always-ok response with real streamer health (previous `timestamp`/`uptime`/`version` fields are preserved)
@@ -172,7 +243,7 @@ Upgrading? Read the [migration guide](docs/guide/migrating-to-4.md) ([online](ht
 - **Non-Custodial Asset Trading** - Added non-custodial asset trading with checkpoint support
   - Files: `src/contracts/`
 
-## [Unreleased]
+## [3.0.0] - 2025-08-01
 
 ### 🔒 Security
 
@@ -265,40 +336,6 @@ Upgrading? Read the [migration guide](docs/guide/migrating-to-4.md) ([online](ht
   - Enhanced error handling in test setup
   - Files: `tests/setup.ts`
 
-### 📈 Performance Metrics
-
-The optimizations provide significant performance improvements:
-
-- **Block Processing**: 40-60% faster
-- **Database Operations**: 70-80% fewer I/O operations
-- **Memory Usage**: Bounded growth prevention
-- **API Calls**: 50-70% reduction  
-- **Action Processing**: 80-90% faster
-- **Overall Throughput**: 2-3x improvement for high-volume scenarios
-
-### 🔄 Backward Compatibility
-
-All changes maintain full backward compatibility:
-- ✅ No breaking API changes
-- ✅ Existing contracts continue to work unchanged
-- ✅ All configuration options preserved
-- ✅ Database schema remains compatible
-
-### 🔧 Migration Guide
-
-No migration steps required - all optimizations are automatically applied when updating to this version.
-
-For developers wanting to take advantage of new features:
-
-```typescript
-// New subscription cleanup methods
-streamer.removeTransferSubscription('account_name');
-streamer.removeCustomJsonIdSubscription('custom_id');
-
-// Enhanced error handling automatically provides better logging
-// No code changes needed - just monitor logs for improved error context
-```
-
 ### 📦 Dependencies
 
 #### Updated
@@ -320,14 +357,4 @@ streamer.removeCustomJsonIdSubscription('custom_id');
 
 ## Security Policy
 
-If you discover a security vulnerability, please send an email to the maintainer. All security vulnerabilities will be promptly addressed.
-
-## Performance Testing
-
-Performance improvements have been validated through:
-- Synthetic benchmarks with high transaction volumes
-- Memory profiling for leak detection  
-- Database performance analysis
-- API call reduction measurements
-
-For detailed performance metrics and benchmarks, see the performance documentation.
+See [SECURITY.md](SECURITY.md) for how to report a vulnerability.

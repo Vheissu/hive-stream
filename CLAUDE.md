@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Hive Stream is a Node.js library for streaming and reacting to blockchain actions on the Hive blockchain. It provides a layer for monitoring blockchain operations, executing contracts, and managing time-based actions. The library includes adapters for data persistence (SQLite, PostgreSQL, MongoDB), 45 built-in contracts, hooks and guards, provably fair randomness, and an offline testing kit.
+Hive Stream is a Node.js library for streaming and reacting to blockchain actions on the Hive blockchain. It provides a layer for monitoring blockchain operations, executing contracts, and managing time-based actions. The library includes adapters for data persistence (SQLite, PostgreSQL, MongoDB), 48 built-in contracts, hooks and guards, provably fair randomness, and an offline testing kit.
 
 ## Development Commands
 
@@ -31,9 +31,11 @@ Hive Stream is a Node.js library for streaming and reacting to blockchain action
 
 **Streamer (`src/streamer.ts`)**: Block polling, operation dispatch, subscriptions, contract execution, time actions and the write-operation namespaces (`ops`, `flows`, `money`, `query`, `engine`). Processes blocks up to the last irreversible block by default (`streamMode: 'irreversible'`); `head` mode detects forks, rewinds to the common ancestor and fires `onFork`. The cursor is checkpointed after every block (`checkpointMode`). `errorPolicy` (`skip` / `halt` / `retry`) decides what a failing handler or storage write does.
 
+**Safety defaults**: transfer-triggered contract actions only run for transfers addressed to the streamer username or the action's `allowedRecipients` guard (`['*']` opts out for non-custodial actions); `refundRejectedTransfers` (opt-in) sends rejected payments back; the HTTP API binds to loopback (`API_HOST`); `onHiveEngine` only delivers sidechain-verified transactions; flows dedupe per operation via the ledger.
+
 **Hooks (`src/hooks.ts`)**: Streamer hooks (`beforeBlock`, `beforeOperation`, `beforeContractAction`, `afterContractAction`, `onActionRejected`, `onFork`, `onError`, `onCheckpoint`, ...) registered via config, `streamer.hook()` or `streamer.use()`. Hooks and subscription callbacks are awaited in order.
 
-**Contracts (`src/contracts/`)**: `defineContract` / `action` in `contract.ts` (validation of actions, hooks and guards). 45 built-in factories (`create*Contract`). Contract hooks: `create`, `destroy`, `beforeAction`, `afterAction`, `onError`. Declarative guards: `allowedSenders`, `blockedSenders`, `allowedAssets`, `minAmount`, `maxAmount`, `rateLimit`, `paused`. New contracts should use block time (`ctx.block.time`) and key records with `operationRecordId(trxId, opIndex)`.
+**Contracts (`src/contracts/`)**: `defineContract` / `action` in `contract.ts` (validation of actions, hooks and guards). 48 built-in factories (`create*Contract`). Contract hooks: `create`, `destroy`, `beforeAction`, `afterAction`, `onError`. Declarative guards: `allowedSenders`, `blockedSenders`, `allowedAssets`, `minAmount`, `maxAmount`, `rateLimit`, `paused`. New contracts should use block time (`ctx.block.time`) and key records with `operationRecordId(trxId, opIndex)`.
 
 **Fairness (`src/fairness/`)**: Commit-reveal provably fair randomness (`createFairness`, `FairnessManager`), with a dependency-free SHA-256/HMAC so `verifyOutcome()` runs in browsers via `hive-stream/client`. Dice, coinflip, roulette, rps and lotto take an opt-in `fairness` option; limbo always uses it.
 
@@ -47,7 +49,7 @@ Hive Stream is a Node.js library for streaming and reacting to blockchain action
 
 ### Generated files (don't hand-edit)
 
-- `docs/contracts/*.md` and `src/catalog/contracts.json` come from `npm run docs:gen` / `npm run catalog:gen` (both run by `npm run build`), via `scripts/lib/contract-introspection.ts`. A new contract factory needs one line in `scripts/lib/contract-metadata.ts`.
+- `docs/contracts/*.md` and `src/catalog/contracts.json` come from `npm run docs:gen` / `npm run catalog:gen` (`npm run build` runs `catalog:gen`; `docs:gen` runs as part of `docs:dev` / `docs:build`), via `scripts/lib/contract-introspection.ts`. A new contract factory needs one line in `scripts/lib/contract-metadata.ts`.
 - `src/scaffold/version.ts` comes from `scripts/generate-version.js`.
 - ESM `.mjs` files in `dist/` are thin wrappers from `scripts/generate-esm-wrappers.js`; there is deliberately no dual build.
 

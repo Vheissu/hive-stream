@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 - `src/` holds TypeScript source. Core entry points are `streamer.ts`, `api.ts`, and `index.ts`.
-- `src/adapters/` contains SQLite/Mongo/Postgres adapters (each also stores the idempotency ledger); `src/contracts/` has the 45 built-in contract factories; `src/fairness/` has provably fair randomness; `src/hooks.ts` defines streamer hooks; `src/exchanges/` has rate helpers; `src/types/` centralizes shared types.
+- `src/adapters/` contains SQLite/Mongo/Postgres adapters (each also stores the idempotency ledger); `src/contracts/` has the 48 built-in contract factories; `src/fairness/` has provably fair randomness; `src/hooks.ts` defines streamer hooks; `src/exchanges/` has rate helpers; `src/types/` centralizes shared types.
 - Browser-safe entry points: `src/client/` (`hive-stream/client`), `src/scaffold/` (`hive-stream/scaffold`, used by the CLI in `src/cli/`), `src/catalog/` (`hive-stream/catalog`). They must not import Node built-ins or packages; `tests/browser-safe-entries.spec.ts` enforces it.
 - `src/testing/` is the offline testing kit (`hive-stream/testing`).
 - `tests/` contains Jest specs (`**/*.spec.ts`) plus `tests/integration/` and `tests/helpers/`.
@@ -33,6 +33,13 @@
 ## Commit & Pull Request Guidelines
 - Follow Conventional Commits with scopes, as in history: `feat(api): ...`, `fix(contract): ...`, `chore(deps): ...`, `docs(readme): ...`.
 - PRs should include: a clear summary, testing notes (`npm test`/`npm run build`), and docs/CHANGELOG updates for user-facing changes.
+
+## Safety Defaults (5.0)
+- Transfer-triggered contract actions run only for transfers addressed to an app account (`USERNAME` plus `accounts`), or to the action's `allowedRecipients` guard (`['*']` for non-custodial actions that verify the recipient themselves).
+- `refundRejectedTransfers` (opt-in) sends rejected payments back from the account that received them; rejections are in the idempotency ledger first.
+- Every write method signs with the keys of the account it acts as (`accounts` config); a batch is signed with every key it needs.
+- The HTTP API binds to loopback and pages its list routes; `onHiveEngine` delivers only sidechain-verified transactions; flows dedupe per operation through the ledger.
+- Escrow `approve`/`dispute`/`release` reach every action declaring that trigger, with the escrow details as the payload.
 
 ## Configuration & Security Notes
 - Keys and usernames should come from env/config (see `src/config.ts`); never commit secrets.

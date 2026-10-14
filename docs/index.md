@@ -16,8 +16,8 @@ hero:
       text: Built-in Contracts
       link: /contracts/
     - theme: alt
-      text: Upgrading from 3.x
-      link: /guide/migrating-to-4
+      text: Upgrading to 5.0
+      link: /guide/migrating-to-5
 
 features:
   - title: Gambling apps
@@ -37,7 +37,7 @@ features:
     link: /guide/recipes#a-custody-bridge-with-operator-attestations
     linkText: Bridge recipe
   - title: Safe with real money
-    details: Blocks are processed once irreversible, the cursor is saved after every block, and an idempotency ledger stops a replay from paying twice.
+    details: Blocks are processed once irreversible, the cursor is saved after every block, an idempotency ledger stops a replay from paying twice, and only transfers to your account run paid actions. Rejected payments can be refunded automatically.
     link: /guide/production
     linkText: Production guide
   - title: Test everything offline

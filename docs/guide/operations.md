@@ -44,8 +44,9 @@ Batch multiple operations into one transaction:
 
 ```ts
 await streamer.batch()
-    .transfer(...)
-    .customJson(...)
+    .transfer('myapp', 'alice', '1.000 HIVE', 'thanks')
+    .customJson('myapp-log', { event: 'paid', to: 'alice' }, 'myapp')   // posting auth
+    .vote('myapp', 'alice', 'her-post', 10000)
     .send();
 ```
 
