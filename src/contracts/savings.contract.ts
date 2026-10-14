@@ -14,6 +14,7 @@ import {
     requireSender,
     toBigNumber
 } from './helpers';
+import { operationRecordId } from '../types/hive-stream';
 
 const DEFAULT_NAME = 'savings';
 
@@ -148,9 +149,18 @@ export function createSavingsContract(options: SavingsContractOptions = {}) {
             ? 'funded'
             : goal.status;
 
+        // One transaction can carry several transfers; key contributions per operation.
         await state.adapter.query(
             'INSERT INTO savings_contributions (goal_id, contributor, amount, asset, source, transaction_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [payload.goalId, contributor, payment.amount, payment.asset, payment.source, ctx.transaction.id, blockTimeOf(ctx)]
+            [
+                payload.goalId,
+                contributor,
+                payment.amount,
+                payment.asset,
+                payment.source,
+                operationRecordId(ctx.transaction.id, ctx.transaction.operationIndex),
+                blockTimeOf(ctx)
+            ]
         );
 
         await state.adapter.query(
@@ -231,6 +241,15 @@ export function createSavingsContract(options: SavingsContractOptions = {}) {
             if (sender !== goal.owner) {
                 throw new Error('Only the goal owner can close this goal');
             }
+        }
+
+        // Close once: a repeated close (e.g. a recurring time action) must not emit another event.
+        if (goal.status === 'closed') {
+            if (ctx.trigger === 'time') {
+                return;
+            }
+
+            throw new Error('Goal is already closed');
         }
 
         await state.adapter.query(

@@ -18,7 +18,6 @@ describe('Financial Safety', () => {
             getTransaction: jest.fn().mockResolvedValue({
                 operations: [['transfer', { from: 'alice', to: 'beggars', amount: '1.000 HIVE' }]],
             }),
-            verifyTransfer: jest.fn().mockResolvedValue(true),
             transferHiveTokens: jest.fn().mockResolvedValue(true),
             transferHiveTokensMultiple: jest.fn().mockResolvedValue(true),
             ...overrides,
@@ -44,11 +43,11 @@ describe('Financial Safety', () => {
             mockAdapter.addEvent.mockRejectedValue(new Error('Database write failed'));
 
             const contract = createRpsContract({ account: 'beggars' });
-            contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
+            await contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             const ctx = {
                 sender: 'alice',
-                transfer: { rawAmount: '1.000 HIVE' },
+                transfer: { from: 'alice', to: 'beggars', rawAmount: '1.000 HIVE' },
                 block: { number: 1, id: 'block-1', previousId: 'block-0', time: new Date().toISOString() },
                 transaction: { id: 'trx-1' },
             };
@@ -77,11 +76,11 @@ describe('Financial Safety', () => {
             mockStreamer.transferHiveTokens.mockRejectedValue(new Error('Transfer failed'));
 
             const contract = createRpsContract({ account: 'beggars' });
-            contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
+            await contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             const ctx = {
                 sender: 'alice',
-                transfer: { rawAmount: '1.000 HIVE' },
+                transfer: { from: 'alice', to: 'beggars', rawAmount: '1.000 HIVE' },
                 block: { number: 1, id: 'b1', previousId: 'b0', time: new Date().toISOString() },
                 transaction: { id: 'trx-err' },
             };
@@ -99,7 +98,7 @@ describe('Financial Safety', () => {
             const mockAdapter = createMockAdapter();
 
             const contract = createLottoContract({ account: 'beggars', cost: 5, minEntriesHourly: 100 });
-            contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
+            await contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             // Set up an active hourly draw with too few entries
             mockAdapter.find.mockResolvedValue([{
@@ -136,23 +135,22 @@ describe('Financial Safety', () => {
             const mockAdapter = createMockAdapter();
 
             const contract = createLottoContract({ account: 'beggars', cost: 10 });
-            contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
+            await contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             // No existing draw
             mockAdapter.find.mockResolvedValue(null);
 
             const ctx = {
                 sender: 'alice',
-                transfer: { rawAmount: '15.000 HIVE' },
+                transfer: { from: 'alice', to: 'beggars', rawAmount: '15.000 HIVE' },
                 block: { number: 1, id: 'b1', previousId: 'b0', time: new Date().toISOString() },
                 transaction: { id: 'trx-overpay' },
             };
 
-            // Mock verifyTransfer to return true
+            // The contract re-reads the operation from the chain
             mockStreamer.getTransaction.mockResolvedValue({
                 operations: [['transfer', { from: 'alice', to: 'beggars', amount: '15.000 HIVE' }]],
             });
-            mockStreamer.verifyTransfer.mockResolvedValue(true);
 
             await contract.actions.buy.handler({ type: 'hourly' }, ctx as any);
 
@@ -182,20 +180,19 @@ describe('Financial Safety', () => {
             const mockAdapter = createMockAdapter();
 
             const contract = createLottoContract({ account: 'beggars' });
-            contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
+            await contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             const ctx = {
                 sender: 'alice',
-                transfer: { rawAmount: 'notanumber HIVE' },
+                transfer: { from: 'alice', to: 'beggars', rawAmount: 'notanumber HIVE' },
                 block: { number: 1, id: 'b1', previousId: 'b0', time: new Date().toISOString() },
                 transaction: { id: 'trx-nan' },
             };
 
-            mockStreamer.verifyTransfer.mockResolvedValue(true);
-
             await expect(
                 contract.actions.buy.handler({ type: 'hourly' }, ctx as any)
-            ).rejects.toThrow('Invalid ticket amount');
+            ).rejects.toThrow('Invalid amount format');
+            expect(mockStreamer.transferHiveTokens).not.toHaveBeenCalled();
         });
     });
 
@@ -214,7 +211,7 @@ describe('Financial Safety', () => {
                 hourlyWinnersPick: 1,
                 feeAccount: 'feeaccount',
             });
-            contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
+            await contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             // Active draw with enough entries
             mockAdapter.find.mockResolvedValue([{
@@ -293,21 +290,28 @@ describe('Financial Safety', () => {
         });
     });
 
-    describe('verifyTransfer only checks first op (audit #12)', () => {
-        test('verifyTransfer matches first operation', async () => {
-            const tx = {
-                operations: [
-                    ['transfer', { from: 'alice', to: 'bob', amount: '1.000 HIVE' }],
-                    ['transfer', { from: 'bob', to: 'alice', amount: '1.000 HIVE' }],
-                ],
-            } as any;
+    describe('verifyTransfer checks the operation at the given index (audit #12)', () => {
+        const tx = {
+            operations: [
+                ['transfer', { from: 'alice', to: 'bob', amount: '1.000 HIVE' }],
+                ['transfer', { from: 'alice', to: 'alice-alt', amount: '1.000 HIVE' }],
+                ['vote', { voter: 'alice', author: 'bob', permlink: 'p', weight: 10000 }],
+            ],
+        } as any;
 
-            // It only checks operations[0] — this is a KNOWN LIMITATION
-            const result = await Utils.verifyTransfer(tx, 'alice', 'bob', '1.000 HIVE');
-            expect(result).toBe(true);
+        test('defaults to the first operation', async () => {
+            expect(await Utils.verifyTransfer(tx, 'alice', 'bob', '1.000 HIVE')).toBe(true);
+        });
 
-            // A malicious second op that reverses the transfer is NOT caught
-            // This test documents the limitation
+        test('checks the operation the action came from', async () => {
+            expect(await Utils.verifyTransfer(tx, 'alice', 'bob', '1.000 HIVE', 1)).toBe(false);
+            expect(await Utils.verifyTransfer(tx, 'alice', 'alice-alt', '1.000 HIVE', 1)).toBe(true);
+        });
+
+        test('rejects out-of-range indices and non-transfer operations', async () => {
+            expect(await Utils.verifyTransfer(tx, 'alice', 'bob', '1.000 HIVE', 3)).toBe(false);
+            expect(await Utils.verifyTransfer(tx, 'alice', 'bob', '1.000 HIVE', -1)).toBe(false);
+            expect(await Utils.verifyTransfer(tx, 'alice', 'bob', '1.000 HIVE', 2)).toBe(false);
         });
     });
 
@@ -317,16 +321,18 @@ describe('Financial Safety', () => {
             const mockAdapter = createMockAdapter();
 
             const contract = createLottoContract({ account: 'beggars', cost: 10 });
-            contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
+            await contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             const ctx = {
                 sender: 'alice',
-                transfer: { rawAmount: '5.000 HIVE' },
+                transfer: { from: 'alice', to: 'beggars', rawAmount: '5.000 HIVE' },
                 block: { number: 1, id: 'b1', previousId: 'b0', time: new Date().toISOString() },
                 transaction: { id: 'trx-underpay' },
             };
 
-            mockStreamer.verifyTransfer.mockResolvedValue(true);
+            mockStreamer.getTransaction.mockResolvedValue({
+                operations: [['transfer', { from: 'alice', to: 'beggars', amount: '5.000 HIVE' }]],
+            });
 
             await contract.actions.buy.handler({ type: 'hourly' }, ctx as any);
 
@@ -350,7 +356,7 @@ describe('Financial Safety', () => {
             const mockAdapter = createMockAdapter();
 
             const contract = createLottoContract({ account: 'beggars', cost: 5, minEntriesHourly: 2, hourlyWinnersPick: 1 });
-            contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
+            await contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             mockAdapter.find.mockResolvedValue([{
                 _id: 'draw-1',
@@ -389,7 +395,7 @@ describe('Financial Safety', () => {
             const mockAdapter = createMockAdapter();
 
             const contract = createLottoContract({ account: 'beggars', cost: 5, minEntriesHourly: 100 });
-            contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
+            await contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             mockAdapter.find.mockResolvedValue([{
                 _id: 'draw-2',
@@ -424,7 +430,7 @@ describe('Financial Safety', () => {
 
             // 2 entries but 3 winner slots: both entrants win and share the whole pot.
             const contract = createLottoContract({ account: 'beggars', cost: 5, minEntriesHourly: 2, hourlyWinnersPick: 3, feePercentage: 10 });
-            contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
+            await contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             mockAdapter.find.mockResolvedValue([{
                 _id: 'draw-3',
@@ -458,7 +464,7 @@ describe('Financial Safety', () => {
             const mockAdapter = createMockAdapter();
 
             const contract = createLottoContract({ account: 'beggars', cost: 0.1, minEntriesHourly: 1, hourlyWinnersPick: 3, feePercentage: 0 });
-            contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
+            await contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             mockAdapter.find.mockResolvedValue([{
                 _id: 'draw-4',
@@ -494,7 +500,7 @@ describe('Financial Safety', () => {
             const mockAdapter = createMockAdapter();
 
             const contract = createLottoContract({ account: 'beggars', cost: 1, minEntriesHourly: 3, hourlyWinnersPick: 3 });
-            contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
+            await contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             // 5 unique entries
             const entries = Array.from({ length: 5 }, (_, i) => ({
@@ -548,7 +554,7 @@ describe('Financial Safety', () => {
                 feeAccount: 'feeaccount',
                 feePercentage: 5,
             });
-            contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
+            await contract.hooks!.create!({ streamer: mockStreamer, adapter: mockAdapter } as any);
 
             mockAdapter.find.mockResolvedValue([{
                 _id: 'draw-fee',
@@ -603,7 +609,7 @@ describe('Financial Safety', () => {
                 capabilities: { sql: true },
             };
 
-            const contract = createCrowdfundContract();
+            const contract = createCrowdfundContract({ account: 'app' });
             await contract.hooks!.create!({ adapter: mockAdapter, streamer: {} } as any);
 
             await expect(

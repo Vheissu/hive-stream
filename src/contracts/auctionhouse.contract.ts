@@ -1,9 +1,10 @@
 import { z } from 'zod';
+import { getLogger } from '../logger';
+import { operationRecordId } from '../types/hive-stream';
 import { action, defineContract } from './contract';
 import {
     amountSchema,
     assetSchema,
-    assertAssetMatches,
     blockTimeOf,
     createContractState,
     emitContractEvent,
@@ -11,6 +12,7 @@ import {
     identifierSchema,
     parseDateValue,
     requireSender,
+    resolveContractAccount,
     toBigNumber,
     initializeTables
 } from './helpers';
@@ -19,11 +21,18 @@ const DEFAULT_NAME = 'auctionhouse';
 
 export interface AuctionHouseContractOptions {
     name?: string;
+    /**
+     * Account that holds bids in custody, refunds outbid bidders and pays
+     * sellers. Bids must be sent to it. Defaults to the streamer username.
+     */
+    account?: string;
 }
 
 export function createAuctionHouseContract(options: AuctionHouseContractOptions = {}) {
     const name = options.name || DEFAULT_NAME;
-    const state = createContractState();
+    const state = createContractState({ streamer: null as any });
+    // Resolved in the create hook: options.account, else the streamer username.
+    let account = options.account || '';
 
     const createAuctionSchema = z.object({
         auctionId: identifierSchema,
@@ -81,8 +90,92 @@ export function createAuctionHouseContract(options: AuctionHouseContractOptions 
                     note TEXT,
                     created_at DATETIME NOT NULL
                 )
+            `,
+            `
+                CREATE TABLE IF NOT EXISTS auction_house_payouts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    auction_id TEXT NOT NULL,
+                    recipient TEXT NOT NULL,
+                    amount TEXT NOT NULL,
+                    asset TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    memo TEXT NOT NULL,
+                    reference TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at DATETIME NOT NULL,
+                    paid_at DATETIME
+                )
             `
         ]);
+    };
+
+    const withTransaction = async <T>(work: (adapter: any) => Promise<T>): Promise<T> => {
+        if (typeof state.adapter?.runInTransaction === 'function') {
+            return state.adapter.runInTransaction(work);
+        }
+
+        return work(state.adapter);
+    };
+
+    /**
+     * Records money the auction house owes someone. Payouts are written as
+     * `pending` together with the state change that creates them and only
+     * marked `paid` once the transfer has been broadcast, so a failed
+     * broadcast is retried by the next `settleAuction` call instead of lost.
+     */
+    const queuePayout = async (
+        adapter: any,
+        ctx: any,
+        payout: { auctionId: string; recipient: string; amount: string; asset: string; kind: string; memo: string }
+    ) => {
+        await adapter.query(
+            `INSERT INTO auction_house_payouts (auction_id, recipient, amount, asset, kind, memo, reference, status, created_at, paid_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                payout.auctionId,
+                payout.recipient,
+                payout.amount,
+                payout.asset,
+                payout.kind,
+                payout.memo,
+                operationRecordId(ctx.transaction?.id ?? 'time', ctx.transaction?.operationIndex),
+                'pending',
+                blockTimeOf(ctx),
+                null
+            ]
+        );
+    };
+
+    const flushPayouts = async (auctionId: string, ctx: any) => {
+        const pending = await state.adapter.query(
+            'SELECT * FROM auction_house_payouts WHERE auction_id = ? AND status = ? ORDER BY id ASC',
+            [auctionId, 'pending']
+        );
+
+        for (const payout of pending) {
+            try {
+                await state.streamer.transferHiveTokens(account, payout.recipient, payout.amount, payout.asset, payout.memo);
+            } catch (error) {
+                getLogger().error(`[AuctionHouse] ${payout.kind} payout ${payout.id} of ${payout.amount} ${payout.asset} to ${payout.recipient} failed; it stays pending and settleAuction retries it:`, error);
+                continue;
+            }
+
+            await state.adapter.query(
+                'UPDATE auction_house_payouts SET status = ?, paid_at = ? WHERE id = ?',
+                ['paid', blockTimeOf(ctx), payout.id]
+            );
+
+            await emitContractEvent(state.adapter, name, 'payout', { auctionId }, {
+                action: 'auction_payout_sent',
+                data: {
+                    auctionId,
+                    recipient: payout.recipient,
+                    amount: payout.amount,
+                    asset: payout.asset,
+                    kind: payout.kind
+                }
+            }, blockTimeOf(ctx));
+        }
     };
 
     const createAuction = async (payload: z.infer<typeof createAuctionSchema>, ctx: any) => {
@@ -142,69 +235,128 @@ export function createAuctionHouseContract(options: AuctionHouseContractOptions 
     const placeBid = async (payload: z.infer<typeof placeBidSchema>, ctx: any) => {
         const bidder = requireSender(ctx);
         const payment = getIncomingPayment(ctx);
+
+        if (payment.to !== account) {
+            throw new Error(`Bids must be sent to ${account}`);
+        }
+
+        const now = blockTimeOf(ctx);
+
+        // Every bid is held in custody from here on: one that can't be
+        // accepted is sent straight back rather than kept.
+        const refundBid = async (reason: string) => {
+            await withTransaction(async (adapter) => {
+                await queuePayout(adapter, ctx, {
+                    auctionId: payload.auctionId,
+                    recipient: bidder,
+                    amount: payment.amount,
+                    asset: payment.asset,
+                    kind: 'rejected_bid_refund',
+                    memo: `[Refund] Auction ${payload.auctionId}: ${reason}`
+                });
+
+                await adapter.addEvent?.(now, name, 'placeBid', payload, {
+                    action: 'auction_bid_refunded',
+                    data: {
+                        auctionId: payload.auctionId,
+                        bidder,
+                        amount: payment.amount,
+                        asset: payment.asset,
+                        reason
+                    }
+                });
+            });
+
+            await flushPayouts(payload.auctionId, ctx);
+        };
+
         const auctionRows = await state.adapter.query('SELECT * FROM auction_house_auctions WHERE auction_id = ?', [payload.auctionId]);
         if (auctionRows.length === 0) {
-            throw new Error(`Auction ${payload.auctionId} does not exist`);
+            return refundBid('auction does not exist');
         }
 
         const auction = auctionRows[0];
-        const now = blockTimeOf(ctx);
         const startsAt = parseDateValue(auction.starts_at) || now;
         const endsAt = parseDateValue(auction.ends_at) || now;
 
         if (auction.status !== 'open') {
-            throw new Error('Auction is not open for bids');
+            return refundBid('auction is not open for bids');
         }
 
         if (bidder === auction.seller) {
-            throw new Error('Seller cannot bid on their own auction');
+            return refundBid('seller cannot bid on their own auction');
         }
 
         if (startsAt > now) {
-            throw new Error('Auction has not started yet');
+            return refundBid('auction has not started yet');
         }
 
         if (endsAt <= now) {
-            throw new Error('Auction has already ended');
+            return refundBid('auction has already ended');
         }
 
-        assertAssetMatches(payment.asset, auction.payment_asset);
+        if (payment.asset !== auction.payment_asset) {
+            return refundBid(`bids must be paid in ${auction.payment_asset}`);
+        }
 
         const currentHighest = toBigNumber(auction.highest_bid || '0');
         const nextBid = toBigNumber(payment.amount);
         if (nextBid.lte(currentHighest)) {
-            throw new Error('Bid must be greater than the current highest bid');
+            return refundBid('bid must be greater than the current highest bid');
         }
 
-        await state.adapter.query(
-            'INSERT INTO auction_house_bids (auction_id, bidder, amount, asset, note, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-            [payload.auctionId, bidder, payment.amount, payment.asset, payload.note || '', now]
-        );
+        const shouldSettle = Boolean(auction.buy_now_price && nextBid.gte(auction.buy_now_price));
+        const status = shouldSettle ? 'settled' : 'open';
+        const settledAt: Date | null = shouldSettle ? now : null;
 
-        let status = 'open';
-        let settledAt: Date | null = null;
-        const shouldSettle = auction.buy_now_price && nextBid.gte(auction.buy_now_price);
-        if (shouldSettle) {
-            status = 'settled';
-            settledAt = now;
-        }
+        await withTransaction(async (adapter) => {
+            await adapter.query(
+                'INSERT INTO auction_house_bids (auction_id, bidder, amount, asset, note, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+                [payload.auctionId, bidder, payment.amount, payment.asset, payload.note || '', now]
+            );
 
-        await state.adapter.query(
-            'UPDATE auction_house_auctions SET highest_bid = ?, highest_bidder = ?, status = ?, settled_at = ? WHERE auction_id = ?',
-            [payment.amount, bidder, status, settledAt, payload.auctionId]
-        );
-
-        await emitContractEvent(state.adapter, name, 'placeBid', payload, {
-            action: shouldSettle ? 'auction_settled' : 'auction_bid_placed',
-            data: {
-                auctionId: payload.auctionId,
-                bidder,
-                amount: payment.amount,
-                asset: payment.asset,
-                winner: shouldSettle ? bidder : null,
-                settled: shouldSettle
+            if (auction.highest_bidder) {
+                await queuePayout(adapter, ctx, {
+                    auctionId: payload.auctionId,
+                    recipient: auction.highest_bidder,
+                    amount: auction.highest_bid,
+                    asset: auction.payment_asset,
+                    kind: 'outbid_refund',
+                    memo: `[Refund] You were outbid on auction ${payload.auctionId}`
+                });
             }
-        }, blockTimeOf(ctx));
+
+            if (shouldSettle) {
+                await queuePayout(adapter, ctx, {
+                    auctionId: payload.auctionId,
+                    recipient: auction.seller,
+                    amount: payment.amount,
+                    asset: payment.asset,
+                    kind: 'sale',
+                    memo: `Auction ${payload.auctionId} sold to ${bidder}`
+                });
+            }
+
+            await adapter.query(
+                'UPDATE auction_house_auctions SET highest_bid = ?, highest_bidder = ?, status = ?, settled_at = ? WHERE auction_id = ?',
+                [payment.amount, bidder, status, settledAt, payload.auctionId]
+            );
+
+            await adapter.addEvent?.(now, name, 'placeBid', payload, {
+                action: shouldSettle ? 'auction_settled' : 'auction_bid_placed',
+                data: {
+                    auctionId: payload.auctionId,
+                    bidder,
+                    amount: payment.amount,
+                    asset: payment.asset,
+                    winner: shouldSettle ? bidder : null,
+                    settled: shouldSettle,
+                    outbid: auction.highest_bidder || null
+                }
+            });
+        });
+
+        await flushPayouts(payload.auctionId, ctx);
     };
 
     const settleAuction = async (payload: z.infer<typeof settleSchema>, ctx: any) => {
@@ -215,6 +367,8 @@ export function createAuctionHouseContract(options: AuctionHouseContractOptions 
 
         const auction = rows[0];
         if (auction.status === 'settled' || auction.status === 'ended' || auction.status === 'cancelled') {
+            // Already decided: only retry payouts whose broadcast failed.
+            await flushPayouts(payload.auctionId, ctx);
             return;
         }
 
@@ -234,20 +388,45 @@ export function createAuctionHouseContract(options: AuctionHouseContractOptions 
             ? 'settled'
             : 'ended';
 
-        await state.adapter.query(
-            'UPDATE auction_house_auctions SET status = ?, settled_at = ? WHERE auction_id = ?',
-            [status, blockTimeOf(ctx), payload.auctionId]
-        );
-
-        await emitContractEvent(state.adapter, name, 'settleAuction', payload, {
-            action: 'auction_settled',
-            data: {
-                auctionId: payload.auctionId,
-                status,
-                winner: status === 'settled' ? auction.highest_bidder : null,
-                winningBid: status === 'settled' ? auction.highest_bid : null
+        await withTransaction(async (adapter) => {
+            if (status === 'settled') {
+                await queuePayout(adapter, ctx, {
+                    auctionId: payload.auctionId,
+                    recipient: auction.seller,
+                    amount: auction.highest_bid,
+                    asset: auction.payment_asset,
+                    kind: 'sale',
+                    memo: `Auction ${payload.auctionId} sold to ${auction.highest_bidder}`
+                });
+            } else if (auction.highest_bidder) {
+                await queuePayout(adapter, ctx, {
+                    auctionId: payload.auctionId,
+                    recipient: auction.highest_bidder,
+                    amount: auction.highest_bid,
+                    asset: auction.payment_asset,
+                    kind: 'reserve_refund',
+                    memo: `[Refund] Auction ${payload.auctionId} ended below its reserve price`
+                });
             }
-        }, blockTimeOf(ctx));
+
+            await adapter.query(
+                'UPDATE auction_house_auctions SET status = ?, settled_at = ? WHERE auction_id = ?',
+                [status, blockTimeOf(ctx), payload.auctionId]
+            );
+
+            await adapter.addEvent?.(blockTimeOf(ctx), name, 'settleAuction', payload, {
+                action: 'auction_settled',
+                data: {
+                    auctionId: payload.auctionId,
+                    status,
+                    winner: status === 'settled' ? auction.highest_bidder : null,
+                    winningBid: status === 'settled' ? auction.highest_bid : null,
+                    refunded: status === 'ended' ? auction.highest_bidder || null : null
+                }
+            });
+        });
+
+        await flushPayouts(payload.auctionId, ctx);
     };
 
     const cancelAuction = async (payload: z.infer<typeof settleSchema>, ctx: any) => {
@@ -283,15 +462,28 @@ export function createAuctionHouseContract(options: AuctionHouseContractOptions 
     return defineContract({
         name,
         hooks: {
-            create: async ({ adapter }) => {
-                state.adapter = adapter;
+            create: async (lifecycle) => {
+                account = resolveContractAccount('createAuctionHouseContract', options.account, lifecycle);
+                state.adapter = lifecycle.adapter;
+                state.streamer = lifecycle.streamer;
                 await initialize();
             }
         },
         actions: {
             createAuction: action(createAuction, { schema: createAuctionSchema, trigger: 'custom_json' }),
-            placeBid: action(placeBid, { schema: placeBidSchema, trigger: ['transfer', 'recurrent_transfer'] }),
-            settleAuction: action(settleAuction, { schema: settleSchema, trigger: ['custom_json', 'time'] }),
+            placeBid: action(placeBid, {
+                schema: placeBidSchema,
+                trigger: ['transfer', 'recurrent_transfer'],
+                description: 'Bid by sending the full bid amount to the auction account. Outbid bidders are refunded automatically; bids that cannot be accepted are sent back.',
+                // Bids go to the custody account: the streamer username unless
+                // options.account names another account.
+                ...(options.account ? { guards: { allowedRecipients: [options.account] } } : {})
+            }),
+            settleAuction: action(settleAuction, {
+                schema: settleSchema,
+                trigger: ['custom_json', 'time'],
+                description: 'Close an ended auction: pays the seller when the reserve is met, otherwise refunds the highest bidder. Calling it again retries any payout whose transfer failed.'
+            }),
             cancelAuction: action(cancelAuction, { schema: settleSchema, trigger: 'custom_json' })
         }
     });

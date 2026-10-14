@@ -55,7 +55,7 @@ describe('Third wave contract suite', () => {
     });
 
     test('insurance pools manage reserves, claims, and expiries', async () => {
-        const contract = createInsurancePoolContract();
+        const contract = createInsurancePoolContract({ account: 'app' });
         await streamer.registerContract(contract);
 
         await contract.actions.createPool.handler({

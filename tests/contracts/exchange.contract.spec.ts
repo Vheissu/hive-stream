@@ -33,7 +33,7 @@ describe('Exchange Contract', () => {
         transaction: { id: `trx-${trigger}-${sender}` },
         sender,
         customJson: trigger === 'custom_json' ? { id: 'hivestream', json: {}, isSignedWithActiveKey: true } : undefined,
-        transfer: trigger === 'transfer' ? { from: sender, to: 'exchange', rawAmount: '', amount: '', asset: '', memo: '' } : undefined
+        transfer: trigger === 'transfer' ? { from: sender, to: 'beggars', rawAmount: '', amount: '', asset: '', memo: '' } : undefined
     });
 
     test('Deposits, places orders, and matches', async () => {

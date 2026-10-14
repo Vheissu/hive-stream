@@ -224,25 +224,41 @@ export function createProposalTimelockContract(options: ProposalTimelockContract
     };
 
     const executeProposal = async (payload: z.infer<typeof executeSchema>, ctx: any) => {
-        const approver = requireSender(ctx);
+        // A scheduled (time-triggered) execution has no sender: the app that
+        // scheduled it is the executor, and the approval threshold plus the
+        // timelock are what authorise it.
+        const scheduled = ctx.trigger === 'time';
         const proposalRows = await state.adapter.query('SELECT * FROM timelock_proposals WHERE proposal_id = ?', [payload.proposalId]);
         if (proposalRows.length === 0) {
             throw new Error(`Proposal ${payload.proposalId} does not exist`);
         }
 
         const proposal = proposalRows[0];
-        const queueRows = await state.adapter.query('SELECT * FROM timelock_queues WHERE queue_id = ?', [proposal.queue_id]);
-        const queue = queueRows[0];
-        const approvers = parseJson<string[]>(queue.approvers_json, []);
-        if (!approvers.includes(approver)) {
-            throw new Error('Only queue approvers can execute proposals');
+        if (!scheduled) {
+            const approver = requireSender(ctx);
+            const queueRows = await state.adapter.query('SELECT * FROM timelock_queues WHERE queue_id = ?', [proposal.queue_id]);
+            const queue = queueRows[0];
+            const approvers = parseJson<string[]>(queue.approvers_json, []);
+            if (!approvers.includes(approver)) {
+                throw new Error('Only queue approvers can execute proposals');
+            }
         }
 
         if (proposal.status !== 'approved') {
+            // A schedule keeps firing until the proposal executes; not being
+            // approved yet (or already executed or cancelled) is not an error then.
+            if (scheduled) {
+                return;
+            }
+
             throw new Error('Proposal is not approved for execution');
         }
 
         if (new Date(proposal.ready_at) > blockTimeOf(ctx)) {
+            if (scheduled) {
+                return;
+            }
+
             throw new Error('Proposal timelock has not expired yet');
         }
 
@@ -277,6 +293,10 @@ export function createProposalTimelockContract(options: ProposalTimelockContract
             throw new Error('Only the proposer or queue owner can cancel this proposal');
         }
 
+        if (proposal.status === 'cancelled' || proposal.status === 'executed') {
+            throw new Error(`Proposal ${payload.proposalId} is already ${proposal.status}`);
+        }
+
         await state.adapter.query(
             'UPDATE timelock_proposals SET status = ? WHERE proposal_id = ?',
             ['cancelled', payload.proposalId]
@@ -303,7 +323,11 @@ export function createProposalTimelockContract(options: ProposalTimelockContract
             createQueue: action(createQueue, { schema: createQueueSchema, trigger: 'custom_json' }),
             createProposal: action(createProposal, { schema: createProposalSchema, trigger: 'custom_json' }),
             approveProposal: action(approveProposal, { schema: proposalIdSchema, trigger: 'custom_json' }),
-            executeProposal: action(executeProposal, { schema: executeSchema, trigger: ['custom_json', 'time'] }),
+            executeProposal: action(executeProposal, {
+                schema: executeSchema,
+                trigger: ['custom_json', 'time'],
+                description: 'Execute an approved proposal once its timelock has expired: by a queue approver, or by a scheduled time action (no sender needed).'
+            }),
             cancelProposal: action(cancelProposal, { schema: proposalIdSchema, trigger: 'custom_json' })
         }
     });

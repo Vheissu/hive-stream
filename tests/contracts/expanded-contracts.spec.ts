@@ -58,7 +58,7 @@ describe('Expanded contract suite', () => {
     });
 
     test('auction house creates, bids, and settles auctions', async () => {
-        const contract = createAuctionHouseContract();
+        const contract = createAuctionHouseContract({ account: 'contract' });
         await streamer.registerContract(contract);
 
         await contract.actions.createAuction.handler({
@@ -115,7 +115,7 @@ describe('Expanded contract suite', () => {
     });
 
     test('crowdfund campaign finalizes and releases milestones', async () => {
-        const contract = createCrowdfundContract();
+        const contract = createCrowdfundContract({ account: 'app' });
         await streamer.registerContract(contract);
 
         await contract.actions.createCampaign.handler({
@@ -131,6 +131,7 @@ describe('Expanded contract suite', () => {
         contributionContext.transfer.rawAmount = '100.000 HBD';
         contributionContext.transfer.amount = '100.000';
         contributionContext.transfer.asset = 'HBD';
+        contributionContext.transfer.to = 'app';
 
         await contract.actions.contribute.handler({ campaignId: 'campaign-1' }, contributionContext);
         await contract.actions.finalizeCampaign.handler({ campaignId: 'campaign-1' }, createContext('time', 'system'));
@@ -145,7 +146,8 @@ describe('Expanded contract suite', () => {
         expect(campaign[0].status).toBe('funded');
         expect(campaign[0].current_amount).toBe('100');
         expect(milestone[0].status).toBe('released');
-        expect(milestone[0].released_amount).toBe('50');
+        expect(milestone[0].released_amount).toBe('50.000');
+        expect(streamer.transferHiveTokens).toHaveBeenCalledWith('app', 'alice', '50.000', 'HBD', 'Crowdfund milestone release: campaign-1 #0');
     });
 
     test('gift cards issue and redeem partially', async () => {
@@ -239,11 +241,11 @@ describe('Expanded contract suite', () => {
 
     test('remaining new factories register through the public export surface', async () => {
         const contracts = [
-            createBountyBoardContract(),
+            createBountyBoardContract({ account: 'app' }),
             createInvoiceContract(),
             createSavingsContract(),
-            createBookingContract(),
-            createGroupBuyContract(),
+            createBookingContract({ account: 'app' }),
+            createGroupBuyContract({ account: 'app' }),
             createSweepstakesContract()
         ];
 

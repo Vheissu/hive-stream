@@ -444,7 +444,9 @@ export function createTicketingContract(options: TicketingContractOptions = {}) 
             transferTicket: action(transferTicket, { schema: transferTicketSchema, trigger: 'custom_json' }),
             listTicket: action(listTicket, { schema: listTicketSchema, trigger: 'custom_json' }),
             unlistTicket: action(unlistTicket, { schema: buyTicketSchema, trigger: 'custom_json' }),
-            buyTicketDirect: action(buyTicketDirect, { schema: buyTicketSchema, trigger: 'transfer' })
+            // Non-custodial: the payment goes to the seller, not the app account, so the
+            // streamer's recipient guard is opened and the handler checks the seller itself.
+            buyTicketDirect: action(buyTicketDirect, { schema: buyTicketSchema, trigger: 'transfer', guards: { allowedRecipients: ['*'] } })
         }
     });
 }

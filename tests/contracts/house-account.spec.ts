@@ -56,12 +56,15 @@ describe('built-in contract house accounts', () => {
 
     test('an explicit account wins over the streamer username and is used for payouts', async () => {
         const streamer = await createStreamer('myhouse');
-        const contract = createRpsContract({ account: 'explicit-house' });
+        // Loss notices on, so every outcome sends a transfer.
+        const contract = createRpsContract({ account: 'explicit-house', notifyLosses: true });
         await streamer.registerContract(contract);
 
         const transferSpy = jest.spyOn(streamer, 'transferHiveTokens').mockResolvedValue({} as any);
-        jest.spyOn(streamer, 'getTransaction').mockResolvedValue({} as any);
-        jest.spyOn(streamer, 'verifyTransfer').mockResolvedValue(true as any);
+        jest.spyOn(streamer, 'getTransaction').mockResolvedValue({
+            operations: [['transfer', { from: 'alice', to: 'explicit-house', amount: '0.001 HIVE' }]]
+        } as any);
+        jest.spyOn(streamer.getClient().database, 'getAccounts').mockResolvedValue([{ balance: '100.000 HIVE' }] as any);
 
         await contract.actions.play.handler({ move: 'rock' } as any, {
             trigger: 'transfer',

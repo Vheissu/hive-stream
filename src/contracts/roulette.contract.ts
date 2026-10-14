@@ -4,22 +4,33 @@ import seedrandom from 'seedrandom';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
-import { createFairnessSupport, formatBlockchainAmount, formatFairnessMemo, parseBlockchainAmount, resolveContractAccount, blockTimeOf } from './helpers';
+import {
+    blockTimeOf,
+    createBetSettlement,
+    createFairnessSupport,
+    createHouseBankroll,
+    formatBlockchainAmount,
+    formatFairnessMemo,
+    refundableField,
+    resolveContractAccount,
+    verifyIncomingTransfer
+} from './helpers';
 import { resolveFairnessOption, type FairDrawProof, type FairnessManager, type FairnessOptions } from '../fairness/manager';
+import { operationRecordId, type ContractContext } from '../types/hive-stream';
 
 const DEFAULT_NAME = 'roulette';
 const DEFAULT_TOKEN_SYMBOL = 'HIVE';
 const DEFAULT_MIN_AMOUNT = 0.001;
 const DEFAULT_MAX_AMOUNT = 20;
+const MAX_SEED_LENGTH = 64;
 
 const BET_TYPES = ['straight', 'color', 'parity', 'dozen', 'column', 'range'] as const;
 const RED_NUMBERS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
 
-type RouletteBetType = typeof BET_TYPES[number];
 type RouletteColor = 'red' | 'black';
 type RouletteParity = 'odd' | 'even';
 type RouletteRange = 'low' | 'high';
-type RouletteSpinPayload = { betType: RouletteBetType; value: string | number; seed?: string };
+type RouletteSpinPayload = { betType: unknown; value: unknown; seed?: string };
 
 type NormalizedSpinPayload =
     | { betType: 'straight'; value: number; seed?: string }
@@ -31,18 +42,26 @@ type NormalizedSpinPayload =
 
 export interface RouletteContractOptions {
     name?: string;
+    /** House account that receives bets and pays winners. Defaults to the streamer username. */
     account?: string;
+    /** Default accepted asset (HIVE). Winnings are always paid in the asset that was bet. */
     tokenSymbol?: string;
+    /** Accepted assets (HIVE and/or HBD). Defaults to `[tokenSymbol]`. */
     validCurrencies?: string[];
     minAmount?: number;
     maxAmount?: number;
+    /** Send a 0.001 notice transfer on losses (default false; results are always recorded as events). */
+    notifyLosses?: boolean;
     /**
-     * Provably-fair commit-reveal draws (recommended). When omitted the legacy
-     * RNG (block ids plus an uncommitted per-bet server seed) is used.
+     * Provably-fair commit-reveal draws, on by default. Pass options or a
+     * shared FairnessManager to customise, or `false` for the legacy RNG
+     * (block ids plus an uncommitted server seed; not verifiable).
      */
     fairness?: FairnessManager | FairnessOptions | boolean;
 }
 
+// Legacy RNG, used only with `fairness: false`: block ids plus an uncommitted
+// per-bet server seed. Not verifiable, and a block producer can bias it.
 function rng(previousBlockId: string, blockId: string, transactionId: string, serverSeed: string, clientSeed = ''): number {
     if (!previousBlockId || !blockId || !transactionId || !serverSeed) {
         throw new Error('Invalid RNG parameters');
@@ -117,6 +136,8 @@ function normalizeSpinPayload(payload: RouletteSpinPayload): NormalizedSpinPaylo
 
             return { betType: 'range', value: payload.value, seed: payload.seed };
         }
+        default:
+            throw new Error(`Bet type must be one of ${BET_TYPES.join(', ')}`);
     }
 }
 
@@ -187,19 +208,13 @@ function getSpinContext(number: number) {
     return { color, parity, range };
 }
 
+// Typed but permissive: an unknown bet type, an out-of-range value or a long
+// seed is refunded by the handler instead of failing validation and keeping
+// the stake.
 const spinSchema = z.object({
-    betType: z.enum(BET_TYPES),
-    value: z.union([z.string(), z.number().int()]),
-    seed: z.string().max(64).optional()
-}).superRefine((payload, ctx) => {
-    try {
-        normalizeSpinPayload(payload as RouletteSpinPayload);
-    } catch (error) {
-        ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: error instanceof Error ? error.message : 'Invalid roulette payload'
-        });
-    }
+    betType: refundableField(z.enum(BET_TYPES)),
+    value: refundableField(z.union([z.string(), z.number().int()])),
+    seed: z.string().optional()
 });
 
 export function createRouletteContract(options: RouletteContractOptions = {}) {
@@ -210,244 +225,166 @@ export function createRouletteContract(options: RouletteContractOptions = {}) {
     const validCurrencies = options.validCurrencies || [tokenSymbol];
     const minAmount = options.minAmount ?? DEFAULT_MIN_AMOUNT;
     const maxAmount = options.maxAmount ?? DEFAULT_MAX_AMOUNT;
-    const fairSupport = createFairnessSupport(name, () => account, resolveFairnessOption(options.fairness));
+    const notifyLosses = options.notifyLosses ?? false;
+    const fairSupport = createFairnessSupport(name, () => account, resolveFairnessOption(options.fairness ?? true));
     const fairness = fairSupport.fairness;
 
     const state = {
         streamer: null as any,
         adapter: null as any,
-        balanceCache: null as { balance: BigNumber; timestamp: number } | null,
-        balanceCacheTimeout: 30000,
-        betQueue: [] as Array<() => Promise<void>>,
-        processingQueue: false,
-        pendingPayouts: new BigNumber(0)
+        queue: Promise.resolve() as Promise<unknown>
     };
 
-    const invalidateBalanceCache = (): void => {
-        state.balanceCache = null;
-    };
+    const bankroll = createHouseBankroll({ streamer: () => state.streamer, account: () => account, logPrefix: '[RouletteContract]' });
 
-    const getBalance = async (): Promise<BigNumber> => {
-        const now = Date.now();
+    const processSpin = async (payload: RouletteSpinPayload, ctx: ContractContext): Promise<void> => {
+        const incoming = await verifyIncomingTransfer(state.streamer, ctx, account);
+        const player = incoming.from;
+        const settlement = createBetSettlement({
+            streamer: state.streamer,
+            adapter: state.adapter,
+            contract: name,
+            account,
+            ctx,
+            player,
+            amount: incoming.amount,
+            asset: incoming.asset,
+            logPrefix: '[RouletteContract]',
+            onSent: (asset, amount) => bankroll.debit(asset, amount)
+        });
 
-        if (state.balanceCache && (now - state.balanceCache.timestamp) < state.balanceCacheTimeout) {
-            return state.balanceCache.balance;
-        }
-
-        try {
-            const accountInfo = await state.streamer['client'].database.getAccounts([account]);
-
-            if (accountInfo?.[0]) {
-                const amount = parseBlockchainAmount(accountInfo[0].balance as string).value;
-
-                state.balanceCache = {
-                    balance: amount,
-                    timestamp: now
-                };
-
-                return amount;
-            }
-        } catch (error) {
-            getLogger().error('[RouletteContract] Error fetching balance:', error);
-            if (state.balanceCache) {
-                return state.balanceCache.balance;
-            }
-        }
-
-        return new BigNumber(0);
-    };
-
-    const processQueue = async (): Promise<void> => {
-        if (state.processingQueue || state.betQueue.length === 0) {
+        if (await settlement.alreadySettled()) {
             return;
         }
 
-        state.processingQueue = true;
-
-        while (state.betQueue.length > 0) {
-            const nextBet = state.betQueue.shift();
-            if (nextBet) {
-                try {
-                    await nextBet();
-                } catch (error) {
-                    getLogger().error('[RouletteContract] Queue processing error:', error);
-                }
-            }
-        }
-
-        state.processingQueue = false;
-    };
-
-    const processSpin = async (payload: RouletteSpinPayload, ctx: any): Promise<void> => {
-        if (!ctx.transfer) {
-            throw new Error('Transfer context required for spin');
-        }
-
-        const sender = ctx.sender;
-        const amountRaw = ctx.transfer.rawAmount;
+        let reserved: BigNumber | null = null;
 
         try {
-            const bet = normalizeSpinPayload(payload);
+            if (!validCurrencies.includes(incoming.asset)) {
+                await settlement.refund('[Refund] You sent an invalid currency.');
+                return;
+            }
 
-            let parsedAmount;
+            if (incoming.value.isLessThan(minAmount)) {
+                await settlement.refund(`[Refund] Bet amount too small. Minimum: ${minAmount} ${incoming.asset}.`);
+                return;
+            }
+
+            if (incoming.value.isGreaterThan(maxAmount)) {
+                await settlement.refund(`[Refund] You sent too much. Maximum: ${maxAmount} ${incoming.asset}.`);
+                return;
+            }
+
+            let bet: NormalizedSpinPayload;
+
             try {
-                parsedAmount = parseBlockchainAmount(amountRaw);
+                bet = normalizeSpinPayload(payload);
             } catch (error) {
-                throw new Error('Invalid amount format');
-            }
-
-            const amountParsed = parsedAmount.value;
-            if (amountParsed.isNegative()) {
-                throw new Error('Invalid amount value');
-            }
-
-            const transaction = await state.streamer.getTransaction(ctx.block.number, ctx.transaction.id);
-            const verify = await state.streamer.verifyTransfer(transaction, sender, account, amountRaw);
-            const amountCurrency = parsedAmount.asset;
-
-            if (!verify) {
+                await settlement.refund(`[Refund] ${error instanceof Error ? error.message : 'Invalid roulette bet'}.`);
                 return;
             }
 
-            if (!validCurrencies.includes(amountCurrency)) {
-                await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] You sent an invalid currency.');
-                invalidateBalanceCache();
+            if (bet.seed !== undefined && (typeof bet.seed !== 'string' || bet.seed.length > MAX_SEED_LENGTH)) {
+                await settlement.refund(`[Refund] Seed must be a string of at most ${MAX_SEED_LENGTH} characters.`);
                 return;
             }
 
-            if (amountParsed.isLessThan(minAmount)) {
-                await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, `[Refund] Bet amount too small. Minimum: ${minAmount} ${amountCurrency}.`);
-                invalidateBalanceCache();
+            // Standard single-zero odds: payouts are whole multiples of the
+            // stake, so the zero is the house edge at every bet size.
+            const potentialPayout = incoming.value.multipliedBy(getPayoutMultiplier(bet)).decimalPlaces(3, BigNumber.ROUND_DOWN);
+
+            if (potentialPayout.isGreaterThan(await bankroll.available(incoming.asset))) {
+                await settlement.refund('[Refund] The server cannot afford this bet payout.');
                 return;
             }
 
-            if (amountParsed.isGreaterThan(maxAmount)) {
-                await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, `[Refund] You sent too much. Maximum: ${maxAmount} ${amountCurrency}.`);
-                invalidateBalanceCache();
-                return;
+            bankroll.reserve(incoming.asset, potentialPayout);
+            reserved = potentialPayout;
+
+            let winningNumber: number;
+            let serverSeed: string | null = null;
+            let proof: FairDrawProof | null = null;
+
+            if (fairness) {
+                const draw = await fairness.draw({ type: 'roulette' }, {
+                    clientSeed: bet.seed || player,
+                    blockId: ctx.block.id
+                });
+                winningNumber = draw.outcome;
+                proof = draw.proof;
+            } else {
+                serverSeed = randomUUID();
+                winningNumber = rng(ctx.block.previousId, ctx.block.id, ctx.transaction.id, serverSeed, bet.seed ?? '');
             }
 
-            const potentialPayout = amountParsed.multipliedBy(getPayoutMultiplier(bet));
-            const balance = await getBalance();
-            const availableBalance = balance.minus(state.pendingPayouts);
+            const spinContext = getSpinContext(winningNumber);
+            const won = isWinningBet(bet, winningNumber);
 
-            if (potentialPayout.isGreaterThan(availableBalance)) {
-                await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] The server cannot afford this bet payout.');
-                invalidateBalanceCache();
-                return;
+            if (state.adapter?.addEvent) {
+                await state.adapter.addEvent(blockTimeOf(ctx), name, 'spin', payload, {
+                    action: 'spin_result',
+                    data: {
+                        player,
+                        betType: bet.betType,
+                        betValue: String(bet.value),
+                        winningNumber,
+                        winningColor: spinContext.color,
+                        winningParity: spinContext.parity,
+                        winningRange: spinContext.range,
+                        result: won ? 'win' : 'lose',
+                        amount: formatBlockchainAmount(incoming.value),
+                        payout: won ? formatBlockchainAmount(potentialPayout) : '0',
+                        asset: incoming.asset,
+                        ...(proof
+                            ? { fairness: proof, outcomeSpec: { type: 'roulette' } }
+                            : { serverSeed }),
+                        blockId: ctx.block.id,
+                        transactionId: operationRecordId(ctx.transaction.id, ctx.transaction.operationIndex)
+                    }
+                });
             }
 
-            state.pendingPayouts = state.pendingPayouts.plus(potentialPayout);
-            let payoutIncremented = true;
+            const betDescription = describeBet(bet);
+            const seedMemo = proof ? formatFairnessMemo(proof) : ` | Seed: ${serverSeed}`;
 
-            try {
-                let winningNumber: number;
-                let serverSeed: string | null = null;
-                let proof: FairDrawProof | null = null;
-
-                if (fairness) {
-                    const draw = await fairness.draw({ type: 'roulette' }, {
-                        clientSeed: bet.seed || sender,
-                        blockId: ctx.block.id
-                    });
-                    winningNumber = draw.outcome;
-                    proof = draw.proof;
-                } else {
-                    serverSeed = randomUUID();
-                    winningNumber = rng(ctx.block.previousId, ctx.block.id, ctx.transaction.id, serverSeed, bet.seed ?? '');
-                }
-
-                const spinContext = getSpinContext(winningNumber);
-                const won = isWinningBet(bet, winningNumber);
-
-                if (state.adapter?.addEvent) {
-                    await state.adapter.addEvent(blockTimeOf(ctx), name, 'spin', payload, {
-                        action: 'spin_result',
-                        data: {
-                            player: sender,
-                            betType: bet.betType,
-                            betValue: String(bet.value),
-                            winningNumber,
-                            winningColor: spinContext.color,
-                            winningParity: spinContext.parity,
-                            winningRange: spinContext.range,
-                            result: won ? 'win' : 'lose',
-                            ...(proof
-                                ? { fairness: proof, outcomeSpec: { type: 'roulette' } }
-                                : { serverSeed }),
-                            blockId: ctx.block.id,
-                            transactionId: ctx.transaction.id
-                        }
-                    });
-                }
-
-                const betDescription = describeBet(bet);
-                const seedMemo = proof ? formatFairnessMemo(proof) : ` | Seed: ${serverSeed}`;
-                if (won) {
-                    await state.streamer.transferHiveTokens(
-                        account,
-                        sender,
-                        formatBlockchainAmount(potentialPayout),
-                        parsedAmount.asset,
-                        `[Winner] | Bet: ${betDescription} | Number: ${winningNumber} | Color: ${spinContext.color}${seedMemo}`
-                    );
-                    invalidateBalanceCache();
-                    return;
-                }
-
-                await state.streamer.transferHiveTokens(
-                    account,
-                    sender,
+            if (won) {
+                await settlement.send(
+                    player,
+                    formatBlockchainAmount(potentialPayout),
+                    incoming.asset,
+                    `[Winner] | Bet: ${betDescription} | Number: ${winningNumber} | Color: ${spinContext.color}${seedMemo}`
+                );
+            } else if (notifyLosses) {
+                await settlement.send(
+                    player,
                     '0.001',
-                    parsedAmount.asset,
+                    incoming.asset,
                     `[Lost] | Bet: ${betDescription} | Number: ${winningNumber} | Color: ${spinContext.color}${seedMemo}`
                 );
-                invalidateBalanceCache();
-            } finally {
-                if (payoutIncremented) {
-                    state.pendingPayouts = state.pendingPayouts.minus(potentialPayout);
-                    payoutIncremented = false;
-                }
             }
         } catch (e) {
             const error = e instanceof Error ? e : new Error(String(e));
             getLogger().error('[RouletteContract] Spin processing error:', {
-                sender,
-                amount: amountRaw,
+                sender: player,
+                amount: incoming.rawAmount,
                 payload,
                 message: error.message
             });
 
-            try {
-                if (amountRaw && typeof amountRaw === 'string' && amountRaw.includes(' ')) {
-                    const parsedAmount = parseBlockchainAmount(amountRaw);
-                    const amountBN = parsedAmount.value;
-                    if (!amountBN.isNaN() && amountBN.isFinite() && !amountBN.isNegative()) {
-                        await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] Processing error occurred.');
-                        invalidateBalanceCache();
-                    }
-                }
-            } catch (refundError) {
-                getLogger().error('[RouletteContract] Failed to refund after error:', refundError);
-            }
-
+            await settlement.refundAfterError(error);
             throw error;
+        } finally {
+            if (reserved) {
+                bankroll.release(incoming.asset, reserved);
+            }
         }
     };
 
-    const spin = async (payload: RouletteSpinPayload, ctx: any): Promise<void> => {
-        return new Promise<void>((resolve, reject) => {
-            state.betQueue.push(async () => {
-                try {
-                    await processSpin(payload, ctx);
-                    resolve();
-                } catch (error) {
-                    reject(error);
-                }
-            });
-
-            processQueue();
-        });
+    const spin = (payload: RouletteSpinPayload, ctx: ContractContext): Promise<void> => {
+        // Serialize bets so bankroll checks see every in-flight payout.
+        const run = state.queue.then(() => processSpin(payload, ctx));
+        state.queue = run.catch(() => undefined);
+        return run;
     };
 
     return defineContract({
@@ -461,15 +398,14 @@ export function createRouletteContract(options: RouletteContractOptions = {}) {
                 await fairSupport.initialize(adapter);
             },
             destroy: () => {
-                state.betQueue = [];
-                state.processingQueue = false;
+                state.queue = Promise.resolve();
             }
         },
         actions: {
             spin: action(spin, {
                 schema: spinSchema,
                 trigger: 'transfer',
-                description: 'Place a single-zero roulette bet by transferring to the house account.'
+                description: `Place a provably-fair single-zero roulette bet by transferring to the house account. \`betType\`/\`value\`: straight 0-36 (pays 36x), color red/black, parity odd/even, range low/high (2x), dozen or column 1-3 (3x). \`seed\` (optional client seed) at most ${MAX_SEED_LENGTH} characters. Invalid bets are refunded.`
             }),
             ...fairSupport.actions
         }

@@ -3,17 +3,31 @@ import BigNumber from '../bignumber';
 import seedrandom from 'seedrandom';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
-import { createFairnessSupport, formatBlockchainAmount, formatFairnessMemo, parseBlockchainAmount, resolveContractAccount, blockTimeOf } from './helpers';
+import {
+    blockTimeOf,
+    createBetSettlement,
+    createFairnessSupport,
+    createHouseBankroll,
+    formatBlockchainAmount,
+    formatFairnessMemo,
+    refundableField,
+    resolveContractAccount,
+    verifyIncomingTransfer
+} from './helpers';
 import { resolveFairnessOption, type FairDrawProof, type FairnessManager, type FairnessOptions } from '../fairness/manager';
+import { operationRecordId, type ContractContext } from '../types/hive-stream';
 
 const DEFAULT_NAME = 'hivedice';
 const DEFAULT_TOKEN_SYMBOL = 'HIVE';
-const DEFAULT_HOUSE_EDGE = 0.05;
+const DEFAULT_HOUSE_EDGE = 1;
 const DEFAULT_MIN_BET = 1;
 const DEFAULT_MAX_BET = 10;
+const MIN_ROLL = 2;
+const MAX_ROLL = 96;
+const MAX_SEED_LENGTH = 64;
 
-// Legacy block-derived RNG. Biasable by the block producer; prefer the
-// `fairness` option (commit-reveal) for real-money games.
+// Legacy block-derived RNG, used only with `fairness: false`. Biasable by the
+// block producer and not verifiable by players.
 const rng = (previousBlockId: string, blockId: string, transactionId: string): number => {
     if (!previousBlockId || !blockId || !transactionId) {
         throw new Error('Invalid RNG parameters');
@@ -31,19 +45,27 @@ const rng = (previousBlockId: string, blockId: string, transactionId: string): n
 
 export interface DiceContractOptions {
     name?: string;
+    /** House account that receives bets and pays winners. Defaults to the streamer username. */
     account?: string;
+    /** Default accepted asset (HIVE). Winnings are always paid in the asset that was bet. */
     tokenSymbol?: string;
+    /** Accepted assets (HIVE and/or HBD). Defaults to `[tokenSymbol]`. */
     validCurrencies?: string[];
+    /** House edge in percent (default 1). A win pays the fair odds x (100 - houseEdge) / 100, rounded down. */
     houseEdge?: number;
     minBet?: number;
     maxBet?: number;
+    /** Send a 0.001 notice transfer on losses (default false; results are always recorded as events). */
+    notifyLosses?: boolean;
     /**
-     * Provably-fair commit-reveal draws (recommended). `true` uses defaults;
-     * pass options or a shared FairnessManager to customise. When omitted the
-     * legacy block-id RNG is used for backwards compatibility.
+     * Provably-fair commit-reveal draws, on by default. Pass options or a
+     * shared FairnessManager to customise, or `false` for the legacy block-id
+     * RNG (not verifiable, and a block producer can bias it).
      */
     fairness?: FairnessManager | FairnessOptions | boolean;
 }
+
+type RollPayload = { roll: unknown; seed?: string };
 
 export function createDiceContract(options: DiceContractOptions = {}) {
     const name = options.name || DEFAULT_NAME;
@@ -54,220 +76,159 @@ export function createDiceContract(options: DiceContractOptions = {}) {
     const minBet = options.minBet ?? DEFAULT_MIN_BET;
     const maxBet = options.maxBet ?? DEFAULT_MAX_BET;
     const validCurrencies = options.validCurrencies || [tokenSymbol];
-    const fairSupport = createFairnessSupport(name, () => account, resolveFairnessOption(options.fairness));
+    const notifyLosses = options.notifyLosses ?? false;
+    const fairSupport = createFairnessSupport(name, () => account, resolveFairnessOption(options.fairness ?? true));
     const fairness = fairSupport.fairness;
+
+    if (!Number.isFinite(houseEdge) || houseEdge < 0 || houseEdge >= 100) {
+        throw new Error('houseEdge must be a percentage from 0 to below 100 (e.g. 1 for 1%)');
+    }
+
+    if (houseEdge > 0 && houseEdge < 1) {
+        getLogger().warn(`[${name}] houseEdge is a percentage since 5.0: ${houseEdge} means ${houseEdge}%, not ${houseEdge * 100}%`);
+    }
 
     const state = {
         streamer: null as any,
         adapter: null as any,
-        balanceCache: null as { balance: BigNumber; timestamp: number } | null,
-        balanceCacheTimeout: 30000,
-        betQueue: [] as Array<() => Promise<void>>,
-        processingQueue: false,
-        pendingPayouts: new BigNumber(0)
+        queue: Promise.resolve() as Promise<unknown>
     };
 
+    const bankroll = createHouseBankroll({ streamer: () => state.streamer, account: () => account, logPrefix: '[DiceContract]' });
+
+    // Typed but permissive: out-of-range rolls and long seeds are refunded by
+    // the handler instead of failing validation and keeping the stake.
     const rollSchema = z.object({
-        roll: z.number().int().min(2).max(96),
-        seed: z.string().max(64).optional()
+        roll: refundableField(z.number().int().min(MIN_ROLL).max(MAX_ROLL)),
+        seed: z.string().optional()
     });
 
-    const getBalance = async (): Promise<BigNumber> => {
-        const now = Date.now();
+    const processRoll = async (payload: RollPayload, ctx: ContractContext): Promise<void> => {
+        const bet = await verifyIncomingTransfer(state.streamer, ctx, account);
+        const player = bet.from;
+        const settlement = createBetSettlement({
+            streamer: state.streamer,
+            adapter: state.adapter,
+            contract: name,
+            account,
+            ctx,
+            player,
+            amount: bet.amount,
+            asset: bet.asset,
+            logPrefix: '[DiceContract]',
+            onSent: (asset, amount) => bankroll.debit(asset, amount)
+        });
 
-        if (state.balanceCache && (now - state.balanceCache.timestamp) < state.balanceCacheTimeout) {
-            return state.balanceCache.balance;
-        }
-
-        try {
-            const accountInfo = await state.streamer['client'].database.getAccounts([account]);
-
-            if (accountInfo?.[0]) {
-                const amount = parseBlockchainAmount(accountInfo[0].balance as string).value;
-
-                state.balanceCache = {
-                    balance: amount,
-                    timestamp: now
-                };
-
-                return amount;
-            }
-        } catch (error) {
-            getLogger().error('[DiceContract] Error fetching balance:', error);
-            if (state.balanceCache) {
-                return state.balanceCache.balance;
-            }
-        }
-
-        return new BigNumber(0);
-    };
-
-    const processQueue = async (): Promise<void> => {
-        if (state.processingQueue || state.betQueue.length === 0) {
+        if (await settlement.alreadySettled()) {
             return;
         }
 
-        state.processingQueue = true;
-
-        while (state.betQueue.length > 0) {
-            const nextBet = state.betQueue.shift();
-            if (nextBet) {
-                try {
-                    await nextBet();
-                } catch (error) {
-                    getLogger().error('[DiceContract] Queue processing error:', error);
-                }
-            }
-        }
-
-        state.processingQueue = false;
-    };
-
-    const processRoll = async (payload: { roll: number; seed?: string }, ctx: any): Promise<void> => {
-        if (!ctx.transfer) {
-            throw new Error('Transfer context required for roll');
-        }
-
-        const sender = ctx.sender;
-        const amountRaw = ctx.transfer.rawAmount;
+        let reserved: BigNumber | null = null;
 
         try {
-            let parsedAmount;
-            try {
-                parsedAmount = parseBlockchainAmount(amountRaw);
-            } catch (error) {
-                throw new Error('Invalid amount format');
-            }
-            const amountParsed = parsedAmount.value;
-            if (amountParsed.isNegative()) {
-                throw new Error('Invalid amount value');
+            if (!validCurrencies.includes(bet.asset)) {
+                await settlement.refund('[Refund] Invalid bet currency.');
+                return;
             }
 
-            const amountCurrency = parsedAmount.asset;
-            const transaction = await state.streamer.getTransaction(ctx.block.number, ctx.transaction.id);
-            const verify = await state.streamer.verifyTransfer(transaction, sender, account, amountRaw);
+            if (bet.value.isLessThan(minBet) || bet.value.isGreaterThan(maxBet)) {
+                await settlement.refund('[Refund] You sent an invalid bet amount.');
+                return;
+            }
 
-            const balance = await getBalance();
-            const availableBalance = balance.minus(state.pendingPayouts);
+            const roll = payload.roll;
 
-            if (verify) {
-                if (availableBalance.isLessThan(new BigNumber(minBet * 2))) {
-                    await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] The server could not fulfill your bet.');
-                    return;
-                }
+            if (typeof roll !== 'number' || !Number.isInteger(roll) || roll < MIN_ROLL || roll > MAX_ROLL) {
+                await settlement.refund(`[Refund] Roll must be a whole number between ${MIN_ROLL} and ${MAX_ROLL}.`);
+                return;
+            }
 
-                if (!validCurrencies.includes(amountCurrency)) {
-                    await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] Invalid bet currency.');
-                    return;
-                }
+            if (payload.seed !== undefined && (typeof payload.seed !== 'string' || payload.seed.length > MAX_SEED_LENGTH)) {
+                await settlement.refund(`[Refund] Seed must be a string of at most ${MAX_SEED_LENGTH} characters.`);
+                return;
+            }
 
-                if (amountParsed.isLessThan(minBet) || amountParsed.isGreaterThan(maxBet)) {
-                    await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] You sent an invalid bet amount.');
-                    return;
-                }
+            const availableBalance = await bankroll.available(bet.asset);
 
-                const roll = payload.roll;
-                const multiplier = new BigNumber(1).minus(houseEdge).multipliedBy(100).dividedBy(roll);
-                const tokensWonBN = amountParsed.multipliedBy(multiplier);
-                const tokensWon = formatBlockchainAmount(tokensWonBN);
+            if (availableBalance.isLessThan(new BigNumber(minBet).multipliedBy(2))) {
+                await settlement.refund('[Refund] The server could not fulfill your bet.');
+                return;
+            }
 
-                if (tokensWonBN.isGreaterThan(availableBalance)) {
-                    await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] The server could not fulfill your bet.');
-                    return;
-                }
+            const multiplier = new BigNumber(100).minus(houseEdge).dividedBy(roll);
+            const payout = bet.value.multipliedBy(multiplier).decimalPlaces(3, BigNumber.ROUND_DOWN);
+            const tokensWon = formatBlockchainAmount(payout);
 
-                state.pendingPayouts = state.pendingPayouts.plus(tokensWonBN);
-                let payoutIncremented = true;
+            if (payout.isGreaterThan(availableBalance)) {
+                await settlement.refund('[Refund] The server could not fulfill your bet.');
+                return;
+            }
 
-                let random: number;
-                let proof: FairDrawProof | null = null;
+            bankroll.reserve(bet.asset, payout);
+            reserved = payout;
 
-                if (fairness) {
-                    const draw = await fairness.draw({ type: 'dice', sides: 100 }, {
-                        clientSeed: payload.seed || sender,
-                        blockId: ctx.block.id
-                    });
-                    random = draw.outcome;
-                    proof = draw.proof;
-                } else {
-                    random = rng(ctx.block.previousId, ctx.block.id, ctx.transaction.id);
-                }
+            let random: number;
+            let proof: FairDrawProof | null = null;
 
-                const fairMemo = formatFairnessMemo(proof);
-                const winningMemo = `You won ${tokensWon} ${tokenSymbol}. Roll: ${random}, Your guess: ${roll}${fairMemo}`;
-                const losingMemo = `You lost ${formatBlockchainAmount(amountParsed)} ${tokenSymbol}. Roll: ${random}, Your guess: ${roll}${fairMemo}`;
+            if (fairness) {
+                const draw = await fairness.draw({ type: 'dice', sides: 100 }, {
+                    clientSeed: payload.seed || player,
+                    blockId: ctx.block.id
+                });
+                random = draw.outcome;
+                proof = draw.proof;
+            } else {
+                random = rng(ctx.block.previousId, ctx.block.id, ctx.transaction.id);
+            }
 
-                if (proof && state.adapter?.addEvent) {
-                    await state.adapter.addEvent(blockTimeOf(ctx), name, 'roll', payload, {
-                        action: 'dice_result',
-                        data: {
-                            player: sender,
-                            guess: roll,
-                            roll: random,
-                            result: random < roll ? 'win' : 'lose',
-                            amount: formatBlockchainAmount(amountParsed),
-                            payout: random < roll ? tokensWon : '0',
-                            asset: amountCurrency,
-                            transactionId: ctx.transaction.id,
-                            fairness: proof,
-                            outcomeSpec: { type: 'dice', sides: 100 }
-                        }
-                    });
-                }
+            const won = random < roll;
+            const fairMemo = formatFairnessMemo(proof);
 
-                try {
-                    if (random < roll) {
-                        await state.streamer.transferHiveTokens(account, sender, tokensWon, tokenSymbol, winningMemo);
-                        // Invalidate balance cache after payout
-                        state.balanceCache = null;
-                    } else {
-                        await state.streamer.transferHiveTokens(account, sender, '0.001', tokenSymbol, losingMemo);
+            if (state.adapter?.addEvent) {
+                await state.adapter.addEvent(blockTimeOf(ctx), name, 'roll', payload, {
+                    action: 'dice_result',
+                    data: {
+                        player,
+                        guess: roll,
+                        roll: random,
+                        result: won ? 'win' : 'lose',
+                        amount: formatBlockchainAmount(bet.value),
+                        payout: won ? tokensWon : '0',
+                        asset: bet.asset,
+                        transactionId: operationRecordId(ctx.transaction.id, ctx.transaction.operationIndex),
+                        ...(proof ? { fairness: proof, outcomeSpec: { type: 'dice', sides: 100 } } : {})
                     }
-                } finally {
-                    if (payoutIncremented) {
-                        state.pendingPayouts = state.pendingPayouts.minus(tokensWonBN);
-                        payoutIncremented = false;
-                    }
-                }
+                });
+            }
+
+            if (won) {
+                await settlement.send(player, tokensWon, bet.asset, `You won ${tokensWon} ${bet.asset}. Roll: ${random}, Your guess: ${roll}${fairMemo}`);
+            } else if (notifyLosses) {
+                await settlement.send(player, '0.001', bet.asset, `You lost ${formatBlockchainAmount(bet.value)} ${bet.asset}. Roll: ${random}, Your guess: ${roll}${fairMemo}`);
             }
         } catch (e) {
             const error = e instanceof Error ? e : new Error(String(e));
             getLogger().error('[DiceContract] Roll processing error:', {
-                sender,
-                amount: amountRaw,
+                sender: player,
+                amount: bet.rawAmount,
                 payload,
                 message: error.message
             });
 
-            try {
-                if (amountRaw && typeof amountRaw === 'string' && amountRaw.includes(' ')) {
-                    const parsedAmount = parseBlockchainAmount(amountRaw);
-                    const amountBN = parsedAmount.value;
-                    if (!amountBN.isNaN() && amountBN.isFinite() && !amountBN.isNegative()) {
-                        await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] Processing error occurred.');
-                    }
-                }
-            } catch (refundError) {
-                getLogger().error('[DiceContract] Failed to refund after error:', refundError);
-            }
-
+            await settlement.refundAfterError(error);
             throw error;
+        } finally {
+            if (reserved) {
+                bankroll.release(bet.asset, reserved);
+            }
         }
     };
 
-    const roll = async (payload: { roll: number; seed?: string }, ctx: any): Promise<void> => {
-        return new Promise<void>((resolve, reject) => {
-            state.betQueue.push(async () => {
-                try {
-                    await processRoll(payload, ctx);
-                    resolve();
-                } catch (error) {
-                    reject(error);
-                }
-            });
-
-            processQueue();
-        });
+    const roll = (payload: RollPayload, ctx: ContractContext): Promise<void> => {
+        // Serialize bets so bankroll checks see every in-flight payout.
+        const run = state.queue.then(() => processRoll(payload, ctx));
+        state.queue = run.catch(() => undefined);
+        return run;
     };
 
     return defineContract({
@@ -281,15 +242,14 @@ export function createDiceContract(options: DiceContractOptions = {}) {
                 await fairSupport.initialize(adapter);
             },
             destroy: () => {
-                state.betQueue = [];
-                state.processingQueue = false;
+                state.queue = Promise.resolve();
             }
         },
         actions: {
             roll: action(roll, {
                 schema: rollSchema,
                 trigger: 'transfer',
-                description: 'Bet by transferring to the house account; wins when the 1-100 roll is below your guess.'
+                description: `Bet by transferring to the house account; you win when the provably-fair 1-100 roll is below your guess. \`roll\` must be a whole number from ${MIN_ROLL} to ${MAX_ROLL} (the win chance is roll - 1 percent) and \`seed\` (optional client seed) at most ${MAX_SEED_LENGTH} characters; anything else is refunded.`
             }),
             ...fairSupport.actions
         }

@@ -43,13 +43,13 @@ export interface BridgeContractOptions {
     /** Fee charged on both directions, in basis points (max 2000). */
     feeBps?: number;
     minAmount?: string;
-    /** Largest single deposit or withdrawal. */
+    /** Largest single deposit or withdrawal. Larger withdrawals are rejected when requested or attested. */
     maxPerTx?: string;
     /** Rolling 24h cap per asset and direction across all users. */
     dailyLimit?: string;
     /** Rolling 24h cap on deposits per Hive account and asset. */
     accountDailyLimit?: string;
-    /** Accounts allowed to pause/unpause and retry releases. Defaults to the custody account. */
+    /** Accounts allowed to pause/unpause and retry failed releases and refunds. Defaults to the custody account. */
     admins?: string[];
     /**
      * Publish the contract's decision on each deposit on-chain. When enabled,
@@ -154,6 +154,10 @@ export function createBridgeContract(options: BridgeContractOptions) {
         amount: amountSchema,
         asset: assetSchema,
         decision: z.enum(['release', 'reject']).optional()
+    });
+
+    const depositIdSchema = z.object({
+        depositId: externalIdSchema
     });
 
     const setPausedSchema = z.object({
@@ -267,8 +271,8 @@ export function createBridgeContract(options: BridgeContractOptions) {
     );
 
     const depositedInWindow = async (asset: string, since: Date, excludeId: string, sender?: string): Promise<BigNumber> => {
-        const params: any[] = [asset, since.toISOString(), 'refunded', 'refunding', excludeId];
-        let sql = 'SELECT amount FROM bridge_deposits WHERE asset = ? AND created_at >= ? AND status NOT IN (?, ?) AND deposit_id <> ?';
+        const params: any[] = [asset, since.toISOString(), 'refunded', 'refunding', 'refund_failed', excludeId];
+        let sql = 'SELECT amount FROM bridge_deposits WHERE asset = ? AND created_at >= ? AND status NOT IN (?, ?, ?) AND deposit_id <> ?';
 
         if (sender) {
             sql += ' AND sender = ?';
@@ -414,13 +418,29 @@ export function createBridgeContract(options: BridgeContractOptions) {
         }
     };
 
+    /**
+     * Refunds a deposit. The row moves to 'refunding' before the transfer and
+     * to 'refunded' after; a failed broadcast moves it to 'refund_failed',
+     * which an admin can retry with retryRefund after reconciling it.
+     */
     const refundDeposit = async (ctx: ContractContext, depositId: string, sender: string, amount: string, asset: string, reason: string) => {
         await state.adapter.query(
             'UPDATE bridge_deposits SET status = ?, status_reason = ?, updated_at = ? WHERE deposit_id = ?',
             ['refunding', reason, nowOf(ctx).toISOString(), depositId]
         );
 
-        await transfer(sender, amount, asset, `[Bridge refund] ${reason} (${depositId})`);
+        try {
+            await transfer(sender, amount, asset, `[Bridge refund] ${reason} (${depositId})`);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            // status_reason keeps the refund reason so a retry can reuse it.
+            await state.adapter.query(
+                'UPDATE bridge_deposits SET status = ?, updated_at = ? WHERE deposit_id = ?',
+                ['refund_failed', nowOf(ctx).toISOString(), depositId]
+            );
+            await audit(ctx, 'deposit', depositId, 'deposit_refund_failed', custodyAccount, { reason, amount, asset, to: sender, error: message });
+            throw error;
+        }
 
         await state.adapter.query(
             'UPDATE bridge_deposits SET status = ?, updated_at = ? WHERE deposit_id = ?',
@@ -611,6 +631,16 @@ export function createBridgeContract(options: BridgeContractOptions) {
         if (amount.decimalPlaces() > PRECISION) {
             throw new Error(`Amounts support at most ${PRECISION} decimal places`);
         }
+
+        // A withdrawal that can never fit the limits would sit in the queue
+        // forever (and block everything behind it), so refuse it up front.
+        if (maxPerTx && amount.gt(maxPerTx)) {
+            throw new Error(`Maximum withdrawal is ${format(maxPerTx)} ${asset}`);
+        }
+
+        if (dailyLimit && amount.gt(dailyLimit)) {
+            throw new Error(`Withdrawal exceeds the daily limit of ${format(dailyLimit)} ${asset}`);
+        }
     };
 
     const requestWithdrawal = async (payload: z.infer<typeof requestWithdrawalSchema>, ctx: ContractContext) => {
@@ -695,6 +725,37 @@ export function createBridgeContract(options: BridgeContractOptions) {
         return 'released';
     };
 
+    const replaceWithdrawalRequest = async (
+        ctx: ContractContext,
+        record: any,
+        data: { recipient: string; amount: BigNumber; asset: string; requestedBy: string }
+    ) => {
+        const { fee, net } = computeFee(data.amount);
+
+        await state.adapter.query(
+            `UPDATE bridge_withdrawals SET recipient = ?, asset = ?, amount = ?, fee = ?, net_amount = ?, requested_by = ?, updated_at = ?
+             WHERE withdrawal_id = ?`,
+            [
+                data.recipient, data.asset, format(data.amount), format(fee), format(net), data.requestedBy,
+                nowOf(ctx).toISOString(), record.withdrawal_id
+            ]
+        );
+
+        await audit(ctx, 'withdrawal', record.withdrawal_id, 'withdrawal_request_replaced', data.requestedBy, {
+            previous: {
+                recipient: record.recipient,
+                amount: record.amount,
+                asset: record.asset,
+                requestedBy: record.requested_by
+            },
+            recipient: data.recipient,
+            amount: format(data.amount),
+            fee: format(fee),
+            netAmount: format(net),
+            asset: data.asset
+        });
+    };
+
     const attestWithdrawal = async (payload: z.infer<typeof attestWithdrawalSchema>, ctx: ContractContext) => {
         const operator = requireOperator(ctx);
         const id = withdrawalId(payload.sourceChain, payload.sourceTxId);
@@ -721,18 +782,38 @@ export function createBridgeContract(options: BridgeContractOptions) {
             rows = await state.adapter.query('SELECT * FROM bridge_withdrawals WHERE withdrawal_id = ?', [id]);
         }
 
-        const record = rows[0];
+        let record = rows[0];
 
         if (record.status !== 'requested') {
             throw new Error(`Withdrawal ${id} is ${record.status}`);
         }
 
-        if (decision === 'release' && (
-            record.recipient !== payload.recipient ||
+        const mismatch = record.recipient !== payload.recipient ||
             record.asset !== payload.asset ||
-            !toBigNumber(record.amount).eq(amount)
-        )) {
-            throw new Error(`Attestation does not match withdrawal ${id}`);
+            !toBigNumber(record.amount).eq(amount);
+
+        if (decision === 'release' && mismatch) {
+            const attestations = await state.adapter.query(
+                'SELECT operator FROM bridge_attestations WHERE ref_type = ? AND ref_id = ?',
+                ['withdrawal', id]
+            );
+
+            if (attestations.length > 0) {
+                throw new Error(`Attestation does not match withdrawal ${id}`);
+            }
+
+            // Anyone can request a withdrawal, so an unattested request is only
+            // a claim: the first operator attestation states what the source
+            // chain actually shows and replaces it. This stops a front-running
+            // request from fixing someone else's recipient or amount.
+            await replaceWithdrawalRequest(ctx, record, {
+                recipient: payload.recipient,
+                amount,
+                asset: payload.asset,
+                requestedBy: operator
+            });
+            rows = await state.adapter.query('SELECT * FROM bridge_withdrawals WHERE withdrawal_id = ?', [id]);
+            record = rows[0];
         }
 
         const count = await recordAttestation('withdrawal', id, operator, decision, ctx);
@@ -777,6 +858,28 @@ export function createBridgeContract(options: BridgeContractOptions) {
         }
 
         await releaseWithdrawal(ctx, record, sender);
+    };
+
+    const retryRefund = async (payload: z.infer<typeof depositIdSchema>, ctx: ContractContext) => {
+        const sender = requireSender(ctx);
+
+        if (!admins.includes(sender)) {
+            throw new Error(`${sender} cannot retry refunds`);
+        }
+
+        const rows = await state.adapter.query('SELECT * FROM bridge_deposits WHERE deposit_id = ?', [payload.depositId]);
+
+        if (rows.length === 0) {
+            throw new Error(`Deposit ${payload.depositId} does not exist`);
+        }
+
+        const record = rows[0];
+
+        if (record.status !== 'refund_failed') {
+            throw new Error(`Deposit ${payload.depositId} is ${record.status}`);
+        }
+
+        await refundDeposit(ctx, record.deposit_id, record.sender, record.amount, record.asset, record.status_reason || 'Refund retried by admin');
     };
 
     const processQueue = async (_payload: Record<string, never>, ctx: ContractContext) => {
@@ -843,7 +946,7 @@ export function createBridgeContract(options: BridgeContractOptions) {
                 schema: requestWithdrawalSchema,
                 trigger: 'custom_json',
                 guards: { rateLimit: { max: 20, windowSeconds: 3600 } },
-                description: 'Register a withdrawal back to Hive for funds locked or burned on another chain.'
+                description: 'Register a withdrawal back to Hive for funds locked or burned on another chain. Until an operator attests it, the request is only a claim: the first operator attestation replaces a mismatched recipient, amount or asset.'
             }),
             attestWithdrawal: action(attestWithdrawal, {
                 schema: attestWithdrawalSchema,
@@ -858,6 +961,13 @@ export function createBridgeContract(options: BridgeContractOptions) {
                 requiresActiveKey: true,
                 guards: { allowedSenders: [...new Set([...admins, ...operators])] },
                 description: 'Retry a queued withdrawal, or (admins only) a failed release after manual reconciliation.'
+            }),
+            retryRefund: action(retryRefund, {
+                schema: depositIdSchema,
+                trigger: 'custom_json',
+                requiresActiveKey: true,
+                guards: { allowedSenders: admins },
+                description: 'Admin-only: re-send a deposit refund whose broadcast failed, after reconciling it.'
             }),
             processQueue: action(processQueue, {
                 schema: z.object({}),

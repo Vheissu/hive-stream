@@ -2,10 +2,20 @@ import BigNumber from '../bignumber';
 import seedrandom from 'seedrandom';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
-import { Utils } from '../utils';
-import { createFairnessSupport, initializeTables, resolveContractAccount } from './helpers';
+import { getLogger } from '../logger';
+import {
+    blockTimeOf,
+    createBetSettlement,
+    createFairnessSupport,
+    fetchAccountBalance,
+    initializeTables,
+    refundableField,
+    resolveContractAccount,
+    verifyIncomingTransfer
+} from './helpers';
 import { sha256Hex } from '../fairness/sha256';
 import { resolveFairnessOption, type FairDrawProof, type FairnessManager, type FairnessOptions } from '../fairness/manager';
+import { operationRecordId, type ContractContext } from '../types/hive-stream';
 
 const DEFAULT_NAME = 'hivelotto';
 const DEFAULT_TOKEN_SYMBOL = 'HIVE';
@@ -22,6 +32,8 @@ const DEFAULT_PERCENTAGE = 5;
 const COLLECTION_LOTTERY = 'lottery';
 const COLLECTION_SETTINGS = 'settings';
 
+// Legacy block-derived RNG, used only with `fairness: false`. Biasable by the
+// block producer and not verifiable by players.
 function rng(previousBlockId: string, blockId: string, transactionId: string, entropy: number, maximum = 100): number {
     const random = seedrandom(`${previousBlockId}${blockId}${transactionId}${entropy}`).double();
     return Math.floor(random * maximum) + 1;
@@ -29,9 +41,13 @@ function rng(previousBlockId: string, blockId: string, transactionId: string, en
 
 export interface LottoContractOptions {
     name?: string;
+    /** House account that sells tickets and pays winners. Defaults to the streamer username. */
     account?: string;
+    /** Receives the fee share of each pot. Defaults to the house account. */
     feeAccount?: string;
+    /** Asset tickets are priced and paid out in (HIVE or HBD). Tickets paid in any other asset are refunded. */
     tokenSymbol?: string;
+    /** Accepted ticket assets. Defaults to `[tokenSymbol]`; a ticket must also be paid in `tokenSymbol`. */
     validCurrencies?: string[];
     validDrawTypes?: string[];
     cost?: number;
@@ -41,10 +57,12 @@ export interface LottoContractOptions {
     dailyWinnersPick?: number;
     maxTicketsPerUser?: number;
     feePercentage?: number;
+    /** Send a 0.001 notice transfer to entrants who did not win a draw (default false; results are always recorded on the draw). */
+    notifyLosses?: boolean;
     /**
-     * Provably-fair winner selection (recommended). The client seed is the
+     * Provably-fair winner selection, on by default. The client seed is the
      * sha256 of every entry's transaction id, so all entrants contribute
-     * entropy. When omitted the legacy block-id RNG is used.
+     * entropy. Pass `false` for the legacy block-id RNG (not verifiable).
      */
     fairness?: FairnessManager | FairnessOptions | boolean;
 }
@@ -64,7 +82,8 @@ export function createLottoContract(options: LottoContractOptions = {}) {
     const dailyWinnersPick = options.dailyWinnersPick ?? DEFAULT_DAILY_WINNERS_PICK;
     const maxTicketsPerUser = options.maxTicketsPerUser ?? DEFAULT_MAX_TICKETS_PER_USER;
     const feePercentage = options.feePercentage ?? DEFAULT_PERCENTAGE;
-    const fairSupport = createFairnessSupport(name, () => account, resolveFairnessOption(options.fairness));
+    const notifyLosses = options.notifyLosses ?? false;
+    const fairSupport = createFairnessSupport(name, () => account, resolveFairnessOption(options.fairness ?? true));
     const fairness = fairSupport.fairness;
 
     const state = {
@@ -73,9 +92,10 @@ export function createLottoContract(options: LottoContractOptions = {}) {
     };
 
     /**
-     * Draw storage. Document stores (MongoDB) keep the original `lottery` /
-     * `settings` collections; SQL adapters get namespaced tables with the
-     * entries, winners and fairness proof stored as JSON text.
+     * Draw storage. Document stores (MongoDB) use the `lottery` / `settings`
+     * collections with every document tagged with the contract name, so two
+     * lotto instances never share draws; SQL adapters get namespaced tables
+     * with the entries, winners and fairness proof stored as JSON text.
      */
     const isSql = (): boolean => Boolean(state.adapter?.capabilities?.sql);
 
@@ -132,10 +152,11 @@ export function createLottoContract(options: LottoContractOptions = {}) {
                 return;
             }
 
-            const settings = await state.adapter.findOne(COLLECTION_SETTINGS, {});
+            const settings = await state.adapter.findOne(COLLECTION_SETTINGS, { contract: name });
 
             if (!settings) {
                 await state.adapter.insert(COLLECTION_SETTINGS, {
+                    contract: name,
                     contractInitiated: time,
                     enabled: true
                 });
@@ -152,7 +173,7 @@ export function createLottoContract(options: LottoContractOptions = {}) {
                 return rows?.[0] ? toDraw(rows[0]) : null;
             }
 
-            const draws = (await state.adapter.find(COLLECTION_LOTTERY, { status: 'active', type })) || [];
+            const draws = (await state.adapter.find(COLLECTION_LOTTERY, { contract: name, status: 'active', type })) || [];
             return draws[0] ?? null;
         },
 
@@ -165,7 +186,7 @@ export function createLottoContract(options: LottoContractOptions = {}) {
                 return;
             }
 
-            await state.adapter.insert(COLLECTION_LOTTERY, draw);
+            await state.adapter.insert(COLLECTION_LOTTERY, { contract: name, ...draw });
         },
 
         async save(draw: any, time: Date): Promise<void> {
@@ -188,26 +209,12 @@ export function createLottoContract(options: LottoContractOptions = {}) {
         }
     };
 
-    const blockTime = (ctx: any): Date => {
-        const time = ctx?.block?.time;
-        return time ? new Date(time) : new Date();
-    };
-
+    // Typed but permissive: an unknown draw type is refunded by the handler
+    // instead of failing validation and keeping the ticket money.
     const buySchema = z.object({
-        type: z.enum(['hourly', 'daily'])
+        type: refundableField(z.enum(['hourly', 'daily']))
     });
     type BuyPayload = z.infer<typeof buySchema>;
-
-    const getBalance = async (): Promise<number | null> => {
-        const accountInfo = await state.streamer['client'].database.getAccounts([account]);
-
-        if (accountInfo?.[0]) {
-            const balance = (accountInfo[0].balance as string).split(' ');
-            return parseFloat(balance[0]);
-        }
-
-        return null;
-    };
 
     const getPreviousUserTicketsForCurrentDrawType = async (type: string, accountName: string): Promise<number> => {
         const draw = await store.findActive(type);
@@ -220,75 +227,69 @@ export function createLottoContract(options: LottoContractOptions = {}) {
         return userEntries.length;
     };
 
-    const buy = async (payload: BuyPayload, ctx: any): Promise<void> => {
-        if (!ctx.transfer) {
-            throw new Error('Transfer context required for buy');
+    const buy = async (payload: BuyPayload, ctx: ContractContext): Promise<void> => {
+        const ticket = await verifyIncomingTransfer(state.streamer, ctx, account);
+        const sender = ticket.from;
+        const settlement = createBetSettlement({
+            streamer: state.streamer,
+            adapter: state.adapter,
+            contract: name,
+            account,
+            ctx,
+            player: sender,
+            amount: ticket.amount,
+            asset: ticket.asset,
+            logPrefix: '[LottoContract]'
+        });
+
+        if (await settlement.alreadySettled()) {
+            return;
         }
 
-        const sender = ctx.sender;
-        const amountRaw = ctx.transfer.rawAmount;
-
-        const amountTrim = amountRaw.split(' ');
-        const amountParsed = new BigNumber(amountTrim[0]);
-        if (amountParsed.isNaN() || !amountParsed.isFinite() || amountParsed.isNegative()) {
-            throw new Error('Invalid ticket amount');
+        if (!validCurrencies.includes(ticket.asset) || ticket.asset !== tokenSymbol) {
+            await settlement.refund('[Refund] You sent an invalid currency.');
+            return;
         }
-        const amountCurrency = amountTrim[1].trim();
 
-        const transaction = await state.streamer.getTransaction(ctx.block.number, ctx.transaction.id);
-        const verify = await state.streamer.verifyTransfer(transaction, sender, account, amountRaw);
+        const drawType = payload.type;
 
-        if (verify) {
-            if (!validCurrencies.includes(amountCurrency)) {
-                await state.streamer.transferHiveTokens(account, sender, amountTrim[0], amountTrim[1], '[Refund] You sent an invalid currency.');
-                return;
-            }
+        if (typeof drawType !== 'string' || !validDrawTypes.includes(drawType)) {
+            await settlement.refund('[Refund] You specified an invalid draw type');
+            return;
+        }
 
-            if (!validDrawTypes.includes(payload.type)) {
-                await state.streamer.transferHiveTokens(account, sender, amountTrim[0], amountTrim[1], '[Refund] You specified an invalid draw type');
-                return;
-            }
+        const previousEntriesCount = await getPreviousUserTicketsForCurrentDrawType(drawType, sender);
+        if (previousEntriesCount >= maxTicketsPerUser) {
+            await settlement.refund('[Refund] You have exceeded the allowed number of entries');
+            return;
+        }
 
-            const previousEntriesCount = await getPreviousUserTicketsForCurrentDrawType(payload.type, sender);
-            if (previousEntriesCount >= maxTicketsPerUser) {
-                await state.streamer.transferHiveTokens(account, sender, amountTrim[0], amountTrim[1], '[Refund] You have exceeded the allowed number of entries');
-                return;
-            }
+        if (ticket.value.isLessThan(cost)) {
+            await settlement.refund(`[Refund] A ticket costs ${cost} ${tokenSymbol}. You sent ${ticket.rawAmount}. Insufficient amount.`);
+            return;
+        }
 
-            if (amountParsed.isLessThan(cost)) {
-                await state.streamer.transferHiveTokens(account, sender, amountTrim[0], amountTrim[1], `[Refund] A ticket costs ${cost} ${tokenSymbol}. You sent ${amountRaw}. Insufficient amount.`);
-                return;
-            }
+        const time = blockTimeOf(ctx);
+        const entry = {
+            account: sender,
+            transactionId: operationRecordId(ctx.transaction.id, ctx.transaction.operationIndex),
+            date: time
+        };
+        const activeDraw = await store.findActive(drawType);
 
-            if (amountParsed.isGreaterThan(cost)) {
-                const difference = amountParsed.minus(cost).toFixed(3);
-                await state.streamer.transferHiveTokens(account, sender, difference, amountTrim[1], `[Refund] A ticket costs ${cost} ${tokenSymbol}. You sent ${amountRaw}. You were refunded ${difference} ${tokenSymbol}.`);
-                // Continue to create the entry — user paid enough for a ticket
-            }
+        // Record the entry before refunding any overpayment, so a failed
+        // refund can never cost the player their ticket.
+        if (activeDraw) {
+            activeDraw.entries.push(entry);
+            await store.save(activeDraw, time);
+        } else {
+            const drawId = `${name}:${drawType}:${ctx.transaction.id}:${ctx.transaction.operationIndex ?? 0}`;
+            await store.insert({ status: 'active', type: drawType, entries: [entry] }, drawId, time);
+        }
 
-            const activeDraw = await store.findActive(payload.type);
-
-            if (activeDraw) {
-                const draw = activeDraw;
-
-                draw.entries.push({
-                    account: sender,
-                    transactionId: ctx.transaction.id,
-                    date: blockTime(ctx)
-                });
-
-                await store.save(draw, blockTime(ctx));
-                return;
-            }
-
-            const entries = [{
-                account: sender,
-                transactionId: ctx.transaction.id,
-                date: blockTime(ctx)
-            }];
-
-            const drawId = `${name}:${payload.type}:${ctx.transaction.id}:${ctx.transaction.operationIndex ?? 0}`;
-            await store.insert({ status: 'active', type: payload.type, entries }, drawId, blockTime(ctx));
+        if (ticket.value.isGreaterThan(cost)) {
+            const difference = ticket.value.minus(cost).toFixed(3, BigNumber.ROUND_DOWN);
+            await settlement.send(sender, difference, ticket.asset, `[Refund] A ticket costs ${cost} ${tokenSymbol}. You sent ${ticket.rawAmount}. You were refunded ${difference} ${tokenSymbol}.`);
         }
     };
 
@@ -329,145 +330,96 @@ export function createLottoContract(options: LottoContractOptions = {}) {
         return { winners, proof: null };
     };
 
-    const drawHourlyLottery = async (_payload: any, ctx: any): Promise<void> => {
-        const draw = await store.findActive('hourly');
+    const runDraw = async (type: 'hourly' | 'daily', ctx: any): Promise<void> => {
+        const draw = await store.findActive(type);
 
-        if (draw) {
-            const total = draw.entries.length;
-
-            if (total < minEntriesHourly) {
-                const entrants = draw.entries.reduce((arr: string[], entrant: any) => {
-                    arr.push(entrant.account);
-                    return arr;
-                }, []);
-
-                // Mark draw as completed BEFORE refunding to prevent re-draws
-                await store.save({ ...draw, status: 'completed' }, blockTime(ctx));
-
-                await state.streamer.transferHiveTokensMultiple(account, entrants, new BigNumber(cost).toFixed(3), tokenSymbol, '[Refund] The hourly lotto draw did not have enough contestants.');
-                return;
-            }
-
-            const balance = await getBalance();
-            const winningsAmount = new BigNumber(total).multipliedBy(cost);
-            const percentageFee = winningsAmount.dividedBy(100).multipliedBy(feePercentage);
-            const payoutTotal = winningsAmount.minus(percentageFee);
-
-            // Check full outgoing amount (winnings + fee) against balance
-            if (balance !== null && winningsAmount.toNumber() > balance) {
-                throw new Error('Balance is less than amount to pay out');
-            }
-
-            // Mark draw as completed BEFORE payouts to prevent re-draws
-            await store.save({ ...draw, status: 'completed' }, blockTime(ctx));
-
-            if (account !== feeAccount) {
-                await state.streamer.transferHiveTokens(account, feeAccount, percentageFee.toFixed(3), tokenSymbol, 'percentage fee');
-            }
-
-            const { winners, proof } = await getWinners(hourlyWinnersPick, draw.entries, ctx);
-            // Split the pot across the winners actually drawn, rounding down so
-            // the payouts can never exceed the pot.
-            const amountPerWinner = payoutTotal.dividedBy(Math.max(1, winners.length)).toFixed(3, BigNumber.ROUND_DOWN);
-
-            if (proof) {
-                await store.save({
-                    ...draw,
-                    status: 'completed',
-                    winners: winners.map((winner: any) => winner.account),
-                    fairness: proof
-                }, blockTime(ctx));
-            }
-
-            if (winners) {
-                const winnerStrings = winners.reduce((arr: string[], winner: any) => {
-                    arr.push(winner.account);
-                    return arr;
-                }, []);
-
-                await state.streamer.transferHiveTokensMultiple(account, winnerStrings, amountPerWinner, tokenSymbol, `Congratulations you won the hourly lottery. You won ${amountPerWinner} ${tokenSymbol}. Winners: ${winnerStrings.join(', ')}`);
-
-                const losers = draw.entries
-                    .filter((entry: any) => !winnerStrings.includes(entry.account))
-                    .reduce((unique: string[], value: any) => {
-                        return unique.includes(value.account) ? unique : [...unique, value.account];
-                    }, []);
-
-                if (losers.length) {
-                    await state.streamer.transferHiveTokensMultiple(account, losers, '0.001', tokenSymbol, `Sorry, you didn't win the hourly draw. Winners: ${winnerStrings.join(', ')}`);
-                }
-            }
-
+        if (!draw) {
             return;
         }
 
-        return;
+        const minEntries = type === 'hourly' ? minEntriesHourly : minEntriesDaily;
+        const winnersPick = type === 'hourly' ? hourlyWinnersPick : dailyWinnersPick;
+        const time = blockTimeOf(ctx);
+        const total = draw.entries.length;
+
+        if (total < minEntries) {
+            const entrants = draw.entries.map((entrant: any) => entrant.account);
+
+            // Mark draw as completed BEFORE refunding to prevent re-draws
+            await store.save({ ...draw, status: 'completed' }, time);
+
+            await state.streamer.transferHiveTokensMultiple(account, entrants, new BigNumber(cost).toFixed(3), tokenSymbol, `[Refund] The ${type} lotto draw did not have enough contestants.`);
+            return;
+        }
+
+        const winningsAmount = new BigNumber(total).multipliedBy(cost);
+        const percentageFee = winningsAmount.dividedBy(100).multipliedBy(feePercentage);
+        const payoutTotal = winningsAmount.minus(percentageFee);
+        const balance = await fetchAccountBalance(state.streamer, account, tokenSymbol);
+
+        // Check full outgoing amount (winnings + fee) against balance
+        if (winningsAmount.isGreaterThan(balance)) {
+            throw new Error('Balance is less than amount to pay out');
+        }
+
+        // Mark draw as completed BEFORE payouts to prevent re-draws
+        await store.save({ ...draw, status: 'completed' }, time);
+
+        if (account !== feeAccount) {
+            await state.streamer.transferHiveTokens(account, feeAccount, percentageFee.toFixed(3, BigNumber.ROUND_DOWN), tokenSymbol, 'percentage fee');
+        }
+
+        const { winners, proof } = await getWinners(winnersPick, draw.entries, ctx);
+        // Split the pot across the winners actually drawn, rounding down so
+        // the payouts can never exceed the pot.
+        const amountPerWinner = payoutTotal.dividedBy(Math.max(1, winners.length)).toFixed(3, BigNumber.ROUND_DOWN);
+        const winnerStrings: string[] = winners.map((winner: any) => winner.account);
+
+        await store.save({
+            ...draw,
+            status: 'completed',
+            winners: winnerStrings,
+            ...(proof ? { fairness: proof } : {})
+        }, time);
+
+        if (!winnerStrings.length) {
+            return;
+        }
+
+        const winMemo = type === 'hourly'
+            ? `Congratulations you won the hourly lottery. You won ${amountPerWinner} ${tokenSymbol}. Winners: ${winnerStrings.join(', ')}`
+            : `Congratulations you won the daily lottery. You won ${amountPerWinner} ${tokenSymbol}`;
+
+        await state.streamer.transferHiveTokensMultiple(account, winnerStrings, amountPerWinner, tokenSymbol, winMemo);
+
+        if (!notifyLosses) {
+            return;
+        }
+
+        const losers = [...new Set<string>(draw.entries.map((entry: any) => entry.account))]
+            .filter((entrant) => !winnerStrings.includes(entrant));
+
+        if (losers.length) {
+            await state.streamer.transferHiveTokensMultiple(account, losers, '0.001', tokenSymbol, `Sorry, you didn't win the ${type} draw. Winners: ${winnerStrings.join(', ')}`);
+        }
+    };
+
+    const drawHourlyLottery = async (_payload: any, ctx: any): Promise<void> => {
+        try {
+            await runDraw('hourly', ctx);
+        } catch (error) {
+            getLogger().error('[LottoContract] Hourly draw failed:', error);
+            throw error;
+        }
     };
 
     const drawDailyLottery = async (_payload: any, ctx: any): Promise<void> => {
-        const draw = await store.findActive('daily');
-
-        if (draw) {
-            const total = draw.entries.length;
-
-            if (total < minEntriesDaily) {
-                // Mark draw as completed BEFORE refunding to prevent re-draws
-                await store.save({ ...draw, status: 'completed' }, blockTime(ctx));
-
-                // Use transferHiveTokensMultiple for error isolation (one failure doesn't kill others)
-                const entrants = draw.entries.reduce((arr: string[], entrant: any) => {
-                    arr.push(entrant.account);
-                    return arr;
-                }, []);
-                await state.streamer.transferHiveTokensMultiple(account, entrants, new BigNumber(cost).toFixed(3), tokenSymbol, '[Refund] The daily lotto draw did not have enough contestants.');
-
-                return;
-            }
-
-            const balance = await getBalance();
-            const winningsAmount = new BigNumber(total).multipliedBy(cost);
-            const percentageFee = winningsAmount.dividedBy(100).multipliedBy(feePercentage);
-            const payoutTotal = winningsAmount.minus(percentageFee);
-
-            // Check full outgoing amount (winnings + fee) against balance
-            if (balance !== null && winningsAmount.toNumber() > balance) {
-                throw new Error('Balance is less than amount to pay out');
-            }
-
-            // Mark draw as completed BEFORE payouts to prevent re-draws
-            await store.save({ ...draw, status: 'completed' }, blockTime(ctx));
-
-            if (account !== feeAccount) {
-                await state.streamer.transferHiveTokens(account, feeAccount, percentageFee.toFixed(3), tokenSymbol, 'percentage fee');
-            }
-
-            const { winners, proof } = await getWinners(dailyWinnersPick, draw.entries, ctx);
-            // Split the pot across the winners actually drawn, rounding down so
-            // the payouts can never exceed the pot.
-            const amountPerWinner = payoutTotal.dividedBy(Math.max(1, winners.length)).toFixed(3, BigNumber.ROUND_DOWN);
-
-            if (proof) {
-                await store.save({
-                    ...draw,
-                    status: 'completed',
-                    winners: winners.map((winner: any) => winner.account),
-                    fairness: proof
-                }, blockTime(ctx));
-            }
-
-            if (winners) {
-                const winnerStrings = winners.reduce((arr: string[], winner: any) => {
-                    arr.push(winner.account);
-                    return arr;
-                }, []);
-
-                await state.streamer.transferHiveTokensMultiple(account, winnerStrings, amountPerWinner, tokenSymbol, `Congratulations you won the daily lottery. You won ${amountPerWinner} ${tokenSymbol}`);
-            }
-
-            return;
+        try {
+            await runDraw('daily', ctx);
+        } catch (error) {
+            getLogger().error('[LottoContract] Daily draw failed:', error);
+            throw error;
         }
-
-        return;
     };
 
     return defineContract({
@@ -487,7 +439,7 @@ export function createLottoContract(options: LottoContractOptions = {}) {
             buy: action(buy, {
                 schema: buySchema,
                 trigger: 'transfer',
-                description: 'Buy a ticket for the hourly or daily draw by transferring the ticket cost.'
+                description: 'Buy a ticket for the hourly or daily draw by transferring the ticket cost in the lotto\'s asset. `type` must be "hourly" or "daily" (or another configured draw type); invalid tickets are refunded and overpayments are refunded down to the ticket cost.'
             }),
             drawHourlyLottery: action(drawHourlyLottery, {
                 trigger: 'time'

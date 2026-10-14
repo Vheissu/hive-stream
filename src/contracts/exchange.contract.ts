@@ -2,6 +2,7 @@ import BigNumber from '../bignumber';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
+import { getLogger } from '../logger';
 import { ensureSqlAdapter, resolveContractAccount, blockTimeOf } from './helpers';
 
 const DEFAULT_NAME = 'exchange';
@@ -271,6 +272,10 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
             throw new Error('Transfer context required for deposits');
         }
 
+        if (ctx.transfer.to !== account) {
+            throw new Error(`Deposits must be sent to ${account}`);
+        }
+
         const amount = new BigNumber(ctx.transfer.amount);
         if (amount.isNaN() || amount.lte(0)) {
             throw new Error('Invalid deposit amount');
@@ -336,15 +341,17 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
             return insertedRows[0].id;
         });
 
-        try {
-            const to = payload.to || ctx.sender;
-            await state.streamer.transferHiveTokens(account, to, payload.amount, payload.asset, 'Exchange withdrawal');
-            await state.adapter.query(
-                'UPDATE exchange_withdrawals SET status = ? WHERE id = ?',
-                ['completed', withdrawalId]
-            );
-        } catch (error) {
-            // Re-read current balance inside rollback to avoid stale state
+        const to = payload.to || ctx.sender;
+        const setWithdrawalStatus = (status: string) => state.adapter.query(
+            'UPDATE exchange_withdrawals SET status = ? WHERE id = ?',
+            [status, withdrawalId]
+        );
+
+        // Credit the balance back only when the transfer was never sent. Once
+        // the broadcast has been attempted it may have landed (a timeout can
+        // still be included in a block), so the balance stays debited and the
+        // withdrawal is left for an operator to reconcile.
+        if (!state.streamer || typeof state.streamer.transferHiveTokens !== 'function') {
             await withTransaction(async (adapter) => {
                 const currentBalance = await getBalanceRow(ctx.sender, payload.asset, adapter);
                 await setBalanceRow(ctx.sender, payload.asset, currentBalance.available.plus(amount), currentBalance.locked, adapter);
@@ -353,6 +360,27 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
                     ['failed', withdrawalId]
                 );
             });
+            throw new Error('Exchange withdrawals need a streamer to broadcast the transfer');
+        }
+
+        try {
+            await state.streamer.transferHiveTokens(account, to, payload.amount, payload.asset, 'Exchange withdrawal');
+        } catch (error) {
+            getLogger().error(`[ExchangeContract] Withdrawal ${withdrawalId} broadcast failed; ${payload.amount} ${payload.asset} stays debited from ${ctx.sender} until reconciled:`, error);
+
+            try {
+                await setWithdrawalStatus('unconfirmed');
+            } catch (statusError) {
+                getLogger().error(`[ExchangeContract] Could not mark withdrawal ${withdrawalId} as unconfirmed:`, statusError);
+            }
+
+            throw error;
+        }
+
+        try {
+            await setWithdrawalStatus('completed');
+        } catch (error) {
+            getLogger().error(`[ExchangeContract] Withdrawal ${withdrawalId} was sent but could not be marked completed:`, error);
             throw error;
         }
     };
@@ -729,13 +757,19 @@ export function createExchangeContract(options: ExchangeContractOptions = {}) {
         },
         actions: {
             createPair: action(createPair, { schema: createPairSchema, trigger: 'custom_json' }),
-            deposit: action(deposit, { schema: depositSchema, trigger: 'transfer' }),
+            deposit: action(deposit, {
+                schema: depositSchema,
+                trigger: 'transfer',
+                // Deposits go to the exchange account, which is the streamer
+                // username unless options.account says otherwise.
+                ...(options.account ? { guards: { allowedRecipients: [options.account] } } : {})
+            }),
             withdraw: action(withdraw, { schema: withdrawSchema, trigger: 'custom_json', requiresActiveKey: true }),
-            placeOrder: action(placeOrder, { schema: placeOrderSchema, trigger: 'custom_json' }),
-            cancelOrder: action(cancelOrder, { schema: cancelOrderSchema, trigger: 'custom_json' }),
+            placeOrder: action(placeOrder, { schema: placeOrderSchema, trigger: 'custom_json', requiresActiveKey: true }),
+            cancelOrder: action(cancelOrder, { schema: cancelOrderSchema, trigger: 'custom_json', requiresActiveKey: true }),
             matchOrders: action(matchOrders, { schema: matchOrdersSchema, trigger: 'time' }),
             snapshotOrderBook: action(snapshotOrderBook, { schema: snapshotSchema, trigger: ['time', 'custom_json'] }),
-            transfer: action(internalTransfer, { schema: transferSchema, trigger: 'custom_json' })
+            transfer: action(internalTransfer, { schema: transferSchema, trigger: 'custom_json', requiresActiveKey: true })
         }
     });
 }

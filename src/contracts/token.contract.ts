@@ -114,6 +114,15 @@ export function createTokenContract(options: TokenContractOptions = {}) {
         `);
     };
 
+    const assertPrecision = (amount: BigNumber, tokenData: { symbol: string; precision: number | string }) => {
+        const precision = Number(tokenData.precision);
+        const decimals = amount.decimalPlaces() ?? 0;
+
+        if (decimals > precision) {
+            throw new Error(`${tokenData.symbol} supports at most ${precision} decimal places`);
+        }
+    };
+
     const withTransaction = async <T>(work: (adapter: any) => Promise<T>): Promise<T> => {
         if (typeof state.adapter?.runInTransaction === 'function') {
             return state.adapter.runInTransaction(work);
@@ -200,6 +209,8 @@ export function createTokenContract(options: TokenContractOptions = {}) {
                     throw new Error('Only the token creator can issue new tokens');
                 }
 
+                assertPrecision(amountBN, tokenData);
+
                 const currentSupplyBN = new BigNumber(tokenData.current_supply);
                 const maxSupplyBN = new BigNumber(tokenData.max_supply);
                 const newSupplyBN = currentSupplyBN.plus(amountBN);
@@ -272,6 +283,8 @@ export function createTokenContract(options: TokenContractOptions = {}) {
                 if (!token || token.length === 0) {
                     throw new Error(`Token ${symbol} does not exist`);
                 }
+
+                assertPrecision(amountBN, token[0]);
 
                 const senderBalance = await adapter.query(
                     'SELECT balance FROM token_balances WHERE account = ? AND symbol = ?',
@@ -408,11 +421,13 @@ export function createTokenContract(options: TokenContractOptions = {}) {
             }),
             issueTokens: action(issueTokens, {
                 schema: issueTokensSchema,
-                trigger: 'custom_json'
+                trigger: 'custom_json',
+                requiresActiveKey: true
             }),
             transferTokens: action(transferTokens, {
                 schema: transferTokensSchema,
-                trigger: 'custom_json'
+                trigger: 'custom_json',
+                requiresActiveKey: true
             }),
             getBalance: action(getBalance, {
                 schema: getBalanceSchema,

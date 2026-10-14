@@ -7,6 +7,8 @@ import { parseBlockchainAmount } from './helpers';
 import { blockTimeOf, ensureSqlAdapter, resolveContractAccount } from './helpers';
 
 const CONTRACT_NAME = 'hivenft';
+/** HIVE and HBD, the only listing currencies, have three decimal places. */
+const PAYOUT_PRECISION = 3;
 
 interface NFTCollection {
     symbol: string;
@@ -850,18 +852,21 @@ export class NFTContract {
                 [collectionSymbol]
             );
 
+            // No royalty when the creator sells their own NFT: it would only
+            // be withheld from them. Royalties are rounded down so the payouts
+            // never add up to more than the buyer paid.
             let royaltyAmount = new BigNumber(0);
-            let sellerAmount = paidAmount;
             let royaltyRecipient: string | null = null;
 
-            if (collection && collection.length > 0 && collection[0].royalty > 0) {
-                royaltyAmount = paidAmount.multipliedBy(collection[0].royalty);
-                sellerAmount = paidAmount.minus(royaltyAmount);
+            if (collection && collection.length > 0 && collection[0].royalty > 0 && collection[0].creator !== listingData.seller) {
+                royaltyAmount = paidAmount.multipliedBy(collection[0].royalty).decimalPlaces(PAYOUT_PRECISION, BigNumber.ROUND_DOWN);
 
-                if (royaltyAmount.gt(0) && collection[0].creator !== listingData.seller) {
+                if (royaltyAmount.gt(0)) {
                     royaltyRecipient = collection[0].creator;
                 }
             }
+
+            const sellerAmount = paidAmount.minus(royaltyAmount).decimalPlaces(PAYOUT_PRECISION, BigNumber.ROUND_DOWN);
 
             await this.withTransaction(async (adapter) => {
                 await adapter.query(
@@ -888,8 +893,8 @@ export class NFTContract {
                         buyer: sender,
                         price: amount,
                         currency: asset,
-                        royaltyAmount: royaltyAmount.toFixed(3),
-                        sellerAmount: sellerAmount.toFixed(3)
+                        royaltyAmount: royaltyAmount.toFixed(PAYOUT_PRECISION),
+                        sellerAmount: sellerAmount.toFixed(PAYOUT_PRECISION)
                     }
                 });
             });
@@ -899,7 +904,7 @@ export class NFTContract {
             await this._instance.transferHiveTokens(
                 contractAccount,
                 listingData.seller,
-                sellerAmount.toFixed(3),
+                sellerAmount.toFixed(PAYOUT_PRECISION),
                 asset,
                 `NFT sale: ${tokenId} from ${collectionSymbol}`
             );
@@ -909,7 +914,7 @@ export class NFTContract {
                 await this._instance.transferHiveTokens(
                     contractAccount,
                     royaltyRecipient,
-                    royaltyAmount.toFixed(3),
+                    royaltyAmount.toFixed(PAYOUT_PRECISION),
                     asset,
                     `NFT royalty: ${tokenId} from ${collectionSymbol}`
                 );
@@ -970,7 +975,7 @@ export class NFTContract {
             let royaltyRecipient: string | null = null;
 
             if (collection && collection.length > 0 && collection[0].royalty > 0 && collection[0].creator !== listingData.seller) {
-                royaltyDue = paidAmount.multipliedBy(collection[0].royalty);
+                royaltyDue = paidAmount.multipliedBy(collection[0].royalty).decimalPlaces(PAYOUT_PRECISION, BigNumber.ROUND_DOWN);
                 royaltyRecipient = collection[0].creator;
             }
 
@@ -1001,7 +1006,7 @@ export class NFTContract {
                         currency: asset,
                         // Royalties cannot be enforced on a direct peer-to-peer payment;
                         // they are recorded here so sellers/marketplaces can honour them.
-                        royaltyDue: royaltyDue.toFixed(3),
+                        royaltyDue: royaltyDue.toFixed(PAYOUT_PRECISION),
                         royaltyRecipient
                     }
                 });
@@ -1173,26 +1178,47 @@ export function createNFTContract(options: NFTContractOptions = {}) {
                 trigger: 'custom_json'
             }),
             transferNFT: action((payload, ctx) => callWithContext(payload, ctx, (instance as any).transferNFT.bind(instance), { sender: ctx.sender }), {
-                trigger: 'custom_json'
+                trigger: 'custom_json',
+                requiresActiveKey: true
             }),
             burnNFT: action((payload, ctx) => callWithContext(payload, ctx, (instance as any).burnNFT.bind(instance), { sender: ctx.sender }), {
-                trigger: 'custom_json'
+                trigger: 'custom_json',
+                requiresActiveKey: true
             }),
             listNFT: action((payload, ctx) => callWithContext(payload, ctx, (instance as any).listNFT.bind(instance), { sender: ctx.sender }), {
-                trigger: 'custom_json'
+                trigger: 'custom_json',
+                requiresActiveKey: true
             }),
             unlistNFT: action((payload, ctx) => callWithContext(payload, ctx, (instance as any).unlistNFT.bind(instance), { sender: ctx.sender }), {
                 trigger: 'custom_json'
             }),
             buyNFT: action(async (payload, ctx) => {
-                const amountRaw = ctx.transfer?.rawAmount || '';
-                const parsedAmount = parseBlockchainAmount(amountRaw);
+                const transfer = ctx.transfer;
+                if (!transfer) {
+                    throw new Error('Transfer context required');
+                }
 
-                // Verify the transfer actually happened on-chain
-                const transaction = await Utils.getTransaction(instance._instance['client'], ctx.block.number, ctx.transaction.id);
-                const verified = await Utils.verifyTransfer(transaction, ctx.sender, instance.account, amountRaw);
-                if (!verified) {
+                // The payment is the operation that triggered this action.
+                if (transfer.to !== instance.account) {
+                    throw new Error(`Payment must be sent to the marketplace account ${instance.account}`);
+                }
+
+                if (transfer.from !== ctx.sender) {
                     throw new Error('Transfer verification failed');
+                }
+
+                const parsedAmount = parseBlockchainAmount(transfer.rawAmount || '');
+
+                // Secondary check: re-read that same operation from the chain.
+                const client = instance._instance?.['client'];
+                if (client) {
+                    const transaction = await Utils.getTransaction(client, ctx.block.number, ctx.transaction.id);
+                    const operation = transaction?.operations?.[ctx.transaction.operationIndex ?? 0] as any;
+                    const data = operation?.[1];
+
+                    if (!operation || operation[0] !== 'transfer' || data?.from !== ctx.sender || data?.to !== instance.account || data?.amount !== transfer.rawAmount) {
+                        throw new Error('Transfer verification failed');
+                    }
                 }
 
                 return callWithContext(payload, ctx, (instance as any).buyNFT.bind(instance), {
@@ -1201,7 +1227,10 @@ export function createNFTContract(options: NFTContractOptions = {}) {
                     asset: parsedAmount.asset
                 });
             }, {
-                trigger: 'transfer'
+                trigger: 'transfer',
+                // Paid to the marketplace account: the streamer username unless
+                // options.account names another account.
+                ...(options.account ? { guards: { allowedRecipients: [options.account] } } : {})
             }),
             buyNFTDirect: action((payload, ctx) => {
                 const parsedAmount = parseBlockchainAmount(ctx.transfer?.rawAmount || '');
@@ -1213,7 +1242,10 @@ export function createNFTContract(options: NFTContractOptions = {}) {
                     asset: parsedAmount.asset
                 });
             }, {
-                trigger: 'transfer'
+                trigger: 'transfer',
+                // Non-custodial: the payment goes straight to the seller, so any
+                // recipient is accepted here and the handler checks it is the seller.
+                guards: { allowedRecipients: ['*'] }
             }),
             getTokenInfo: action((payload, ctx) => callWithContext(payload, ctx, (instance as any).getTokenInfo.bind(instance), { sender: ctx.sender }), {
                 trigger: 'custom_json'

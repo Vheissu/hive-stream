@@ -82,6 +82,17 @@ export function createPredictionMarketContract(options: PredictionMarketContract
         ]);
     };
 
+    // Stakes are TEXT, so they're summed with BigNumber rather than SQL SUM
+    // (which fails on PostgreSQL and goes through floats on SQLite).
+    const sumStakes = async (marketId: string, option: number) => {
+        const rows = await state.adapter.query(
+            'SELECT stake_amount FROM prediction_positions WHERE market_id = ? AND option_index = ?',
+            [marketId, option]
+        );
+
+        return rows.reduce((sum: any, row: any) => sum.plus(row.stake_amount), toBigNumber(0));
+    };
+
     const createMarket = async (payload: z.infer<typeof createMarketSchema>, ctx: any) => {
         const creator = requireSender(ctx);
         const existing = await state.adapter.query('SELECT market_id FROM prediction_markets WHERE market_id = ?', [payload.marketId]);
@@ -196,20 +207,59 @@ export function createPredictionMarketContract(options: PredictionMarketContract
             }
         }
 
+        if (market.status !== 'open') {
+            throw new Error('Market has already been resolved');
+        }
+
         if ((parseDateValue(market.closes_at) || blockTimeOf(ctx)) > blockTimeOf(ctx)) {
             throw new Error('Market cannot be resolved before close');
         }
 
+        // Nobody backed the winning option: void the market so every staker
+        // can claim their stake back instead of the pool being stranded.
+        const winningStake = await sumStakes(payload.marketId, payload.winningOption);
+        const status = winningStake.gt(0) ? 'resolved' : 'void';
+
         await state.adapter.query(
             'UPDATE prediction_markets SET winning_option = ?, status = ?, resolved_at = ? WHERE market_id = ?',
-            [payload.winningOption, 'resolved', blockTimeOf(ctx), payload.marketId]
+            [payload.winningOption, status, blockTimeOf(ctx), payload.marketId]
         );
 
         await emitContractEvent(state.adapter, name, 'resolveMarket', payload, {
-            action: 'prediction_market_resolved',
+            action: status === 'void' ? 'prediction_market_voided' : 'prediction_market_resolved',
             data: {
                 marketId: payload.marketId,
-                winningOption: payload.winningOption
+                winningOption: payload.winningOption,
+                status,
+                totalPool: market.total_pool,
+                winningStake: winningStake.toFixed()
+            }
+        }, blockTimeOf(ctx));
+    };
+
+    const claimRefund = async (market: any, account: string, payload: z.infer<typeof claimSchema>, ctx: any) => {
+        const positions = await state.adapter.query(
+            'SELECT * FROM prediction_positions WHERE market_id = ? AND account = ? AND claimed = ?',
+            [payload.marketId, account, 0]
+        );
+        if (positions.length === 0) {
+            throw new Error('No refundable stake found for this account');
+        }
+
+        const refund = positions.reduce((sum: any, position: any) => sum.plus(position.stake_amount), toBigNumber(0));
+
+        await state.adapter.query(
+            'UPDATE prediction_positions SET claimed = ?, updated_at = ? WHERE market_id = ? AND account = ?',
+            [1, blockTimeOf(ctx), payload.marketId, account]
+        );
+
+        await emitContractEvent(state.adapter, name, 'claimWinnings', payload, {
+            action: 'prediction_refund_claim_requested',
+            data: {
+                marketId: payload.marketId,
+                account,
+                payout: refund.toFixed(),
+                asset: market.asset
             }
         }, blockTimeOf(ctx));
     };
@@ -222,6 +272,10 @@ export function createPredictionMarketContract(options: PredictionMarketContract
         }
 
         const market = marketRows[0];
+        if (market.status === 'void') {
+            return claimRefund(market, account, payload, ctx);
+        }
+
         if (market.status !== 'resolved') {
             throw new Error('Market is not resolved');
         }
@@ -239,11 +293,7 @@ export function createPredictionMarketContract(options: PredictionMarketContract
             throw new Error('Winnings already claimed');
         }
 
-        const totalWinningStakeRows = await state.adapter.query(
-            'SELECT COALESCE(SUM(stake_amount), 0) AS total FROM prediction_positions WHERE market_id = ? AND option_index = ?',
-            [payload.marketId, market.winning_option]
-        );
-        const totalWinningStake = toBigNumber(totalWinningStakeRows[0]?.total || '0');
+        const totalWinningStake = await sumStakes(payload.marketId, Number(market.winning_option));
         if (totalWinningStake.lte(0)) {
             throw new Error('No winning stakes exist for this market');
         }
@@ -277,8 +327,16 @@ export function createPredictionMarketContract(options: PredictionMarketContract
         actions: {
             createMarket: action(createMarket, { schema: createMarketSchema, trigger: 'custom_json' }),
             buyPosition: action(buyPosition, { schema: buyPositionSchema, trigger: ['transfer', 'recurrent_transfer'] }),
-            resolveMarket: action(resolveMarket, { schema: resolveSchema, trigger: ['custom_json', 'time'] }),
-            claimWinnings: action(claimWinnings, { schema: claimSchema, trigger: 'custom_json' })
+            resolveMarket: action(resolveMarket, {
+                schema: resolveSchema,
+                trigger: ['custom_json', 'time'],
+                description: 'Resolve an open market after it closes (creator only). A market whose winning option has no stakes is voided so stakers can reclaim them.'
+            }),
+            claimWinnings: action(claimWinnings, {
+                schema: claimSchema,
+                trigger: 'custom_json',
+                description: 'Request your share of the pool for a resolved market, or your stakes back for a voided one.'
+            })
         }
     });
 }

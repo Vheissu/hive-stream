@@ -177,6 +177,14 @@ export function createOracleBountyContract(options: OracleBountyContractOptions 
             throw new Error(`Feed ${payload.feedId} does not exist`);
         }
 
+        const existingRound = await state.adapter.query(
+            'SELECT status FROM oracle_rounds WHERE feed_id = ? AND round_id = ?',
+            [payload.feedId, payload.roundId]
+        );
+        if (existingRound.length > 0 && existingRound[0].status === 'finalized') {
+            throw new Error(`Round ${payload.roundId} is already finalized`);
+        }
+
         await state.adapter.query(
             `INSERT INTO oracle_rounds (feed_id, round_id, median_value, status, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?)
@@ -216,6 +224,16 @@ export function createOracleBountyContract(options: OracleBountyContractOptions 
             }
         }
 
+        // Finalize once: rewards are credited here, so a repeat (e.g. a
+        // recurring time action) must never credit the same reports again.
+        if (roundRows[0].status === 'finalized') {
+            if (ctx.trigger === 'time') {
+                return;
+            }
+
+            throw new Error(`Round ${payload.roundId} is already finalized`);
+        }
+
         if (reports.length === 0) {
             throw new Error('Oracle round has no reports');
         }
@@ -230,7 +248,7 @@ export function createOracleBountyContract(options: OracleBountyContractOptions 
         for (const report of reports) {
             const deviation = median === 0 ? 0 : Math.abs((Number(report.value) - median) / median);
             const eligible = deviation <= tolerance || Number(feed.tolerance_bps || 0) === 0;
-            if (!eligible || remainingBudget.lt(feed.reward_per_report)) {
+            if (Number(report.rewarded) === 1 || !eligible || remainingBudget.lt(feed.reward_per_report)) {
                 continue;
             }
 
@@ -318,7 +336,11 @@ export function createOracleBountyContract(options: OracleBountyContractOptions 
             createFeed: action(createFeed, { schema: createFeedSchema, trigger: 'custom_json' }),
             fundFeed: action(fundFeed, { schema: idSchema, trigger: ['transfer', 'recurrent_transfer'] }),
             submitReport: action(submitReport, { schema: submitReportSchema, trigger: 'custom_json' }),
-            finalizeRound: action(finalizeRound, { schema: finalizeRoundSchema, trigger: ['custom_json', 'time'] }),
+            finalizeRound: action(finalizeRound, {
+                schema: finalizeRoundSchema,
+                trigger: ['custom_json', 'time'],
+                description: 'Compute the round median and credit in-tolerance reporters from the feed budget. Each round finalizes once.'
+            }),
             withdrawRewards: action(withdrawRewards, { schema: withdrawSchema, trigger: 'custom_json' })
         }
     });

@@ -1,3 +1,4 @@
+import BigNumber from '../bignumber';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
 import {
@@ -12,18 +13,28 @@ import {
     initializeTables,
     parseDateValue,
     requireSender,
+    resolveContractAccount,
     toBigNumber
 } from './helpers';
 
 const DEFAULT_NAME = 'insurancepool';
+const PRECISION = 3;
 
 export interface InsurancePoolContractOptions {
     name?: string;
+    /**
+     * Account that receives premiums and reserve funding and pays approved
+     * claims. Payouts are signed with the app's active key, so this must be
+     * the app account. Defaults to the streamer username.
+     */
+    account?: string;
 }
 
 export function createInsurancePoolContract(options: InsurancePoolContractOptions = {}) {
     const name = options.name || DEFAULT_NAME;
-    const state = createContractState();
+    // Resolved in the create hook: options.account, else the streamer username.
+    let account = options.account || '';
+    const state = createContractState({ streamer: null as any });
 
     const createPoolSchema = z.object({
         poolId: identifierSchema,
@@ -50,6 +61,10 @@ export function createInsurancePoolContract(options: InsurancePoolContractOption
         claimId: identifierSchema,
         amount: amountSchema.optional(),
         note: z.string().max(280).optional()
+    });
+
+    const claimIdSchema = z.object({
+        claimId: identifierSchema
     });
 
     const expireSchema = z.object({
@@ -278,32 +293,37 @@ export function createInsurancePoolContract(options: InsurancePoolContractOption
             throw new Error('Only the pool owner can approve claims');
         }
 
-        const approvedAmount = payload.amount || claim.requested_amount;
-        if (toBigNumber(approvedAmount).gt(pool.reserve_balance)) {
+        const requested = toBigNumber(payload.amount || claim.requested_amount);
+        if (requested.gt(claim.requested_amount)) {
+            throw new Error('Approved amount cannot exceed the requested amount');
+        }
+
+        if (requested.gt(pool.coverage_cap)) {
+            throw new Error('Approved amount cannot exceed the coverage cap');
+        }
+
+        // Pay whole units of the asset's precision, never rounding up.
+        const payout = requested.decimalPlaces(PRECISION, BigNumber.ROUND_DOWN);
+        if (payout.lte(0)) {
+            throw new Error('Approved amount must be at least 0.001');
+        }
+
+        if (payout.gt(pool.reserve_balance)) {
             throw new Error('Pool reserve cannot cover the approved claim amount');
         }
 
-        const nextReserve = toBigNumber(pool.reserve_balance).minus(approvedAmount);
+        const approvedAmount = payout.toFixed(PRECISION);
+        const nextReserve = toBigNumber(pool.reserve_balance).minus(payout);
         await state.adapter.query(
             'UPDATE insurance_pools SET reserve_balance = ?, updated_at = ? WHERE pool_id = ?',
             [nextReserve.toFixed(), blockTimeOf(ctx), pool.pool_id]
         );
+        // 'paying' until the broadcast succeeds; the reserve is already
+        // committed, so a failed broadcast leaves a retryable claim behind.
         await state.adapter.query(
             'UPDATE insurance_claims SET approved_amount = ?, status = ?, note = ?, updated_at = ? WHERE claim_id = ?',
-            [approvedAmount, 'approved', payload.note || '', blockTimeOf(ctx), payload.claimId]
+            [approvedAmount, 'paying', payload.note || '', blockTimeOf(ctx), payload.claimId]
         );
-
-        // Actually pay the claimant
-        if ((state as any).streamer) {
-            const contractAccount = pool.owner;
-            await (state as any).streamer.transferHiveTokens(
-                contractAccount,
-                claim.holder,
-                toBigNumber(approvedAmount).toFixed(3),
-                pool.asset,
-                `Insurance claim payout: ${payload.claimId}`
-            );
-        }
 
         await emitContractEvent(state.adapter, name, 'approveClaim', payload, {
             action: 'insurance_claim_approved',
@@ -315,6 +335,89 @@ export function createInsurancePoolContract(options: InsurancePoolContractOption
                 asset: pool.asset
             }
         }, blockTimeOf(ctx));
+
+        await payClaim({ ...claim, approved_amount: approvedAmount }, pool, ctx);
+    };
+
+    /**
+     * Broadcasts a claim payout and records the outcome. The claim is only
+     * marked 'approved' (paid) once the transfer succeeds; a failed broadcast
+     * marks it 'payout_failed' so retryClaimPayout can send it again.
+     */
+    const payClaim = async (claim: any, pool: any, ctx: any) => {
+        try {
+            if (!state.streamer) {
+                throw new Error('Insurance pool contract is not attached to a streamer');
+            }
+
+            await state.streamer.transferHiveTokens(
+                account,
+                claim.holder,
+                claim.approved_amount,
+                pool.asset,
+                `Insurance claim payout: ${claim.claim_id}`
+            );
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            await state.adapter.query(
+                'UPDATE insurance_claims SET status = ?, updated_at = ? WHERE claim_id = ?',
+                ['payout_failed', blockTimeOf(ctx), claim.claim_id]
+            );
+            await emitContractEvent(state.adapter, name, 'payClaim', { claimId: claim.claim_id }, {
+                action: 'insurance_claim_payout_failed',
+                data: {
+                    claimId: claim.claim_id,
+                    poolId: pool.pool_id,
+                    holder: claim.holder,
+                    amount: claim.approved_amount,
+                    asset: pool.asset,
+                    error: message
+                }
+            }, blockTimeOf(ctx));
+            throw error;
+        }
+
+        await state.adapter.query(
+            'UPDATE insurance_claims SET status = ?, updated_at = ? WHERE claim_id = ?',
+            ['approved', blockTimeOf(ctx), claim.claim_id]
+        );
+        await emitContractEvent(state.adapter, name, 'payClaim', { claimId: claim.claim_id }, {
+            action: 'insurance_claim_paid',
+            data: {
+                claimId: claim.claim_id,
+                poolId: pool.pool_id,
+                holder: claim.holder,
+                amount: claim.approved_amount,
+                asset: pool.asset
+            }
+        }, blockTimeOf(ctx));
+    };
+
+    const retryClaimPayout = async (payload: z.infer<typeof claimIdSchema>, ctx: any) => {
+        const sender = requireSender(ctx);
+        const claimRows = await state.adapter.query('SELECT * FROM insurance_claims WHERE claim_id = ?', [payload.claimId]);
+        if (claimRows.length === 0) {
+            throw new Error(`Claim ${payload.claimId} does not exist`);
+        }
+
+        const claim = claimRows[0];
+        const poolRows = await state.adapter.query('SELECT * FROM insurance_pools WHERE pool_id = ?', [claim.pool_id]);
+        const pool = poolRows[0];
+        if (sender !== pool.owner && sender !== claim.holder && sender !== account) {
+            throw new Error('Only the pool owner, the claimant or the app account can retry a payout');
+        }
+
+        if (claim.status !== 'payout_failed') {
+            throw new Error(`Claim ${payload.claimId} is ${claim.status}, not payout_failed`);
+        }
+
+        // Claim the row before broadcasting so it can only be retried once at a time.
+        await state.adapter.query(
+            'UPDATE insurance_claims SET status = ?, updated_at = ? WHERE claim_id = ? AND status = ?',
+            ['paying', blockTimeOf(ctx), payload.claimId, 'payout_failed']
+        );
+
+        await payClaim(claim, pool, ctx);
     };
 
     const expirePolicies = async (payload: { poolId?: string } = {}, _ctx: any) => {
@@ -345,9 +448,11 @@ export function createInsurancePoolContract(options: InsurancePoolContractOption
     return defineContract({
         name,
         hooks: {
-            create: async ({ adapter, streamer }) => {
+            create: async (lifecycle) => {
+                const { adapter, streamer } = lifecycle;
+                account = resolveContractAccount('createInsurancePoolContract', options.account, lifecycle);
                 state.adapter = adapter;
-                (state as any).streamer = streamer;
+                state.streamer = streamer;
                 await initialize();
             }
         },
@@ -356,7 +461,16 @@ export function createInsurancePoolContract(options: InsurancePoolContractOption
             fundPool: action(fundPool, { schema: poolIdSchema, trigger: ['transfer', 'recurrent_transfer'] }),
             buyPolicy: action(buyPolicy, { schema: poolIdSchema, trigger: ['transfer', 'recurrent_transfer'] }),
             fileClaim: action(fileClaim, { schema: fileClaimSchema, trigger: 'custom_json' }),
-            approveClaim: action(approveClaim, { schema: approveClaimSchema, trigger: 'custom_json' }),
+            approveClaim: action(approveClaim, {
+                schema: approveClaimSchema,
+                trigger: 'custom_json',
+                description: 'Pool owner approves a pending claim (up to the requested amount and the coverage cap) and pays it from the app account.'
+            }),
+            retryClaimPayout: action(retryClaimPayout, {
+                schema: claimIdSchema,
+                trigger: 'custom_json',
+                description: 'Re-send a claim payout whose broadcast failed (pool owner, claimant or app account).'
+            }),
             expirePolicies: action(expirePolicies, { schema: expireSchema, trigger: ['custom_json', 'time'] })
         }
     });

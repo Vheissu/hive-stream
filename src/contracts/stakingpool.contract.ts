@@ -20,6 +20,8 @@ import { operationRecordId, type ContractContext } from '../types/hive-stream';
 const DEFAULT_NAME = 'stakingpool';
 const PRECISION = 3;
 const MAX_COOLDOWN_SECONDS = 365 * 24 * 60 * 60;
+/** Hive produces a block every 3 seconds; used to find the block at a pool's end time in 'block' accrual mode. */
+const BLOCK_INTERVAL_MS = 3000;
 
 // Reward rates allow up to 8 decimals so small per-second emissions are expressible.
 const rateSchema = z.string().regex(/^\d+(?:\.\d{1,8})?$/, 'Invalid reward rate');
@@ -30,7 +32,10 @@ export interface StakingPoolContractOptions {
     account?: string;
     /** Accounts allowed to create pools and change reward rates. Defaults to the custody account. */
     admins?: string[];
-    /** 'time' accrues `rewardRate` per second of block time; 'block' accrues per block. */
+    /**
+     * 'time' accrues `rewardRate` per second of block time; 'block' accrues
+     * per block. Either way accrual stops at the pool's `endsAt`.
+     */
     accrual?: 'time' | 'block';
 }
 
@@ -131,17 +136,24 @@ export function createStakingPoolContract(options: StakingPoolContractOptions = 
         : new Date();
 
     const accrualPoint = (ctx: ContractContext, pool?: any): BigNumber => {
+        let now = nowOf(ctx);
+        const endsAt = pool?.ends_at ? new Date(pool.ends_at) : null;
+
         if (accrual === 'block') {
-            return new BigNumber(ctx.block?.number ?? 0);
+            const blockNumber = ctx.block?.number ?? 0;
+
+            if (endsAt && endsAt < now) {
+                // Past the end: accrue only up to the block produced at endsAt,
+                // derived from this block's number and time at 3s per block.
+                const blocksSinceEnd = Math.ceil((now.getTime() - endsAt.getTime()) / BLOCK_INTERVAL_MS);
+                return new BigNumber(Math.max(0, blockNumber - blocksSinceEnd));
+            }
+
+            return new BigNumber(blockNumber);
         }
 
-        let now = nowOf(ctx);
-
-        if (pool?.ends_at) {
-            const endsAt = new Date(pool.ends_at);
-            if (endsAt < now) {
-                now = endsAt;
-            }
+        if (endsAt && endsAt < now) {
+            now = endsAt;
         }
 
         return new BigNumber(Math.floor(now.getTime() / 1000));
@@ -376,11 +388,17 @@ export function createStakingPoolContract(options: StakingPoolContractOptions = 
         }, blockTimeOf(ctx));
     };
 
+    /**
+     * Releases a matured unbonding entry. The row is claimed ('releasing')
+     * before the transfer and only marked 'released' once it succeeds; a
+     * failed broadcast marks it 'failed', and the next withdraw or scheduled
+     * release sends it again.
+     */
     const releaseUnbonding = async (entry: any, ctx: ContractContext) => {
         // Claim the row first; only the caller that flips it may transfer.
         await state.adapter.query(
-            'UPDATE staking_unbonding SET status = ? WHERE id = ? AND status = ?',
-            ['releasing', entry.id, 'unbonding']
+            'UPDATE staking_unbonding SET status = ? WHERE id = ? AND status IN (?, ?)',
+            ['releasing', entry.id, 'unbonding', 'failed']
         );
         const rows = await state.adapter.query('SELECT status FROM staking_unbonding WHERE id = ?', [entry.id]);
 
@@ -388,7 +406,23 @@ export function createStakingPoolContract(options: StakingPoolContractOptions = 
             return false;
         }
 
-        await transfer(entry.account, entry.amount, entry.asset, `Unstaked from ${entry.pool_id}`);
+        try {
+            await transfer(entry.account, entry.amount, entry.asset, `Unstaked from ${entry.pool_id}`);
+        } catch (error) {
+            await state.adapter.query('UPDATE staking_unbonding SET status = ? WHERE id = ?', ['failed', entry.id]);
+            await emitContractEvent(state.adapter, name, 'release', { poolId: entry.pool_id }, {
+                action: 'staking_release_failed',
+                data: {
+                    poolId: entry.pool_id,
+                    account: entry.account,
+                    amount: entry.amount,
+                    asset: entry.asset,
+                    error: error instanceof Error ? error.message : String(error)
+                }
+            }, blockTimeOf(ctx));
+            throw error;
+        }
+
         await state.adapter.query(
             'UPDATE staking_unbonding SET status = ?, released_at = ? WHERE id = ?',
             ['released', nowOf(ctx).toISOString(), entry.id]
@@ -453,8 +487,8 @@ export function createStakingPoolContract(options: StakingPoolContractOptions = 
 
     const withdrawMatured = async (ctx: ContractContext, holder?: string): Promise<number> => {
         const now = nowOf(ctx).toISOString();
-        const params: any[] = ['unbonding', now];
-        let sql = 'SELECT * FROM staking_unbonding WHERE status = ? AND available_at <= ?';
+        const params: any[] = ['unbonding', 'failed', now];
+        let sql = 'SELECT * FROM staking_unbonding WHERE status IN (?, ?) AND available_at <= ?';
 
         if (holder) {
             sql += ' AND account = ?';
@@ -463,11 +497,21 @@ export function createStakingPoolContract(options: StakingPoolContractOptions = 
 
         const matured = await state.adapter.query(`${sql} ORDER BY id ASC`, params);
         let released = 0;
+        let firstError: unknown = null;
 
+        // One failed broadcast must not hold up everyone else's release.
         for (const entry of matured) {
-            if (await releaseUnbonding(entry, ctx)) {
-                released++;
+            try {
+                if (await releaseUnbonding(entry, ctx)) {
+                    released++;
+                }
+            } catch (error) {
+                firstError = firstError ?? error;
             }
+        }
+
+        if (firstError) {
+            throw firstError;
         }
 
         return released;
@@ -486,6 +530,58 @@ export function createStakingPoolContract(options: StakingPoolContractOptions = 
         await withdrawMatured(ctx);
     };
 
+    /**
+     * Sends a recorded claim. The row stays 'pending' until the transfer
+     * succeeds and becomes 'paid'; a failed broadcast marks it 'failed' so
+     * the staker's next claim sends it again.
+     */
+    const payClaim = async (row: { id?: number; pool_id: string; account: string; amount: string; asset: string; transaction_id: string }, ctx: ContractContext) => {
+        try {
+            await transfer(row.account, row.amount, row.asset, `Staking rewards from ${row.pool_id}`);
+        } catch (error) {
+            await state.adapter.query(
+                'UPDATE staking_claims SET status = ? WHERE pool_id = ? AND account = ? AND transaction_id = ?',
+                ['failed', row.pool_id, row.account, row.transaction_id]
+            );
+            await emitContractEvent(state.adapter, name, 'claim', { poolId: row.pool_id }, {
+                action: 'staking_claim_failed',
+                data: {
+                    poolId: row.pool_id,
+                    account: row.account,
+                    amount: row.amount,
+                    asset: row.asset,
+                    error: error instanceof Error ? error.message : String(error)
+                }
+            }, blockTimeOf(ctx));
+            throw error;
+        }
+
+        await state.adapter.query(
+            'UPDATE staking_claims SET status = ? WHERE pool_id = ? AND account = ? AND transaction_id = ?',
+            ['paid', row.pool_id, row.account, row.transaction_id]
+        );
+        await emitContractEvent(state.adapter, name, 'claim', { poolId: row.pool_id }, {
+            action: 'staking_rewards_claimed',
+            data: { poolId: row.pool_id, account: row.account, amount: row.amount, asset: row.asset }
+        }, blockTimeOf(ctx));
+    };
+
+    /** Re-sends this staker's claims whose broadcast failed earlier. Returns how many were retried. */
+    const retryFailedClaims = async (poolId: string, staker: string, ctx: ContractContext): Promise<number> => {
+        const failed = await state.adapter.query(
+            'SELECT * FROM staking_claims WHERE pool_id = ? AND account = ? AND status = ? ORDER BY id ASC',
+            [poolId, staker, 'failed']
+        );
+
+        for (const row of failed) {
+            // Claim the row so a concurrent retry can never send it twice.
+            await state.adapter.query('UPDATE staking_claims SET status = ? WHERE id = ? AND status = ?', ['pending', row.id, 'failed']);
+            await payClaim(row, ctx);
+        }
+
+        return failed.length;
+    };
+
     const claim = async (payload: z.infer<typeof poolIdSchema>, ctx: ContractContext) => {
         const staker = requireSender(ctx);
         const pool = await loadPool(state.adapter, payload.poolId);
@@ -495,6 +591,7 @@ export function createStakingPoolContract(options: StakingPoolContractOptions = 
         }
 
         const now = nowOf(ctx);
+        const retried = await retryFailedClaims(payload.poolId, staker, ctx);
 
         const claimRef = operationRecordId(ctx.transaction.id, ctx.transaction.operationIndex);
         const payout = await withTransaction(async (adapter) => {
@@ -520,19 +617,20 @@ export function createStakingPoolContract(options: StakingPoolContractOptions = 
         });
 
         if (!payout) {
+            if (retried > 0) {
+                return;
+            }
+
             throw new Error('No rewards to claim');
         }
 
-        await transfer(staker, payout, pool.reward_asset, `Staking rewards from ${payload.poolId}`);
-        await state.adapter.query(
-            'UPDATE staking_claims SET status = ? WHERE pool_id = ? AND account = ? AND transaction_id = ?',
-            ['paid', payload.poolId, staker, claimRef]
-        );
-
-        await emitContractEvent(state.adapter, name, 'claim', payload, {
-            action: 'staking_rewards_claimed',
-            data: { poolId: payload.poolId, account: staker, amount: payout, asset: pool.reward_asset }
-        }, blockTimeOf(ctx));
+        await payClaim({
+            pool_id: payload.poolId,
+            account: staker,
+            amount: payout,
+            asset: pool.reward_asset,
+            transaction_id: claimRef
+        }, ctx);
     };
 
     const setRewardRate = async (payload: z.infer<typeof setRewardRateSchema>, ctx: ContractContext) => {
@@ -603,12 +701,12 @@ export function createStakingPoolContract(options: StakingPoolContractOptions = 
             withdraw: action(withdraw, {
                 schema: poolIdSchema,
                 trigger: 'custom_json',
-                description: 'Release your matured unbonding entries.'
+                description: 'Release your matured unbonding entries, including any whose earlier transfer failed.'
             }),
             claim: action(claim, {
                 schema: poolIdSchema,
                 trigger: 'custom_json',
-                description: 'Pay out accrued rewards (rounded down to the asset precision; the remainder stays pending).'
+                description: 'Pay out accrued rewards (rounded down to the asset precision; the remainder stays pending). Re-sends earlier claims whose transfer failed.'
             }),
             setRewardRate: action(setRewardRate, {
                 schema: setRewardRateSchema,
@@ -620,7 +718,7 @@ export function createStakingPoolContract(options: StakingPoolContractOptions = 
             releaseMatured: action(releaseMatured, {
                 schema: z.object({}),
                 trigger: 'time',
-                description: 'Scheduled release of every matured unbonding entry.'
+                description: 'Scheduled release of every matured unbonding entry, retrying failed transfers.'
             })
         }
     });

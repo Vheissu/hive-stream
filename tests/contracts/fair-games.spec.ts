@@ -10,6 +10,7 @@ import {
     createRpsContract
 } from '../../src';
 import { verifyOutcome, sha256Hex } from '../../src/client';
+import { Utils } from '../../src/utils';
 import { makeContext } from '../helpers/contract-context';
 
 async function revealProof(manager: FairnessManager, proof: any) {
@@ -36,7 +37,9 @@ describe('provably-fair game modes', () => {
         });
         transfers = jest.spyOn(streamer, 'transferHiveTokens').mockResolvedValue(true as any);
         jest.spyOn(streamer, 'getTransaction').mockResolvedValue({} as any);
-        jest.spyOn(streamer, 'verifyTransfer').mockResolvedValue(true as any);
+        // These tests call handlers directly; the on-chain re-read is covered
+        // by the game specs that run on the testing kit.
+        jest.spyOn(Utils, 'verifyTransfer').mockResolvedValue(true);
         jest.spyOn(streamer.getClient().database, 'getAccounts').mockResolvedValue([{ balance: '100000.000 HIVE', hbd_balance: '0.000 HBD' }] as any);
     });
 
@@ -47,7 +50,8 @@ describe('provably-fair game modes', () => {
 
     test('dice settles with a committed seed and the result verifies after rotation', async () => {
         const fairness = new FairnessManager();
-        const contract = createDiceContract({ name: 'fairdice', account: 'house', fairness });
+        // Loss notices on, so the memo is checked whatever the outcome.
+        const contract = createDiceContract({ name: 'fairdice', account: 'house', fairness, notifyLosses: true });
         await streamer.registerContract(contract);
 
         const commitment = fairness.getCommitment();
@@ -126,9 +130,15 @@ describe('provably-fair game modes', () => {
         expect(rotation.commitment.seedIndex).toBe(1);
     });
 
-    test('legacy mode is unchanged when fairness is not configured', () => {
-        const contract = createDiceContract({ account: 'beggars', name: 'legacy' });
-        expect((contract.actions as any).rotateSeed).toBeUndefined();
+    test.each([
+        ['dice', createDiceContract],
+        ['coinflip', createCoinflipContract],
+        ['roulette', createRouletteContract],
+        ['rps', createRpsContract],
+        ['lotto', createLottoContract]
+    ] as Array<[string, (options: any) => any]>)('%s is provably fair by default and fairness: false opts out', (_name, factory) => {
+        expect(factory({ account: 'beggars' }).actions.rotateSeed).toBeDefined();
+        expect(factory({ account: 'beggars', fairness: false }).actions.rotateSeed).toBeUndefined();
     });
 });
 

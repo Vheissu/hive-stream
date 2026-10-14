@@ -1,8 +1,8 @@
+import BigNumber from '../bignumber';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
 import {
     amountSchema,
-    assertAssetMatches,
     blockTimeOf,
     createContractState,
     emitContractEvent,
@@ -11,18 +11,29 @@ import {
     initializeTables,
     parseDateValue,
     requireSender,
+    resolveContractAccount,
     toBigNumber
 } from './helpers';
+import { operationRecordId } from '../types/hive-stream';
 
 const DEFAULT_NAME = 'bountyboard';
+const PRECISION = 3;
 
 export interface BountyBoardContractOptions {
     name?: string;
+    /**
+     * Account that receives bounty rewards and refunds rejected ones.
+     * Refunds are signed with the app's active key, so this must be the app
+     * account. Defaults to the streamer username.
+     */
+    account?: string;
 }
 
 export function createBountyBoardContract(options: BountyBoardContractOptions = {}) {
     const name = options.name || DEFAULT_NAME;
-    const state = createContractState();
+    // Resolved in the create hook: options.account, else the streamer username.
+    let account = options.account || '';
+    const state = createContractState({ streamer: null as any });
 
     const createBountySchema = z.object({
         bountyId: identifierSchema,
@@ -98,14 +109,57 @@ export function createBountyBoardContract(options: BountyBoardContractOptions = 
     const createBounty = async (payload: z.infer<typeof createBountySchema>, ctx: any) => {
         const sponsor = requireSender(ctx);
         const payment = getIncomingPayment(ctx);
-        const existing = await state.adapter.query('SELECT bounty_id FROM bounty_board_bounties WHERE bounty_id = ?', [payload.bountyId]);
-        if (existing.length > 0) {
-            throw new Error(`Bounty ${payload.bountyId} already exists`);
+
+        // Only money sent to the app account can be refunded from it.
+        if (payment.to !== account) {
+            throw new Error(`Bounty rewards must be sent to ${account}`);
         }
 
-        const deadline = parseDateValue(payload.deadline);
+        const reward = toBigNumber(payment.amount);
+        if (!reward.isFinite() || !reward.gt(0)) {
+            // Nothing arrived, so there is nothing to send back.
+            throw new Error('Bounty reward must be greater than zero');
+        }
+
+        // The reward has already arrived, so every rejection sends it back
+        // instead of throwing (which would keep the sponsor's money).
+        const refund = async (reason: string) => {
+            if (!state.streamer) {
+                throw new Error('Bounty board contract is not attached to a streamer');
+            }
+
+            const amount = reward.decimalPlaces(PRECISION, BigNumber.ROUND_DOWN).toFixed(PRECISION);
+            await state.streamer.transferHiveTokens(account, sponsor, amount, payment.asset, `[Refund] ${reason}`);
+            await emitContractEvent(state.adapter, name, 'createBounty', payload, {
+                action: 'bounty_refunded',
+                data: {
+                    bountyId: payload.bountyId,
+                    sponsor,
+                    amount,
+                    asset: payment.asset,
+                    reason,
+                    transactionId: operationRecordId(ctx.transaction.id, ctx.transaction.operationIndex)
+                }
+            }, blockTimeOf(ctx));
+        };
+
+        const existing = await state.adapter.query('SELECT bounty_id FROM bounty_board_bounties WHERE bounty_id = ?', [payload.bountyId]);
+        if (existing.length > 0) {
+            await refund(`Bounty ${payload.bountyId} already exists`);
+            return;
+        }
+
+        let deadline: Date | null;
+        try {
+            deadline = parseDateValue(payload.deadline);
+        } catch {
+            await refund('Bounty deadline is not a valid date');
+            return;
+        }
+
         if (deadline && deadline <= blockTimeOf(ctx)) {
-            throw new Error('Bounty deadline must be in the future');
+            await refund('Bounty deadline must be in the future');
+            return;
         }
 
         await state.adapter.query(
@@ -230,9 +284,11 @@ export function createBountyBoardContract(options: BountyBoardContractOptions = 
             ? 'closed'
             : 'partially_awarded';
 
+        // A bounty closed by its last award releases whatever is left back to
+        // the sponsor (reported in a bounty_closed event), so the remainder is zeroed.
         await state.adapter.query(
             'UPDATE bounty_board_bounties SET remaining_reward = ?, status = ?, updated_at = ? WHERE bounty_id = ?',
-            [remainingReward.toFixed(), nextStatus, blockTimeOf(ctx), payload.bountyId]
+            [nextStatus === 'closed' ? '0' : remainingReward.toFixed(), nextStatus, blockTimeOf(ctx), payload.bountyId]
         );
 
         await emitContractEvent(state.adapter, name, 'awardBounty', payload, {
@@ -246,6 +302,18 @@ export function createBountyBoardContract(options: BountyBoardContractOptions = 
                 remainingReward: remainingReward.toFixed()
             }
         }, blockTimeOf(ctx));
+
+        if (nextStatus === 'closed' && remainingReward.gt(0)) {
+            await emitContractEvent(state.adapter, name, 'closeBounty', { bountyId: payload.bountyId }, {
+                action: 'bounty_closed',
+                data: {
+                    bountyId: payload.bountyId,
+                    sponsor: bounty.sponsor,
+                    remainingReward: remainingReward.toFixed(),
+                    asset: bounty.asset
+                }
+            }, blockTimeOf(ctx));
+        }
     };
 
     const closeBounty = async (payload: z.infer<typeof closeSchema>, ctx: any) => {
@@ -262,9 +330,19 @@ export function createBountyBoardContract(options: BountyBoardContractOptions = 
             }
         }
 
+        // Close once: the bounty_closed event tells the app to return the
+        // remainder, so it must never fire twice for the same bounty.
+        if (bounty.status === 'closed') {
+            if (ctx.trigger === 'time') {
+                return;
+            }
+
+            throw new Error('Bounty is already closed');
+        }
+
         await state.adapter.query(
-            'UPDATE bounty_board_bounties SET status = ?, updated_at = ? WHERE bounty_id = ?',
-            ['closed', blockTimeOf(ctx), payload.bountyId]
+            'UPDATE bounty_board_bounties SET status = ?, remaining_reward = ?, updated_at = ? WHERE bounty_id = ?',
+            ['closed', '0', blockTimeOf(ctx), payload.bountyId]
         );
 
         await emitContractEvent(state.adapter, name, 'closeBounty', payload, {
@@ -281,16 +359,27 @@ export function createBountyBoardContract(options: BountyBoardContractOptions = 
     return defineContract({
         name,
         hooks: {
-            create: async ({ adapter }) => {
+            create: async (lifecycle) => {
+                const { adapter, streamer } = lifecycle;
+                account = resolveContractAccount('createBountyBoardContract', options.account, lifecycle);
                 state.adapter = adapter;
+                state.streamer = streamer;
                 await initialize();
             }
         },
         actions: {
-            createBounty: action(createBounty, { schema: createBountySchema, trigger: ['transfer', 'recurrent_transfer'] }),
+            createBounty: action(createBounty, {
+                schema: createBountySchema,
+                trigger: ['transfer', 'recurrent_transfer'],
+                description: 'Fund a new bounty by sending the reward to the app account; a duplicate bounty id or an invalid or past deadline is refunded.'
+            }),
             submitWork: action(submitWork, { schema: submitWorkSchema, trigger: 'custom_json' }),
             awardBounty: action(awardBounty, { schema: awardSchema, trigger: 'custom_json' }),
-            closeBounty: action(closeBounty, { schema: closeSchema, trigger: ['custom_json', 'time'] })
+            closeBounty: action(closeBounty, {
+                schema: closeSchema,
+                trigger: ['custom_json', 'time'],
+                description: 'Close an open bounty (sponsor or scheduled). Emits bounty_closed with the unawarded remainder once and zeroes it.'
+            })
         }
     });
 }

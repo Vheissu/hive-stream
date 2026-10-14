@@ -95,7 +95,8 @@ describe('tournament contract', () => {
         adapter = new SqliteAdapter(':memory:');
         await streamer.registerAdapter(adapter);
         transfers = jest.spyOn(streamer, 'transferHiveTokens').mockResolvedValue(true as any);
-        contract = createTournamentContract({ account: 'host', feeBps: 1000, feeAccount: 'treasury' });
+        // Creation is open (no organizers), so scores come from the app or a configured oracle.
+        contract = createTournamentContract({ account: 'host', feeBps: 1000, feeAccount: 'treasury', oracles: ['gameserver'] });
         await streamer.registerContract(contract);
     });
 

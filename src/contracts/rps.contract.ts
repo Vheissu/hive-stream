@@ -4,17 +4,34 @@ import seedrandom from 'seedrandom';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
-import { createFairnessSupport, formatBlockchainAmount, formatFairnessMemo, parseBlockchainAmount, resolveContractAccount, blockTimeOf } from './helpers';
+import {
+    blockTimeOf,
+    createBetSettlement,
+    createFairnessSupport,
+    createHouseBankroll,
+    formatBlockchainAmount,
+    formatFairnessMemo,
+    refundableField,
+    resolveContractAccount,
+    verifyIncomingTransfer
+} from './helpers';
 import { resolveFairnessOption, type FairDrawProof, type FairnessManager, type FairnessOptions } from '../fairness/manager';
+import { operationRecordId, type ContractContext } from '../types/hive-stream';
 
 const DEFAULT_NAME = 'rps';
 const DEFAULT_TOKEN_SYMBOL = 'HIVE';
 const DEFAULT_MIN_AMOUNT = 0.001;
 const DEFAULT_MAX_AMOUNT = 20;
+const DEFAULT_HOUSE_EDGE = 2;
+const MAX_SEED_LENGTH = 64;
 
 const MOVES = ['rock', 'paper', 'scissors'] as const;
 
-function rng(previousBlockId: string, blockId: string, transactionId: string, serverSeed: string, clientSeed = ''): 'rock' | 'paper' | 'scissors' {
+type Move = typeof MOVES[number];
+
+// Legacy RNG, used only with `fairness: false`: block ids plus an uncommitted
+// per-bet server seed. Not verifiable, and a block producer can bias it.
+function rng(previousBlockId: string, blockId: string, transactionId: string, serverSeed: string, clientSeed = ''): Move {
     if (!previousBlockId || !blockId || !transactionId || !serverSeed) {
         throw new Error('Invalid RNG parameters');
     }
@@ -27,17 +44,35 @@ function rng(previousBlockId: string, blockId: string, transactionId: string, se
 
 export interface RpsContractOptions {
     name?: string;
+    /** House account that receives bets and pays winners. Defaults to the streamer username. */
     account?: string;
+    /** Default accepted asset (HIVE). Winnings are always paid in the asset that was bet. */
     tokenSymbol?: string;
+    /** Accepted assets (HIVE and/or HBD). Defaults to `[tokenSymbol]`. */
     validCurrencies?: string[];
     minAmount?: number;
     maxAmount?: number;
+    /** House edge in percent (default 2). A win pays the stake x 2 x (100 - houseEdge) / 100, rounded down; ties are refunded. */
+    houseEdge?: number;
+    /** Send a 0.001 notice transfer on losses (default false; results are always recorded as events). */
+    notifyLosses?: boolean;
     /**
-     * Provably-fair commit-reveal draws (recommended). When omitted the legacy
-     * RNG (block ids plus an uncommitted per-bet server seed) is used.
+     * Provably-fair commit-reveal draws, on by default. Pass options or a
+     * shared FairnessManager to customise, or `false` for the legacy RNG
+     * (block ids plus an uncommitted server seed; not verifiable).
      */
     fairness?: FairnessManager | FairnessOptions | boolean;
 }
+
+type PlayPayload = { move: unknown; seed?: string };
+
+const beats = (player: Move, opponent: Move): boolean => {
+    return (
+        (player === 'rock' && opponent === 'scissors') ||
+        (player === 'scissors' && opponent === 'paper') ||
+        (player === 'paper' && opponent === 'rock')
+    );
+};
 
 export function createRpsContract(options: RpsContractOptions = {}) {
     const name = options.name || DEFAULT_NAME;
@@ -47,245 +82,167 @@ export function createRpsContract(options: RpsContractOptions = {}) {
     const validCurrencies = options.validCurrencies || [tokenSymbol];
     const minAmount = options.minAmount ?? DEFAULT_MIN_AMOUNT;
     const maxAmount = options.maxAmount ?? DEFAULT_MAX_AMOUNT;
-    const fairSupport = createFairnessSupport(name, () => account, resolveFairnessOption(options.fairness));
+    const houseEdge = options.houseEdge ?? DEFAULT_HOUSE_EDGE;
+    const notifyLosses = options.notifyLosses ?? false;
+    const fairSupport = createFairnessSupport(name, () => account, resolveFairnessOption(options.fairness ?? true));
     const fairness = fairSupport.fairness;
+
+    if (!Number.isFinite(houseEdge) || houseEdge < 0 || houseEdge >= 100) {
+        throw new Error('houseEdge must be a percentage from 0 to below 100');
+    }
+
+    const payoutMultiplier = new BigNumber(2).multipliedBy(new BigNumber(100).minus(houseEdge)).dividedBy(100);
 
     const state = {
         streamer: null as any,
         adapter: null as any,
-        balanceCache: null as { balance: BigNumber; timestamp: number } | null,
-        balanceCacheTimeout: 30000,
-        betQueue: [] as Array<() => Promise<void>>,
-        processingQueue: false,
-        pendingPayouts: new BigNumber(0)
+        queue: Promise.resolve() as Promise<unknown>
     };
 
+    const bankroll = createHouseBankroll({ streamer: () => state.streamer, account: () => account, logPrefix: '[RpsContract]' });
+
+    // Typed but permissive: an unknown move or a long seed is refunded by the
+    // handler instead of failing validation and keeping the stake.
     const playSchema = z.object({
-        move: z.enum(MOVES),
-        seed: z.string().max(64).optional()
+        move: refundableField(z.enum(MOVES)),
+        seed: z.string().optional()
     });
 
-    const getBalance = async (): Promise<BigNumber> => {
-        const now = Date.now();
+    const processPlay = async (payload: PlayPayload, ctx: ContractContext): Promise<void> => {
+        const bet = await verifyIncomingTransfer(state.streamer, ctx, account);
+        const player = bet.from;
+        const settlement = createBetSettlement({
+            streamer: state.streamer,
+            adapter: state.adapter,
+            contract: name,
+            account,
+            ctx,
+            player,
+            amount: bet.amount,
+            asset: bet.asset,
+            logPrefix: '[RpsContract]',
+            onSent: (asset, amount) => bankroll.debit(asset, amount)
+        });
 
-        if (state.balanceCache && (now - state.balanceCache.timestamp) < state.balanceCacheTimeout) {
-            return state.balanceCache.balance;
-        }
-
-        try {
-            const accountInfo = await state.streamer['client'].database.getAccounts([account]);
-
-            if (accountInfo?.[0]) {
-                const amount = parseBlockchainAmount(accountInfo[0].balance as string).value;
-
-                state.balanceCache = {
-                    balance: amount,
-                    timestamp: now
-                };
-
-                return amount;
-            }
-        } catch (error) {
-            getLogger().error('[RpsContract] Error fetching balance:', error);
-            if (state.balanceCache) {
-                return state.balanceCache.balance;
-            }
-        }
-
-        return new BigNumber(0);
-    };
-
-    const debitCachedBalance = (amount: BigNumber): void => {
-        if (!state.balanceCache) {
+        if (await settlement.alreadySettled()) {
             return;
         }
 
-        state.balanceCache = {
-            balance: BigNumber.maximum(new BigNumber(0), state.balanceCache.balance.minus(amount)),
-            timestamp: Date.now()
-        };
-    };
-
-    const processQueue = async (): Promise<void> => {
-        if (state.processingQueue || state.betQueue.length === 0) {
-            return;
-        }
-
-        state.processingQueue = true;
-
-        while (state.betQueue.length > 0) {
-            const nextBet = state.betQueue.shift();
-            if (nextBet) {
-                try {
-                    await nextBet();
-                } catch (error) {
-                    getLogger().error('[RpsContract] Queue processing error:', error);
-                }
-            }
-        }
-
-        state.processingQueue = false;
-    };
-
-    const beats = (player: string, opponent: string): boolean => {
-        return (
-            (player === 'rock' && opponent === 'scissors') ||
-            (player === 'scissors' && opponent === 'paper') ||
-            (player === 'paper' && opponent === 'rock')
-        );
-    };
-
-    const processPlay = async (payload: { move: 'rock' | 'paper' | 'scissors'; seed?: string }, ctx: any): Promise<void> => {
-        if (!ctx.transfer) {
-            throw new Error('Transfer context required for play');
-        }
-
-        const sender = ctx.sender;
-        const amountRaw = ctx.transfer.rawAmount;
+        let reserved: BigNumber | null = null;
 
         try {
-            let parsedAmount;
-            try {
-                parsedAmount = parseBlockchainAmount(amountRaw);
-            } catch (error) {
-                throw new Error('Invalid amount format');
-            }
-            const amountParsed = parsedAmount.value;
-            if (amountParsed.isNegative()) {
-                throw new Error('Invalid amount value');
+            if (!validCurrencies.includes(bet.asset)) {
+                await settlement.refund('[Refund] You sent an invalid currency.');
+                return;
             }
 
-            const amountCurrency = parsedAmount.asset;
-            const transaction = await state.streamer.getTransaction(ctx.block.number, ctx.transaction.id);
-            const verify = await state.streamer.verifyTransfer(transaction, sender, account, amountRaw);
+            if (bet.value.isLessThan(minAmount)) {
+                await settlement.refund(`[Refund] Bet amount too small. Minimum: ${minAmount} ${bet.asset}.`);
+                return;
+            }
 
-            const balance = await getBalance();
-            const availableBalance = balance.minus(state.pendingPayouts);
+            if (bet.value.isGreaterThan(maxAmount)) {
+                await settlement.refund(`[Refund] You sent too much. Maximum: ${maxAmount} ${bet.asset}.`);
+                return;
+            }
 
-            if (verify) {
-                if (!validCurrencies.includes(amountCurrency)) {
-                    await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] You sent an invalid currency.');
-                    debitCachedBalance(amountParsed);
-                    return;
-                }
+            if (!MOVES.includes(payload.move as Move)) {
+                await settlement.refund('[Refund] Move must be rock, paper or scissors.');
+                return;
+            }
 
-                if (amountParsed.isLessThan(minAmount)) {
-                    await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, `[Refund] Bet amount too small. Minimum: ${minAmount} ${amountCurrency}.`);
-                    debitCachedBalance(amountParsed);
-                    return;
-                }
+            if (payload.seed !== undefined && (typeof payload.seed !== 'string' || payload.seed.length > MAX_SEED_LENGTH)) {
+                await settlement.refund(`[Refund] Seed must be a string of at most ${MAX_SEED_LENGTH} characters.`);
+                return;
+            }
 
-                if (amountParsed.isGreaterThan(maxAmount)) {
-                    await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, `[Refund] You sent too much. Maximum: ${maxAmount} ${amountCurrency}.`);
-                    debitCachedBalance(amountParsed);
-                    return;
-                }
+            const move = payload.move as Move;
+            const payout = bet.value.multipliedBy(payoutMultiplier).decimalPlaces(3, BigNumber.ROUND_DOWN);
 
-                const potentialPayout = amountParsed.multipliedBy(2);
-                if (potentialPayout.isGreaterThan(availableBalance)) {
-                    await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] The server cannot afford this bet payout.');
-                    debitCachedBalance(amountParsed);
-                    return;
-                }
+            if (payout.isGreaterThan(await bankroll.available(bet.asset))) {
+                await settlement.refund('[Refund] The server cannot afford this bet payout.');
+                return;
+            }
 
-                state.pendingPayouts = state.pendingPayouts.plus(potentialPayout);
-                let payoutIncremented = true;
+            bankroll.reserve(bet.asset, payout);
+            reserved = payout;
 
-                try {
-                    let serverMove: 'rock' | 'paper' | 'scissors';
-                    let serverSeed: string | null = null;
-                    let proof: FairDrawProof | null = null;
+            let serverMove: Move;
+            let serverSeed: string | null = null;
+            let proof: FairDrawProof | null = null;
 
-                    if (fairness) {
-                        const draw = await fairness.draw({ type: 'int', min: 0, max: 2 }, {
-                            clientSeed: payload.seed || sender,
-                            blockId: ctx.block.id
-                        });
-                        serverMove = MOVES[draw.outcome];
-                        proof = draw.proof;
-                    } else {
-                        serverSeed = randomUUID();
-                        serverMove = rng(ctx.block.previousId, ctx.block.id, ctx.transaction.id, serverSeed, payload.seed ?? '');
+            if (fairness) {
+                const draw = await fairness.draw({ type: 'int', min: 0, max: 2 }, {
+                    clientSeed: payload.seed || player,
+                    blockId: ctx.block.id
+                });
+                serverMove = MOVES[draw.outcome];
+                proof = draw.proof;
+            } else {
+                serverSeed = randomUUID();
+                serverMove = rng(ctx.block.previousId, ctx.block.id, ctx.transaction.id, serverSeed, payload.seed ?? '');
+            }
+
+            const seedMemo = proof ? formatFairnessMemo(proof) : ` | Seed: ${serverSeed}`;
+
+            let result: 'win' | 'lose' | 'tie' = 'lose';
+
+            if (serverMove === move) {
+                result = 'tie';
+            } else if (beats(move, serverMove)) {
+                result = 'win';
+            }
+
+            if (state.adapter?.addEvent) {
+                await state.adapter.addEvent(blockTimeOf(ctx), name, 'play', payload, {
+                    action: 'rps_result',
+                    data: {
+                        player,
+                        playerMove: move,
+                        serverMove,
+                        ...(proof
+                            ? { fairness: proof, outcomeSpec: { type: 'int', min: 0, max: 2 } }
+                            : { serverSeed }),
+                        result,
+                        amount: formatBlockchainAmount(bet.value),
+                        payout: result === 'win' ? formatBlockchainAmount(payout) : result === 'tie' ? formatBlockchainAmount(bet.value) : '0',
+                        asset: bet.asset,
+                        blockId: ctx.block.id,
+                        transactionId: operationRecordId(ctx.transaction.id, ctx.transaction.operationIndex)
                     }
+                });
+            }
 
-                    const seedMemo = proof ? formatFairnessMemo(proof) : ` | Seed: ${serverSeed}`;
-
-                    let result: 'win' | 'lose' | 'tie' = 'lose';
-                    if (serverMove === payload.move) {
-                        result = 'tie';
-                    } else if (beats(payload.move, serverMove)) {
-                        result = 'win';
-                    }
-
-                    await state.adapter.addEvent(blockTimeOf(ctx), name, 'play', payload, {
-                        action: 'rps_result',
-                        data: {
-                            player: sender,
-                            playerMove: payload.move,
-                            serverMove,
-                            ...(proof
-                                ? { fairness: proof, outcomeSpec: { type: 'int', min: 0, max: 2 } }
-                                : { serverSeed }),
-                            result,
-                            blockId: ctx.block.id,
-                            transactionId: ctx.transaction.id
-                        }
-                    });
-
-                    if (result === 'win') {
-                        await state.streamer.transferHiveTokens(account, sender, formatBlockchainAmount(potentialPayout), parsedAmount.asset, `[Winner] | You: ${payload.move} | Server: ${serverMove}${seedMemo}`);
-                        debitCachedBalance(potentialPayout);
-                    } else if (result === 'tie') {
-                        await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, `[Tie] | You: ${payload.move} | Server: ${serverMove}${seedMemo}`);
-                        debitCachedBalance(amountParsed);
-                    } else {
-                        await state.streamer.transferHiveTokens(account, sender, '0.001', parsedAmount.asset, `[Lost] | You: ${payload.move} | Server: ${serverMove}${seedMemo}`);
-                        debitCachedBalance(new BigNumber('0.001'));
-                    }
-                } finally {
-                    if (payoutIncremented) {
-                        state.pendingPayouts = state.pendingPayouts.minus(potentialPayout);
-                        payoutIncremented = false;
-                    }
-                }
+            if (result === 'win') {
+                await settlement.send(player, formatBlockchainAmount(payout), bet.asset, `[Winner] | You: ${move} | Server: ${serverMove}${seedMemo}`);
+            } else if (result === 'tie') {
+                await settlement.send(player, bet.amount, bet.asset, `[Tie] | You: ${move} | Server: ${serverMove}${seedMemo}`);
+            } else if (notifyLosses) {
+                await settlement.send(player, '0.001', bet.asset, `[Lost] | You: ${move} | Server: ${serverMove}${seedMemo}`);
             }
         } catch (e) {
             const error = e instanceof Error ? e : new Error(String(e));
             getLogger().error('[RpsContract] Play processing error:', {
-                sender,
-                amount: amountRaw,
+                sender: player,
+                amount: bet.rawAmount,
                 payload,
                 message: error.message
             });
 
-            // Attempt refund on unexpected errors to avoid loss of funds
-            try {
-                if (amountRaw && typeof amountRaw === 'string' && amountRaw.includes(' ')) {
-                    const parsedAmount = parseBlockchainAmount(amountRaw);
-                    await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] An error occurred processing your bet.');
-                    debitCachedBalance(parsedAmount.value);
-                }
-            } catch (refundError) {
-                getLogger().error('[RpsContract] Refund failed:', refundError);
-            }
-
+            await settlement.refundAfterError(error);
             throw error;
+        } finally {
+            if (reserved) {
+                bankroll.release(bet.asset, reserved);
+            }
         }
     };
 
-    const play = async (payload: { move: 'rock' | 'paper' | 'scissors'; seed?: string }, ctx: any): Promise<void> => {
-        return new Promise<void>((resolve, reject) => {
-            state.betQueue.push(async () => {
-                try {
-                    await processPlay(payload, ctx);
-                    resolve();
-                } catch (error) {
-                    reject(error);
-                }
-            });
-
-            processQueue();
-        });
+    const play = (payload: PlayPayload, ctx: ContractContext): Promise<void> => {
+        // Serialize bets so bankroll checks see every in-flight payout.
+        const run = state.queue.then(() => processPlay(payload, ctx));
+        state.queue = run.catch(() => undefined);
+        return run;
     };
 
     return defineContract({
@@ -297,13 +254,16 @@ export function createRpsContract(options: RpsContractOptions = {}) {
                 state.streamer = streamer;
                 state.adapter = adapter;
                 await fairSupport.initialize(adapter);
+            },
+            destroy: () => {
+                state.queue = Promise.resolve();
             }
         },
         actions: {
             play: action(play, {
                 schema: playSchema,
                 trigger: 'transfer',
-                description: 'Play rock-paper-scissors against the house by transferring a wager; ties are refunded.'
+                description: `Play provably-fair rock-paper-scissors against the house by transferring a wager. \`move\` must be "rock", "paper" or "scissors" and \`seed\` (optional client seed) at most ${MAX_SEED_LENGTH} characters; anything else is refunded. Wins pay 2x the stake less the house edge (2% by default); ties are refunded.`
             }),
             ...fairSupport.actions
         }

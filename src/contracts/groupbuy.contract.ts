@@ -1,9 +1,9 @@
+import BigNumber from '../bignumber';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
 import {
     amountSchema,
     assetSchema,
-    assertAssetMatches,
     blockTimeOf,
     createContractState,
     emitContractEvent,
@@ -12,18 +12,29 @@ import {
     initializeTables,
     parseDateValue,
     requireSender,
+    resolveContractAccount,
     toBigNumber
 } from './helpers';
+import { operationRecordId } from '../types/hive-stream';
 
 const DEFAULT_NAME = 'groupbuy';
+const PRECISION = 3;
 
 export interface GroupBuyContractOptions {
     name?: string;
+    /**
+     * Account that receives commitments and refunds rejected ones. Refunds
+     * are signed with the app's active key, so this must be the app
+     * account. Defaults to the streamer username.
+     */
+    account?: string;
 }
 
 export function createGroupBuyContract(options: GroupBuyContractOptions = {}) {
     const name = options.name || DEFAULT_NAME;
-    const state = createContractState();
+    // Resolved in the create hook: options.account, else the streamer username.
+    let account = options.account || '';
+    const state = createContractState({ streamer: null as any });
 
     const createSchema = z.object({
         groupBuyId: identifierSchema,
@@ -118,28 +129,78 @@ export function createGroupBuyContract(options: GroupBuyContractOptions = {}) {
     const commit = async (payload: z.infer<typeof idSchema>, ctx: any) => {
         const contributor = requireSender(ctx);
         const payment = getIncomingPayment(ctx);
+
+        // Only money sent to the app account can be refunded from it.
+        if (payment.to !== account) {
+            throw new Error(`Commitments must be sent to ${account}`);
+        }
+
+        // One transaction can carry several transfers; key commitments per operation.
+        const commitmentRef = operationRecordId(ctx.transaction.id, ctx.transaction.operationIndex);
+        const duplicate = await state.adapter.query('SELECT id FROM group_buy_commitments WHERE transaction_id = ?', [commitmentRef]);
+        if (duplicate.length > 0) {
+            return;
+        }
+
+        // The payment has already arrived, so every rejection sends it back
+        // instead of throwing (which would keep the contributor's money).
+        const refund = async (reason: string) => {
+            if (!state.streamer) {
+                throw new Error('Group buy contract is not attached to a streamer');
+            }
+
+            const amount = toBigNumber(payment.amount).decimalPlaces(PRECISION, BigNumber.ROUND_DOWN);
+            if (!amount.gt(0)) {
+                throw new Error(reason);
+            }
+
+            await state.streamer.transferHiveTokens(account, contributor, amount.toFixed(PRECISION), payment.asset, `[Refund] ${reason}`);
+            await emitContractEvent(state.adapter, name, 'commit', payload, {
+                action: 'group_buy_refunded',
+                data: {
+                    groupBuyId: payload.groupBuyId,
+                    contributor,
+                    amount: amount.toFixed(PRECISION),
+                    asset: payment.asset,
+                    reason,
+                    transactionId: commitmentRef
+                }
+            }, blockTimeOf(ctx));
+        };
+
         const campaigns = await state.adapter.query('SELECT * FROM group_buy_campaigns WHERE group_buy_id = ?', [payload.groupBuyId]);
         if (campaigns.length === 0) {
-            throw new Error(`Group buy ${payload.groupBuyId} does not exist`);
+            await refund(`Group buy ${payload.groupBuyId} does not exist`);
+            return;
         }
 
         const campaign = campaigns[0];
         if (campaign.status !== 'open') {
-            throw new Error('Group buy is not open');
+            await refund('Group buy is not open');
+            return;
         }
 
-        assertAssetMatches(payment.asset, campaign.asset);
+        const deadline = parseDateValue(campaign.deadline);
+        if (deadline && deadline <= blockTimeOf(ctx)) {
+            await refund('Group buy deadline has passed');
+            return;
+        }
+
+        if (payment.asset !== campaign.asset) {
+            await refund(`Commitments must be paid in ${campaign.asset}`);
+            return;
+        }
 
         const currentAmount = toBigNumber(campaign.current_amount).plus(payment.amount);
         const priorCommitments = await state.adapter.query(
-            'SELECT COUNT(*) AS count FROM group_buy_commitments WHERE group_buy_id = ? AND contributor = ?',
-            [payload.groupBuyId, contributor]
+            'SELECT COUNT(*) AS count FROM group_buy_commitments WHERE group_buy_id = ? AND contributor = ? AND withdrawn = ?',
+            [payload.groupBuyId, contributor, 0]
         );
         const participantCount = Number(campaign.participant_count) + (Number(priorCommitments[0]?.count || 0) > 0 ? 0 : 1);
 
         await state.adapter.query(
             'INSERT INTO group_buy_commitments (group_buy_id, contributor, amount, asset, withdrawn, transaction_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [payload.groupBuyId, contributor, payment.amount, payment.asset, 0, ctx.transaction.id, blockTimeOf(ctx)]
+            [payload.groupBuyId, contributor, payment.amount, payment.asset, 0, commitmentRef, blockTimeOf(ctx)]
         );
 
         await state.adapter.query(
@@ -214,8 +275,12 @@ export function createGroupBuyContract(options: GroupBuyContractOptions = {}) {
 
         const campaign = campaigns[0];
         const deadline = parseDateValue(campaign.deadline);
-        if (campaign.status !== 'failed' && (!deadline || deadline <= blockTimeOf(ctx))) {
-            throw new Error('Commitments can only be withdrawn after a failed group buy');
+        const failed = campaign.status === 'failed';
+        // Before the deadline an open group buy lets contributors back out;
+        // afterwards only a failed one does.
+        const earlyExit = campaign.status === 'open' && !!deadline && deadline > blockTimeOf(ctx);
+        if (!failed && !earlyExit) {
+            throw new Error('Commitments can only be withdrawn before the deadline or after a failed group buy');
         }
 
         const commitments = await state.adapter.query(
@@ -226,11 +291,26 @@ export function createGroupBuyContract(options: GroupBuyContractOptions = {}) {
             throw new Error('No withdrawable commitment found');
         }
 
-        const totalAmount = commitments.reduce((sum: any, commitment: any) => sum.plus(commitment.amount), toBigNumber(0)).toFixed();
+        const total = commitments.reduce((sum: any, commitment: any) => sum.plus(commitment.amount), toBigNumber(0));
+        const totalAmount = total.toFixed();
         await state.adapter.query(
-            'UPDATE group_buy_commitments SET withdrawn = ? WHERE group_buy_id = ? AND contributor = ?',
-            [1, payload.groupBuyId, contributor]
+            'UPDATE group_buy_commitments SET withdrawn = ? WHERE group_buy_id = ? AND contributor = ? AND withdrawn = ?',
+            [1, payload.groupBuyId, contributor, 0]
         );
+
+        if (earlyExit) {
+            // The money goes back to the contributor, so it must no longer
+            // count towards the target or be paid to the organizer later. All
+            // of the contributor's commitments were withdrawn, so they stop
+            // counting as a participant.
+            const currentAmount = toBigNumber(campaign.current_amount).minus(total);
+            const participantCount = Math.max(0, Number(campaign.participant_count) - 1);
+
+            await state.adapter.query(
+                'UPDATE group_buy_campaigns SET current_amount = ?, participant_count = ? WHERE group_buy_id = ?',
+                [(currentAmount.lt(0) ? toBigNumber(0) : currentAmount).toFixed(), participantCount, payload.groupBuyId]
+            );
+        }
 
         await emitContractEvent(state.adapter, name, 'withdrawCommitment', payload, {
             action: 'group_buy_withdrawal_requested',
@@ -246,16 +326,27 @@ export function createGroupBuyContract(options: GroupBuyContractOptions = {}) {
     return defineContract({
         name,
         hooks: {
-            create: async ({ adapter }) => {
+            create: async (lifecycle) => {
+                const { adapter, streamer } = lifecycle;
+                account = resolveContractAccount('createGroupBuyContract', options.account, lifecycle);
                 state.adapter = adapter;
+                state.streamer = streamer;
                 await initialize();
             }
         },
         actions: {
             createGroupBuy: action(createGroupBuy, { schema: createSchema, trigger: 'custom_json' }),
-            commit: action(commit, { schema: idSchema, trigger: ['transfer', 'recurrent_transfer'] }),
+            commit: action(commit, {
+                schema: idSchema,
+                trigger: ['transfer', 'recurrent_transfer'],
+                description: 'Commit funds by sending the group buy asset to the app account; commitments to a missing, closed or expired group buy, or in the wrong asset, are refunded.'
+            }),
             finalizeGroupBuy: action(finalizeGroupBuy, { schema: idSchema, trigger: ['custom_json', 'time'] }),
-            withdrawCommitment: action(withdrawCommitment, { schema: idSchema, trigger: 'custom_json' })
+            withdrawCommitment: action(withdrawCommitment, {
+                schema: idSchema,
+                trigger: 'custom_json',
+                description: 'Withdraw your commitments before the deadline (lowering the totals) or after the group buy failed.'
+            })
         }
     });
 }

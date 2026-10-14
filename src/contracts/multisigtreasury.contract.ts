@@ -299,9 +299,9 @@ export function createMultisigTreasuryContract(options: MultisigTreasuryContract
         actions: {
             createVault: action(createVault, { schema: createVaultSchema, trigger: 'custom_json' }),
             proposeTransfer: action(proposeTransfer, { schema: proposeTransferSchema, trigger: 'custom_json' }),
-            approveProposal: action(approveProposal, { schema: proposalSchema, trigger: 'custom_json' }),
+            approveProposal: action(approveProposal, { schema: proposalSchema, trigger: 'custom_json', requiresActiveKey: true }),
             cancelProposal: action(cancelProposal, { schema: proposalSchema, trigger: 'custom_json' }),
-            markExecuted: action(markExecuted, { schema: markExecutedSchema, trigger: 'custom_json' })
+            markExecuted: action(markExecuted, { schema: markExecutedSchema, trigger: 'custom_json', requiresActiveKey: true })
         }
     });
 }

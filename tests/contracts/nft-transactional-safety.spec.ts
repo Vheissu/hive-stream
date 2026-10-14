@@ -3,6 +3,11 @@ import { SqliteAdapter } from '../../src/adapters/sqlite.adapter';
 import { createNFTContract } from '../../src/contracts/nft.contract';
 import { Utils } from '../../src/utils';
 
+// The buyNFT wrapper re-reads its payment operation from the chain.
+const chainTransfer = (from: string, to: string, amount: string) => ({
+    operations: [['transfer', { from, to, amount, memo: '' }]]
+});
+
 const createCustomJsonContext = (streamer: Streamer, adapter: SqliteAdapter, sender: string, transactionId: string) => ({
     trigger: 'custom_json' as const,
     streamer,
@@ -14,7 +19,7 @@ const createCustomJsonContext = (streamer: Streamer, adapter: SqliteAdapter, sen
     customJson: { id: streamer['config'].JSON_ID, json: {}, isSignedWithActiveKey: true }
 });
 
-const createTransferContext = (streamer: Streamer, adapter: SqliteAdapter, sender: string, rawAmount: string, transactionId: string) => ({
+const createTransferContext = (streamer: Streamer, adapter: SqliteAdapter, sender: string, rawAmount: string, transactionId: string, to: string = 'nftmarket') => ({
     trigger: 'transfer' as const,
     streamer,
     adapter,
@@ -24,7 +29,7 @@ const createTransferContext = (streamer: Streamer, adapter: SqliteAdapter, sende
     sender,
     transfer: {
         from: sender,
-        to: 'hivenft',
+        to,
         rawAmount,
         amount: rawAmount.split(' ')[0],
         asset: rawAmount.split(' ')[1],
@@ -33,6 +38,10 @@ const createTransferContext = (streamer: Streamer, adapter: SqliteAdapter, sende
 });
 
 describe('NFT transactional safety', () => {
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
     test('rolls back minting when the final event write fails', async () => {
         const streamer = new Streamer({ debugMode: false });
         const adapter = new SqliteAdapter(':memory:');
@@ -106,9 +115,8 @@ describe('NFT transactional safety', () => {
             currency: 'HIVE'
         }, createCustomJsonContext(streamer, adapter, 'alice', 'trx-list-token'));
 
-        // Mock blockchain verification calls that the buyNFT action wrapper now performs
-        jest.spyOn(Utils, 'getTransaction').mockResolvedValue({ operations: [] } as any);
-        jest.spyOn(Utils, 'verifyTransfer').mockResolvedValue(true);
+        // Mock the chain re-read that the buyNFT action wrapper performs
+        jest.spyOn(Utils, 'getTransaction').mockResolvedValue(chainTransfer('bob', 'nftmarket', '10.000 HIVE') as any);
         jest.spyOn(streamer, 'transferHiveTokens').mockResolvedValue(true as any);
 
         jest.spyOn(adapter, 'addEvent').mockImplementationOnce(async () => {
@@ -166,8 +174,7 @@ describe('NFT transactional safety', () => {
             currency: 'HIVE'
         }, createCustomJsonContext(streamer, adapter, 'alice', 'trx-list-token'));
 
-        jest.spyOn(Utils, 'getTransaction').mockResolvedValue({ operations: [] } as any);
-        const verifySpy = jest.spyOn(Utils, 'verifyTransfer').mockResolvedValue(true);
+        const getTransactionSpy = jest.spyOn(Utils, 'getTransaction').mockResolvedValue(chainTransfer('bob', 'nftmarket', '10.000 HIVE') as any);
         const transferSpy = jest.spyOn(streamer, 'transferHiveTokens').mockResolvedValue(true as any);
 
         await contract.actions.buyNFT.handler({
@@ -176,7 +183,7 @@ describe('NFT transactional safety', () => {
         }, createTransferContext(streamer, adapter, 'bob', '10.000 HIVE', 'trx-buy-token'));
 
         // The buyer's payment must have gone to the marketplace account...
-        expect(verifySpy).toHaveBeenCalledWith(expect.anything(), 'bob', 'nftmarket', '10.000 HIVE');
+        expect(getTransactionSpy).toHaveBeenCalledWith(expect.anything(), 322, 'trx-buy-token');
         // ...and the seller is paid from it.
         expect(transferSpy).toHaveBeenCalledWith('nftmarket', 'alice', '10.000', 'HIVE', expect.stringContaining('NFT sale'));
 
@@ -191,15 +198,14 @@ describe('NFT transactional safety', () => {
         await streamer.registerAdapter(adapter);
         await streamer.registerContract(contract);
 
-        jest.spyOn(Utils, 'getTransaction').mockResolvedValue({ operations: [] } as any);
-        const verifySpy = jest.spyOn(Utils, 'verifyTransfer').mockResolvedValue(false);
+        const getTransactionSpy = jest.spyOn(Utils, 'getTransaction').mockResolvedValue(chainTransfer('bob', 'nftmarket', '10.000 HIVE') as any);
 
         await expect(contract.actions.buyNFT.handler({
             collectionSymbol: 'TESTNFT',
             tokenId: 'token001'
-        }, createTransferContext(streamer, adapter, 'bob', '10.000 HIVE', 'trx-buy-token'))).rejects.toThrow('Transfer verification failed');
+        }, createTransferContext(streamer, adapter, 'bob', '10.000 HIVE', 'trx-buy-token', 'nftmarket'))).rejects.toThrow('Payment must be sent to the marketplace account streameruser');
 
-        expect(verifySpy).toHaveBeenCalledWith(expect.anything(), 'bob', 'streameruser', '10.000 HIVE');
+        expect(getTransactionSpy).not.toHaveBeenCalled();
         await streamer.stop();
     });
 });

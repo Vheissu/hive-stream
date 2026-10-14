@@ -22,6 +22,12 @@ const PRECISION = 3;
 const MAX_PRIZE_POSITIONS = 50;
 const MAX_FEE_BPS = 3000;
 
+// tournament_entries.refunded
+const NOT_REFUNDED = 0;
+const REFUNDED = 1;
+const REFUNDING = 2;
+const REFUND_FAILED = 3;
+
 const scoreSchema = z.union([
     z.number().finite(),
     z.string().regex(/^-?\d+(?:\.\d+)?$/, 'Invalid score')
@@ -37,7 +43,16 @@ export interface TournamentContractOptions {
     feeAccount?: string;
     /** Accounts allowed to submit scores for any tournament, in addition to each tournament's oracle. */
     oracles?: string[];
-    /** When set, only these accounts can create tournaments. */
+    /**
+     * When set, only these accounts can create tournaments, and a
+     * tournament's oracle defaults to its (trusted) organizer.
+     *
+     * When unset, anyone can create a tournament. An organizer who could
+     * also score it could enter an alt account, score it first and take the
+     * whole pot, so open tournaments are scored by the app account (or one of
+     * `oracles`) only: the oracle defaults to the app account and a
+     * tournament's `oracle` must be the app account or one of `oracles`.
+     */
     organizers?: string[];
 }
 
@@ -271,6 +286,17 @@ export function createTournamentContract(options: TournamentContractOptions = {}
             throw new Error('entryFee must be greater than zero');
         }
 
+        // Open tournaments (no organizer allowlist) are never scored by their
+        // untrusted organizer: see TournamentContractOptions.organizers.
+        let oracle = payload.oracle || organizer;
+        if (!organizers) {
+            oracle = payload.oracle || account;
+
+            if (oracle !== account && !globalOracles.includes(oracle)) {
+                throw new Error(`The oracle must be ${[account, ...globalOracles].join(' or ')} when anyone can create tournaments`);
+            }
+        }
+
         const now = nowOf(ctx);
         const opensAt = parseDateValue(payload.registrationOpensAt) || now;
         const closesAt = parseDateValue(payload.registrationClosesAt)!;
@@ -293,7 +319,7 @@ export function createTournamentContract(options: TournamentContractOptions = {}
                 payload.tournamentId, organizer, payload.title, payload.asset, toBigNumber(payload.entryFee).toFixed(PRECISION),
                 opensAt.toISOString(), closesAt.toISOString(), endsAt ? endsAt.toISOString() : null,
                 payload.minPlayers, payload.maxPlayers, JSON.stringify(payload.prizeSplitBps),
-                payload.oracle || organizer, payload.scoreOrder, payload.tieBreak,
+                oracle, payload.scoreOrder, payload.tieBreak,
                 'registration', null, '0', null, now.toISOString(), null
             ]
         );
@@ -464,22 +490,99 @@ export function createTournamentContract(options: TournamentContractOptions = {}
         await recordScores(payload.tournamentId, payload.scores as Array<{ player: string; score: number | string }>, ctx);
     };
 
+    /**
+     * Refunds every entry that hasn't been refunded yet, including refunds
+     * whose broadcast failed earlier. Each entry is claimed ('refunding')
+     * before its transfer so a crash can never refund twice, and marked
+     * 'refund failed' when the broadcast fails so retryPayouts can resend it.
+     * Returns how many entries were refunded; rethrows the first failure
+     * after attempting every entry.
+     */
     const refundAll = async (tournament: any, reason: string) => {
         const entries = await state.adapter.query(
-            'SELECT * FROM tournament_entries WHERE tournament_id = ? AND refunded = ?',
-            [tournament.tournament_id, 0]
+            'SELECT * FROM tournament_entries WHERE tournament_id = ? AND refunded IN (?, ?)',
+            [tournament.tournament_id, NOT_REFUNDED, REFUND_FAILED]
         );
+        let refunded = 0;
+        let firstError: unknown = null;
 
         for (const entry of entries) {
-            // Mark first so a crash between the two steps can never refund twice.
             await state.adapter.query(
                 'UPDATE tournament_entries SET refunded = ? WHERE tournament_id = ? AND player = ?',
-                [1, tournament.tournament_id, entry.player]
+                [REFUNDING, tournament.tournament_id, entry.player]
             );
-            await transfer(entry.player, entry.amount, tournament.asset, `[Refund] ${tournament.title}: ${reason}`);
+
+            try {
+                await transfer(entry.player, entry.amount, tournament.asset, `[Refund] ${tournament.title}: ${reason}`);
+            } catch (error) {
+                await state.adapter.query(
+                    'UPDATE tournament_entries SET refunded = ? WHERE tournament_id = ? AND player = ?',
+                    [REFUND_FAILED, tournament.tournament_id, entry.player]
+                );
+                firstError = firstError ?? error;
+                continue;
+            }
+
+            await state.adapter.query(
+                'UPDATE tournament_entries SET refunded = ? WHERE tournament_id = ? AND player = ?',
+                [REFUNDED, tournament.tournament_id, entry.player]
+            );
+            refunded++;
         }
 
-        return entries.length;
+        if (firstError) {
+            throw firstError;
+        }
+
+        return refunded;
+    };
+
+    /**
+     * Sends a finalized tournament's prizes: the given list right after
+     * finalizing, otherwise every prize whose broadcast failed. A prize is
+     * marked 'paid' only after its transfer succeeds and 'failed' when the
+     * broadcast fails. A prize left 'pending' (the process stopped mid-send)
+     * is never resent automatically. Rethrows the first failure after
+     * attempting every prize.
+     */
+    const payPrizes = async (tournament: any, ordered?: TournamentPayout[]) => {
+        const payouts: Array<{ player: string; rank: number; amount: string }> = ordered ?? await state.adapter.query(
+            'SELECT * FROM tournament_payouts WHERE tournament_id = ? AND status = ? ORDER BY rank ASC, player ASC',
+            [tournament.tournament_id, 'failed']
+        );
+        let paid = 0;
+        let firstError: unknown = null;
+
+        for (const payout of payouts) {
+            // Back to 'pending' while in flight, so a crash mid-retry is never resent blindly.
+            await state.adapter.query(
+                'UPDATE tournament_payouts SET status = ? WHERE tournament_id = ? AND player = ?',
+                ['pending', tournament.tournament_id, payout.player]
+            );
+
+            try {
+                await transfer(payout.player, payout.amount, tournament.asset, `${tournament.title}: rank #${payout.rank} prize`);
+            } catch (error) {
+                await state.adapter.query(
+                    'UPDATE tournament_payouts SET status = ? WHERE tournament_id = ? AND player = ?',
+                    ['failed', tournament.tournament_id, payout.player]
+                );
+                firstError = firstError ?? error;
+                continue;
+            }
+
+            await state.adapter.query(
+                'UPDATE tournament_payouts SET status = ? WHERE tournament_id = ? AND player = ?',
+                ['paid', tournament.tournament_id, payout.player]
+            );
+            paid++;
+        }
+
+        if (firstError) {
+            throw firstError;
+        }
+
+        return paid;
     };
 
     const cancelTournament = async (payload: z.infer<typeof tournamentIdSchema>, ctx: ContractContext) => {
@@ -499,12 +602,37 @@ export function createTournamentContract(options: TournamentContractOptions = {}
             ['cancelled', 'Cancelled by organizer', nowOf(ctx).toISOString(), payload.tournamentId]
         );
 
-        const refunded = await refundAll(tournament, 'Tournament cancelled');
+        await cancelAndRefund(tournament, 'cancelTournament', 'Tournament cancelled', null, ctx);
+    };
 
-        await emitContractEvent(state.adapter, name, 'cancelTournament', payload, {
+    /**
+     * Refunds a cancelled tournament and emits tournament_cancelled. The event
+     * is emitted even when some refunds fail (they are left for retryPayouts),
+     * then the first failure is rethrown.
+     */
+    const cancelAndRefund = async (tournament: any, eventAction: string, reason: string, statusReason: string | null, ctx: ContractContext) => {
+        let refunded = 0;
+        let failure: unknown = null;
+
+        try {
+            refunded = await refundAll(tournament, reason);
+        } catch (error) {
+            failure = error;
+        }
+
+        await emitContractEvent(state.adapter, name, eventAction, { tournamentId: tournament.tournament_id }, {
             action: 'tournament_cancelled',
-            data: { tournamentId: payload.tournamentId, refunded }
+            data: {
+                tournamentId: tournament.tournament_id,
+                ...(statusReason ? { reason: statusReason } : {}),
+                refunded,
+                ...(failure ? { refundsFailed: true } : {})
+            }
         }, blockTimeOf(ctx));
+
+        if (failure) {
+            throw failure;
+        }
     };
 
     const rankEntries = (entries: any[], order: 'asc' | 'desc', tieBreak: 'split' | 'earliest'): RankedEntry[] => {
@@ -544,12 +672,7 @@ export function createTournamentContract(options: TournamentContractOptions = {}
                 'UPDATE tournaments SET status = ?, status_reason = ?, finalized_at = ? WHERE tournament_id = ?',
                 ['cancelled', 'Not enough players', now.toISOString(), tournament.tournament_id]
             );
-            const refunded = await refundAll(tournament, 'Not enough players');
-
-            await emitContractEvent(state.adapter, name, 'finalize', { tournamentId: tournament.tournament_id }, {
-                action: 'tournament_cancelled',
-                data: { tournamentId: tournament.tournament_id, reason: 'Not enough players', refunded }
-            }, blockTimeOf(ctx));
+            await cancelAndRefund(tournament, 'finalize', 'Not enough players', 'Not enough players', ctx);
             return;
         }
 
@@ -560,12 +683,7 @@ export function createTournamentContract(options: TournamentContractOptions = {}
                 'UPDATE tournaments SET status = ?, status_reason = ?, finalized_at = ? WHERE tournament_id = ?',
                 ['cancelled', 'No scores submitted', now.toISOString(), tournament.tournament_id]
             );
-            const refunded = await refundAll(tournament, 'No scores were submitted');
-
-            await emitContractEvent(state.adapter, name, 'finalize', { tournamentId: tournament.tournament_id }, {
-                action: 'tournament_cancelled',
-                data: { tournamentId: tournament.tournament_id, reason: 'No scores submitted', refunded }
-            }, blockTimeOf(ctx));
+            await cancelAndRefund(tournament, 'finalize', 'No scores were submitted', 'No scores submitted', ctx);
             return;
         }
 
@@ -587,16 +705,32 @@ export function createTournamentContract(options: TournamentContractOptions = {}
             );
         }
 
-        for (const payout of payouts) {
-            await transfer(payout.player, payout.amount, tournament.asset, `${tournament.title}: rank #${payout.rank} prize`);
-            await state.adapter.query(
-                'UPDATE tournament_payouts SET status = ? WHERE tournament_id = ? AND player = ?',
-                ['paid', tournament.tournament_id, payout.player]
-            );
+        // Prizes are 'pending' until sent; a failed broadcast leaves them
+        // 'failed' for retryPayouts instead of marking them paid.
+        let failure: unknown = null;
+
+        try {
+            await payPrizes(tournament, payouts);
+        } catch (error) {
+            failure = error;
         }
 
         if (feeAccount && feeAccount !== account && fee.gt(0)) {
-            await transfer(feeAccount, fee.toFixed(PRECISION), tournament.asset, `${tournament.title}: house fee`);
+            try {
+                await transfer(feeAccount, fee.toFixed(PRECISION), tournament.asset, `${tournament.title}: house fee`);
+            } catch (error) {
+                // The fee simply stays in the custody account; report it so it can be swept by hand.
+                await emitContractEvent(state.adapter, name, 'finalize', { tournamentId: tournament.tournament_id }, {
+                    action: 'tournament_fee_transfer_failed',
+                    data: {
+                        tournamentId: tournament.tournament_id,
+                        feeAccount,
+                        fee: fee.toFixed(PRECISION),
+                        error: error instanceof Error ? error.message : String(error)
+                    }
+                }, blockTimeOf(ctx));
+                failure = failure ?? error;
+            }
         }
 
         await emitContractEvent(state.adapter, name, 'finalize', { tournamentId: tournament.tournament_id }, {
@@ -608,6 +742,59 @@ export function createTournamentContract(options: TournamentContractOptions = {}
                 payouts,
                 standings: ranked.map((entry, index) => ({ position: index + 1, player: entry.player, score: entry.score.toFixed() }))
             }
+        }, blockTimeOf(ctx));
+
+        if (failure) {
+            throw failure;
+        }
+    };
+
+    /**
+     * Re-sends the prizes (finalized tournaments) or refunds (cancelled
+     * tournaments) whose broadcast failed. Callable by the app account or
+     * the tournament's organizer.
+     */
+    const retryPayouts = async (payload: z.infer<typeof tournamentIdSchema>, ctx: ContractContext) => {
+        const sender = requireSender(ctx);
+        const tournament = await getTournament(payload.tournamentId);
+
+        if (sender !== account && sender !== tournament.organizer) {
+            throw new Error('Only the app account or the organizer can retry payouts');
+        }
+
+        let retried = 0;
+
+        if (tournament.status === 'finalized') {
+            const failed = await state.adapter.query(
+                'SELECT COUNT(*) AS total FROM tournament_payouts WHERE tournament_id = ? AND status = ?',
+                [payload.tournamentId, 'failed']
+            );
+            retried = Number(failed[0]?.total ?? 0);
+
+            if (retried > 0) {
+                await payPrizes(tournament);
+            }
+        } else if (tournament.status === 'cancelled') {
+            const failed = await state.adapter.query(
+                'SELECT COUNT(*) AS total FROM tournament_entries WHERE tournament_id = ? AND refunded IN (?, ?)',
+                [payload.tournamentId, NOT_REFUNDED, REFUND_FAILED]
+            );
+            retried = Number(failed[0]?.total ?? 0);
+
+            if (retried > 0) {
+                await refundAll(tournament, tournament.status_reason || 'Tournament cancelled');
+            }
+        } else {
+            throw new Error(`Tournament ${payload.tournamentId} is ${tournament.status}`);
+        }
+
+        if (retried === 0) {
+            throw new Error(`Tournament ${payload.tournamentId} has no failed payouts to retry`);
+        }
+
+        await emitContractEvent(state.adapter, name, 'retryPayouts', payload, {
+            action: 'tournament_payouts_retried',
+            data: { tournamentId: payload.tournamentId, retried }
         }, blockTimeOf(ctx));
     };
 
@@ -694,6 +881,12 @@ export function createTournamentContract(options: TournamentContractOptions = {}
                 trigger: 'custom_json',
                 requiresActiveKey: true,
                 description: 'Organizer-only: cancel and refund every entry.'
+            }),
+            retryPayouts: action(retryPayouts, {
+                schema: tournamentIdSchema,
+                trigger: 'custom_json',
+                requiresActiveKey: true,
+                description: 'App account or organizer: re-send prizes or refunds whose transfer failed.'
             })
         }
     });

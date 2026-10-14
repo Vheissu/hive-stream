@@ -4,6 +4,7 @@ import { getLogger } from '../logger';
 import { action, defineContract } from './contract';
 import {
     blockTimeOf,
+    createBetSettlement,
     createFairnessSupport,
     emitContractEvent,
     formatFairnessMemo,
@@ -83,10 +84,6 @@ export function createLimboContract(options: LimboContractOptions = {}) {
         seed: z.string().max(64).optional()
     });
 
-    const transfer = async (to: string, amount: string, asset: string, memo: string) => {
-        await state.streamer.transferHiveTokens(account, to, amount, asset, memo);
-    };
-
     const getBankroll = async (asset: string): Promise<BigNumber> => {
         const accounts = await state.streamer.getClient().database.getAccounts([account]);
         const info = accounts?.[0];
@@ -110,6 +107,26 @@ export function createLimboContract(options: LimboContractOptions = {}) {
 
         const amount = toBigNumber(transferCtx.amount);
         const asset = transferCtx.asset;
+        // Writes a settlement key before the first transfer, so a re-run of
+        // this operation (errorPolicy 'retry', replay after a crash) cannot
+        // draw and pay again.
+        const settlement = createBetSettlement({
+            streamer: state.streamer,
+            adapter: state.adapter,
+            contract: name,
+            account,
+            ctx,
+            player,
+            amount: amount.toFixed(PRECISION),
+            asset,
+            logPrefix: '[LimboContract]'
+        });
+        const transfer = (to: string, value: string, transferAsset: string, memo: string) => settlement.send(to, value, transferAsset, memo);
+
+        if (await settlement.alreadySettled()) {
+            return;
+        }
+
         const refund = async (reason: string) => {
             await transfer(player, amount.toFixed(PRECISION), asset, `[Refund] ${reason}`);
             await emitContractEvent(state.adapter, name, 'bet', payload, {

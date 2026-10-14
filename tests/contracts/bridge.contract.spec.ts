@@ -174,10 +174,12 @@ describe('bridge contract', () => {
         await expect(custom('requestWithdrawal', 'alice', { sourceChain: 'eth', sourceTxId: '0xburn1', amount: '200.000', asset: 'HIVE' }))
             .rejects.toThrow('already exists');
 
-        await expect(custom('attestWithdrawal', 'op1', { ...withdrawal, amount: '250.000' })).rejects.toThrow('does not match');
-
         await custom('attestWithdrawal', 'op1', withdrawal);
         expect(transfers).not.toHaveBeenCalled();
+
+        // Once attested, the record is fixed: a different amount is a mismatch.
+        await expect(custom('attestWithdrawal', 'op2', { ...withdrawal, amount: '250.000' })).rejects.toThrow('does not match');
+
         await custom('attestWithdrawal', 'op2', withdrawal);
 
         expect(transfers).toHaveBeenCalledTimes(1);

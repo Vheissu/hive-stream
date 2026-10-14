@@ -4,15 +4,33 @@ import seedrandom from 'seedrandom';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { action, defineContract } from './contract';
-import { createFairnessSupport, formatBlockchainAmount, formatFairnessMemo, parseBlockchainAmount, resolveContractAccount, blockTimeOf } from './helpers';
+import {
+    blockTimeOf,
+    createBetSettlement,
+    createFairnessSupport,
+    createHouseBankroll,
+    formatBlockchainAmount,
+    formatFairnessMemo,
+    refundableField,
+    resolveContractAccount,
+    verifyIncomingTransfer
+} from './helpers';
 import { resolveFairnessOption, type FairDrawProof, type FairnessManager, type FairnessOptions } from '../fairness/manager';
+import { operationRecordId, type ContractContext } from '../types/hive-stream';
 
 const DEFAULT_NAME = 'coinflip';
 const DEFAULT_TOKEN_SYMBOL = 'HIVE';
 const DEFAULT_MIN_AMOUNT = 0.001;
 const DEFAULT_MAX_AMOUNT = 20;
+const DEFAULT_HOUSE_EDGE = 2;
+const MAX_SEED_LENGTH = 64;
+const SIDES = ['heads', 'tails'] as const;
 
-function rng(previousBlockId: string, blockId: string, transactionId: string, serverSeed: string, clientSeed = ''): 'heads' | 'tails' {
+type CoinSide = typeof SIDES[number];
+
+// Legacy RNG, used only with `fairness: false`: block ids plus an uncommitted
+// per-bet server seed. Not verifiable, and a block producer can bias it.
+function rng(previousBlockId: string, blockId: string, transactionId: string, serverSeed: string, clientSeed = ''): CoinSide {
     if (!previousBlockId || !blockId || !transactionId || !serverSeed) {
         throw new Error('Invalid RNG parameters');
     }
@@ -29,17 +47,27 @@ function rng(previousBlockId: string, blockId: string, transactionId: string, se
 
 export interface CoinflipContractOptions {
     name?: string;
+    /** House account that receives bets and pays winners. Defaults to the streamer username. */
     account?: string;
+    /** Default accepted asset (HIVE). Winnings are always paid in the asset that was bet. */
     tokenSymbol?: string;
+    /** Accepted assets (HIVE and/or HBD). Defaults to `[tokenSymbol]`. */
     validCurrencies?: string[];
     minAmount?: number;
     maxAmount?: number;
+    /** House edge in percent (default 2). A win pays the stake x 2 x (100 - houseEdge) / 100, rounded down. */
+    houseEdge?: number;
+    /** Send a 0.001 notice transfer on losses (default false; results are always recorded as events). */
+    notifyLosses?: boolean;
     /**
-     * Provably-fair commit-reveal draws (recommended). When omitted the legacy
-     * RNG (block ids plus an uncommitted per-bet server seed) is used.
+     * Provably-fair commit-reveal draws, on by default. Pass options or a
+     * shared FairnessManager to customise, or `false` for the legacy RNG
+     * (block ids plus an uncommitted server seed; not verifiable).
      */
     fairness?: FairnessManager | FairnessOptions | boolean;
 }
+
+type FlipPayload = { guess: unknown; seed?: string };
 
 export function createCoinflipContract(options: CoinflipContractOptions = {}) {
     const name = options.name || DEFAULT_NAME;
@@ -49,232 +77,161 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
     const validCurrencies = options.validCurrencies || [tokenSymbol];
     const minAmount = options.minAmount ?? DEFAULT_MIN_AMOUNT;
     const maxAmount = options.maxAmount ?? DEFAULT_MAX_AMOUNT;
-    const fairSupport = createFairnessSupport(name, () => account, resolveFairnessOption(options.fairness));
+    const houseEdge = options.houseEdge ?? DEFAULT_HOUSE_EDGE;
+    const notifyLosses = options.notifyLosses ?? false;
+    const fairSupport = createFairnessSupport(name, () => account, resolveFairnessOption(options.fairness ?? true));
     const fairness = fairSupport.fairness;
+
+    if (!Number.isFinite(houseEdge) || houseEdge < 0 || houseEdge >= 100) {
+        throw new Error('houseEdge must be a percentage from 0 to below 100');
+    }
+
+    const payoutMultiplier = new BigNumber(2).multipliedBy(new BigNumber(100).minus(houseEdge)).dividedBy(100);
 
     const state = {
         streamer: null as any,
         adapter: null as any,
-        balanceCache: null as { balance: BigNumber; timestamp: number } | null,
-        balanceCacheTimeout: 30000,
-        betQueue: [] as Array<() => Promise<void>>,
-        processingQueue: false,
-        pendingPayouts: new BigNumber(0)
+        queue: Promise.resolve() as Promise<unknown>
     };
 
+    const bankroll = createHouseBankroll({ streamer: () => state.streamer, account: () => account, logPrefix: '[CoinflipContract]' });
+
+    // Typed but permissive: an unknown guess or a long seed is refunded by the
+    // handler instead of failing validation and keeping the stake.
     const flipSchema = z.object({
-        guess: z.enum(['heads', 'tails']),
-        seed: z.string().max(64).optional()
+        guess: refundableField(z.enum(SIDES)),
+        seed: z.string().optional()
     });
 
-    const getBalance = async (): Promise<BigNumber> => {
-        const now = Date.now();
+    const processFlip = async (payload: FlipPayload, ctx: ContractContext): Promise<void> => {
+        const bet = await verifyIncomingTransfer(state.streamer, ctx, account);
+        const player = bet.from;
+        const settlement = createBetSettlement({
+            streamer: state.streamer,
+            adapter: state.adapter,
+            contract: name,
+            account,
+            ctx,
+            player,
+            amount: bet.amount,
+            asset: bet.asset,
+            logPrefix: '[CoinflipContract]',
+            onSent: (asset, amount) => bankroll.debit(asset, amount)
+        });
 
-        if (state.balanceCache && (now - state.balanceCache.timestamp) < state.balanceCacheTimeout) {
-            return state.balanceCache.balance;
-        }
-
-        try {
-            const accountInfo = await state.streamer['client'].database.getAccounts([account]);
-
-            if (accountInfo?.[0]) {
-                const amount = parseBlockchainAmount(accountInfo[0].balance as string).value;
-
-                state.balanceCache = {
-                    balance: amount,
-                    timestamp: now
-                };
-
-                return amount;
-            }
-        } catch (error) {
-            getLogger().error('[CoinflipContract] Error fetching balance:', error);
-            if (state.balanceCache) {
-                return state.balanceCache.balance;
-            }
-        }
-
-        return new BigNumber(0);
-    };
-
-    const processQueue = async (): Promise<void> => {
-        if (state.processingQueue || state.betQueue.length === 0) {
+        if (await settlement.alreadySettled()) {
             return;
         }
 
-        state.processingQueue = true;
-
-        while (state.betQueue.length > 0) {
-            const nextBet = state.betQueue.shift();
-            if (nextBet) {
-                try {
-                    await nextBet();
-                } catch (error) {
-                    getLogger().error('[CoinflipContract] Queue processing error:', error);
-                }
-            }
-        }
-
-        state.processingQueue = false;
-    };
-
-    const processFlip = async (payload: { guess: 'heads' | 'tails'; seed?: string }, ctx: any): Promise<void> => {
-        if (!ctx.transfer) {
-            throw new Error('Transfer context required for flip');
-        }
-
-        const sender = ctx.sender;
-        const amountRaw = ctx.transfer.rawAmount;
+        let reserved: BigNumber | null = null;
 
         try {
-            let parsedAmount;
-            try {
-                parsedAmount = parseBlockchainAmount(amountRaw);
-            } catch (error) {
-                throw new Error('Invalid amount format');
-            }
-            const amountParsed = parsedAmount.value;
-            if (amountParsed.isNegative()) {
-                throw new Error('Invalid amount value');
+            if (!validCurrencies.includes(bet.asset)) {
+                await settlement.refund('[Refund] You sent an invalid currency.');
+                return;
             }
 
-            const amountCurrency = parsedAmount.asset;
-            const transaction = await state.streamer.getTransaction(ctx.block.number, ctx.transaction.id);
-            const verify = await state.streamer.verifyTransfer(transaction, sender, account, amountRaw);
+            if (bet.value.isLessThan(minAmount)) {
+                await settlement.refund(`[Refund] Bet amount too small. Minimum: ${minAmount} ${bet.asset}.`);
+                return;
+            }
 
-            const balance = await getBalance();
-            const availableBalance = balance.minus(state.pendingPayouts);
+            if (bet.value.isGreaterThan(maxAmount)) {
+                await settlement.refund(`[Refund] You sent too much. Maximum: ${maxAmount} ${bet.asset}.`);
+                return;
+            }
 
-            if (verify) {
-                if (!validCurrencies.includes(amountCurrency)) {
-                    await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] You sent an invalid currency.');
-                    return;
-                }
+            if (!SIDES.includes(payload.guess as CoinSide)) {
+                await settlement.refund('[Refund] Guess must be heads or tails.');
+                return;
+            }
 
-                if (amountParsed.isLessThan(minAmount)) {
-                    await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, `[Refund] Bet amount too small. Minimum: ${minAmount} ${amountCurrency}.`);
-                    return;
-                }
+            if (payload.seed !== undefined && (typeof payload.seed !== 'string' || payload.seed.length > MAX_SEED_LENGTH)) {
+                await settlement.refund(`[Refund] Seed must be a string of at most ${MAX_SEED_LENGTH} characters.`);
+                return;
+            }
 
-                if (amountParsed.isGreaterThan(maxAmount)) {
-                    await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, `[Refund] You sent too much. Maximum: ${maxAmount} ${amountCurrency}.`);
-                    return;
-                }
+            const guess = payload.guess as CoinSide;
+            const payout = bet.value.multipliedBy(payoutMultiplier).decimalPlaces(3, BigNumber.ROUND_DOWN);
 
-                const potentialPayout = amountParsed.multipliedBy(2);
+            if (payout.isGreaterThan(await bankroll.available(bet.asset))) {
+                await settlement.refund('[Refund] The server cannot afford this bet payout.');
+                return;
+            }
 
-                if (potentialPayout.isGreaterThan(availableBalance)) {
-                    await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] The server cannot afford this bet payout.');
-                    return;
-                }
+            bankroll.reserve(bet.asset, payout);
+            reserved = payout;
 
-                state.pendingPayouts = state.pendingPayouts.plus(potentialPayout);
-                let payoutIncremented = true;
+            let result: CoinSide;
+            let serverSeed: string | null = null;
+            let proof: FairDrawProof | null = null;
 
-                try {
-                    let generatedGuess: 'heads' | 'tails';
-                    let serverSeed: string | null = null;
-                    let proof: FairDrawProof | null = null;
+            if (fairness) {
+                const draw = await fairness.draw({ type: 'coin' }, {
+                    clientSeed: payload.seed || player,
+                    blockId: ctx.block.id
+                });
+                result = draw.outcome;
+                proof = draw.proof;
+            } else {
+                serverSeed = randomUUID();
+                result = rng(ctx.block.previousId, ctx.block.id, ctx.transaction.id, serverSeed, payload.seed ?? '');
+            }
 
-                    if (fairness) {
-                        const draw = await fairness.draw({ type: 'coin' }, {
-                            clientSeed: payload.seed || sender,
-                            blockId: ctx.block.id
-                        });
-                        generatedGuess = draw.outcome;
-                        proof = draw.proof;
-                    } else {
-                        serverSeed = randomUUID();
-                        generatedGuess = rng(ctx.block.previousId, ctx.block.id, ctx.transaction.id, serverSeed, payload.seed ?? '');
-                    }
+            const userWon = result === guess;
 
-                    const userWon = generatedGuess === payload.guess;
-                    const eventData: Record<string, any> = {
-                        guess: payload.guess,
+            if (state.adapter?.addEvent) {
+                await state.adapter.addEvent(blockTimeOf(ctx), name, 'flip', payload, {
+                    action: 'transfer',
+                    data: {
+                        date: blockTimeOf(ctx),
+                        player,
+                        guess,
+                        result,
+                        userWon: userWon ? 'true' : 'false',
+                        amount: formatBlockchainAmount(bet.value),
+                        payout: userWon ? formatBlockchainAmount(payout) : '0',
+                        asset: bet.asset,
                         previousBlockId: ctx.block.previousId,
                         blockId: ctx.block.id,
-                        transactionId: ctx.transaction.id,
-                        userWon: userWon ? 'true' : 'false'
-                    };
-
-                    if (proof) {
-                        eventData.player = sender;
-                        eventData.result = generatedGuess;
-                        eventData.fairness = proof;
-                        eventData.outcomeSpec = { type: 'coin' };
-                    } else {
-                        eventData.serverSeed = serverSeed;
+                        transactionId: operationRecordId(ctx.transaction.id, ctx.transaction.operationIndex),
+                        ...(proof ? { fairness: proof, outcomeSpec: { type: 'coin' } } : { serverSeed })
                     }
+                });
+            }
 
-                    if (userWon) {
-                        await state.adapter.addEvent(blockTimeOf(ctx), name, 'flip', payload, {
-                            action: 'transfer',
-                            data: { date: blockTimeOf(ctx), ...eventData }
-                        });
+            const proofMemo = proof
+                ? formatFairnessMemo(proof)
+                : ` | Previous block id: ${ctx.block.previousId} | BlockID: ${ctx.block.id} | Trx ID: ${ctx.transaction.id} | Server Seed: ${serverSeed}`;
 
-                        const winMemo = proof
-                            ? `[Winner] | Guess: ${payload.guess} | Server Roll: ${generatedGuess}${formatFairnessMemo(proof)}`
-                            : `[Winner] | Guess: ${payload.guess} | Server Roll: ${generatedGuess} | Previous block id: ${ctx.block.previousId} | BlockID: ${ctx.block.id} | Trx ID: ${ctx.transaction.id} | Server Seed: ${serverSeed}`;
-                        await state.streamer.transferHiveTokens(account, sender, formatBlockchainAmount(potentialPayout), parsedAmount.asset, winMemo);
-                        // Invalidate balance cache after payout
-                        state.balanceCache = null;
-                        return;
-                    }
-
-                    await state.adapter.addEvent(blockTimeOf(ctx), name, 'flip', payload, {
-                        action: 'transfer',
-                        data: eventData
-                    });
-
-                    const loseMemo = proof
-                        ? `[Lost] | Guess: ${payload.guess} | Server Roll: ${generatedGuess}${formatFairnessMemo(proof)}`
-                        : `[Lost] | Guess: ${payload.guess} | Server Roll: ${generatedGuess} | Previous block id: ${ctx.block.previousId} | BlockID: ${ctx.block.id} | Trx ID: ${ctx.transaction.id} | Server Seed: ${serverSeed}`;
-                    await state.streamer.transferHiveTokens(account, sender, '0.001', parsedAmount.asset, loseMemo);
-                } finally {
-                    if (payoutIncremented) {
-                        state.pendingPayouts = state.pendingPayouts.minus(potentialPayout);
-                        payoutIncremented = false;
-                    }
-                }
+            if (userWon) {
+                await settlement.send(player, formatBlockchainAmount(payout), bet.asset, `[Winner] | Guess: ${guess} | Server Roll: ${result}${proofMemo}`);
+            } else if (notifyLosses) {
+                await settlement.send(player, '0.001', bet.asset, `[Lost] | Guess: ${guess} | Server Roll: ${result}${proofMemo}`);
             }
         } catch (e) {
             const error = e instanceof Error ? e : new Error(String(e));
             getLogger().error('[CoinflipContract] Flip processing error:', {
-                sender,
-                amount: amountRaw,
+                sender: player,
+                amount: bet.rawAmount,
                 payload,
                 message: error.message
             });
 
-            try {
-                if (amountRaw && typeof amountRaw === 'string' && amountRaw.includes(' ')) {
-                    const parsedAmount = parseBlockchainAmount(amountRaw);
-                    const amountBN = parsedAmount.value;
-                    if (!amountBN.isNaN() && amountBN.isFinite() && !amountBN.isNegative()) {
-                        await state.streamer.transferHiveTokens(account, sender, parsedAmount.amount, parsedAmount.asset, '[Refund] Processing error occurred.');
-                    }
-                }
-            } catch (refundError) {
-                getLogger().error('[CoinflipContract] Failed to refund after error:', refundError);
-            }
-
+            await settlement.refundAfterError(error);
             throw error;
+        } finally {
+            if (reserved) {
+                bankroll.release(bet.asset, reserved);
+            }
         }
     };
 
-    const flip = async (payload: { guess: 'heads' | 'tails'; seed?: string }, ctx: any): Promise<void> => {
-        return new Promise<void>((resolve, reject) => {
-            state.betQueue.push(async () => {
-                try {
-                    await processFlip(payload, ctx);
-                    resolve();
-                } catch (error) {
-                    reject(error);
-                }
-            });
-
-            processQueue();
-        });
+    const flip = (payload: FlipPayload, ctx: ContractContext): Promise<void> => {
+        // Serialize bets so bankroll checks see every in-flight payout.
+        const run = state.queue.then(() => processFlip(payload, ctx));
+        state.queue = run.catch(() => undefined);
+        return run;
     };
 
     return defineContract({
@@ -288,15 +245,14 @@ export function createCoinflipContract(options: CoinflipContractOptions = {}) {
                 await fairSupport.initialize(adapter);
             },
             destroy: () => {
-                state.betQueue = [];
-                state.processingQueue = false;
+                state.queue = Promise.resolve();
             }
         },
         actions: {
             flip: action(flip, {
                 schema: flipSchema,
                 trigger: 'transfer',
-                description: 'Bet on heads or tails by transferring to the house account; winners receive 2x.'
+                description: `Bet on a provably-fair coin flip by transferring to the house account. \`guess\` must be "heads" or "tails" and \`seed\` (optional client seed) at most ${MAX_SEED_LENGTH} characters; anything else is refunded. Winners receive 2x the stake less the house edge (2% by default).`
             }),
             ...fairSupport.actions
         }

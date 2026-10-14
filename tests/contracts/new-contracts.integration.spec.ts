@@ -151,7 +151,7 @@ describe('new contracts through the streamer', () => {
 
     test('tournament entries and prizes flow through transfers and custom JSON', async () => {
         ts = await createTestStreamer({ username: 'host', activeKey: ACTIVE_KEY, startTime: new Date('2026-05-01T00:00:00Z') });
-        await ts.streamer.registerContract(createTournamentContract({ account: 'host' }));
+        await ts.streamer.registerContract(createTournamentContract({ account: 'host', oracles: ['oracle'] }));
 
         await ts.contractJson('organizer', {
             contract: 'tournaments',

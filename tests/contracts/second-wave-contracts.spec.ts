@@ -193,7 +193,7 @@ describe('Second wave contracts', () => {
     });
 
     test('launchpad handles contributions and claims', async () => {
-        const contract = createLaunchpadContract();
+        const contract = createLaunchpadContract({ account: 'contract' });
         await streamer.registerContract(contract);
 
         await contract.actions.createSale.handler({

@@ -91,7 +91,7 @@ describe('Contract transactional safety', () => {
             transaction: { id: 'trx-deposit-alice' },
             transfer: {
                 from: 'alice',
-                to: 'exchange',
+                to: 'beggars',
                 rawAmount: '100.000 HBD',
                 amount: '100.000',
                 asset: 'HBD',
